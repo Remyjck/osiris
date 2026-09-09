@@ -113,7 +113,7 @@ Definition create_spec (cap : Z) (m : microvx) : iProp Σ :=
                              enqueue_permit γ (Z.to_nat cap) }}.
 
 Lemma create_proof η :
-  path_spec ["Array"; "init"] (λ init, □ iSpec τ[Z; val] init init_spec) η -∗
+  path_spec ["Array"; "init"] init_spec' η -∗
   EWP (eval η (EAnonFun __create)) {{ c, □ iSpec τ[Z] c create_spec }}.
 Proof.
   iIntros "#HArray".
@@ -143,9 +143,8 @@ Proof.
       iDestruct (big_sepLZ2_nil_inv_r with "Hxs") as %->.
       iExists l. by iFrame "Hlocs Hl". }
     iIntros "#Hf Hinit".
-    iPoseProof (init_spec_spec' with "Hinit") as "Hinit".
-    iApply ("Hinit" $! slot _ _ (λ _ s, slot_pointsto s None)%I with "[%] Hf").
-    lia. }
+    iApply ("Hinit" $! slot _ _ (λ _ s, slot_pointsto s None)%I with "[$Hf]").
+    iPureIntro; lia. }
 
   (* [let proph = Proph.create () in ...]: the queue's prophecy. *)
   iIntros (a) "(%ss & %Hlen & Harr & Hslots)".
@@ -1613,13 +1612,8 @@ Proof.
   (* [let create capacity = ...]: the one item that needs [Array.init]. *)
   iApply (imp_sitems_let (λ create : val, □ iSpec τ[Z] create create_spec)%I).
   { iApply create_proof.
-    iApply (path_spec_cons array_module_spec with "HArray").
-    iIntros (δ) "Hδ".
-    iApply path_spec_singleton.
-    rewrite /array_module_spec /context /=.
-    iDestruct "Hδ" as "(_ & #Hinit & _)".
-    iApply (in_env_mono with "Hinit").
-    iIntros (v) "#H". iExact "H". }
+    ltac2:(solve_path_spec ()). iIntros (init) "Hinit".
+    iApply (init_spec_spec' with "Hinit"). }
   iIntros (create) "#Hcreate".
 
   (* [let enqueue q x = ...] *)

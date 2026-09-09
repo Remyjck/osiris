@@ -186,57 +186,18 @@ Section imp_spec.
     by iApply prove_iSpec_pers.
   Qed.
 
-  Lemma imp_EAnon_poly_pers
-    (τ : ∀ A `{Encode A}, types)
-    (P : ∀ A `{Encode A}, τ A -#> microvx -> iProp Σ)
+  Lemma imp_EAnon_poly
+    (τ : tele → types)
+    (P : ∀ TS, (τ TS) -#> microvx -> iProp Σ)
     η
     (x : var)
     e E Ψ :
-    (□ ∀ A (_ : Encode A), predicate_over_function_body (τ A) (P A) η (EAnonFun (AnonFun x e))) -∗
-    EWP (eval η (EAnonFun (AnonFun x e))) @ E <| Ψ |> {{ c, □ ∀ A (_ : Encode A), iSpec (τ A) c (P A) }}.
+    (□ ∀ (TS : tele), predicate_over_function_body (τ TS) (P TS) η (EAnonFun (AnonFun x e))) -∗
+    EWP (eval η (EAnonFun (AnonFun x e))) @ E <| Ψ |> {{ c, ∀ TS, □ iSpec (τ TS) c (P TS) }}.
   Proof.
     iIntros "HP".
     simpl_eval; iApply (@imp_ret _ _ val val); first reflexivity.
-    iIntros (A HencA).
-    by iApply prove_iSpec_pers.
-  Qed.
-
-  (* [imp_EAnon_poly_pers], for a specification that depends on further
-     structure on [A] beyond its encoding (e.g. a decomposition of its
-     values into inline records [InlineEncode]). *)
-
-  Lemma imp_EAnon_poly_str_pers
-    (C : ∀ A, Encode A → Type)
-    (τ : ∀ A `{Encode A}, types)
-    (P : ∀ A (HA : Encode A), C A HA → τ A -#> microvx -> iProp Σ)
-    η
-    (x : var)
-    e E Ψ :
-    (□ ∀ A (HA : Encode A) (HC : C A HA),
-        predicate_over_function_body (τ A) (P A HA HC) η (EAnonFun (AnonFun x e))) -∗
-    EWP (eval η (EAnonFun (AnonFun x e))) @ E <| Ψ |>
-      {{ c, □ ∀ A (HA : Encode A) (HC : C A HA), iSpec (τ A) c (P A HA HC) }}.
-  Proof.
-    iIntros "HP".
-    simpl_eval; iApply (@imp_ret _ _ val val); first reflexivity.
-    iIntros (A HA HC).
-    iSpecialize ("HP" $! A HA HC).
-    by iApply prove_iSpec_pers.
-  Qed.
-
-  Lemma imp_EAnon_poly_inh_pers
-    (τ : ∀ A `{Encode A}, types)
-    (P : ∀ A `{Encode A}, τ A -#> microvx -> iProp Σ)
-    η
-    (x : var)
-    e E Ψ :
-    (□ ∀ A `(Encode A, Inhabited A), predicate_over_function_body (τ A) (P A) η (EAnonFun (AnonFun x e))) -∗
-    EWP (eval η (EAnonFun (AnonFun x e))) @ E <| Ψ |> {{ c, □ ∀ A `(Encode A, Inhabited A), iSpec (τ A) c (P A) }}.
-  Proof.
-    iIntros "HP".
-    simpl_eval; iApply (@imp_ret _ _ val val); first reflexivity.
-    iIntros (A HencA HinhA).
-    iSpecialize ("HP" $! A HencA HinhA).
+    iIntros (TS).
     by iApply prove_iSpec_pers.
   Qed.
 
@@ -602,3 +563,73 @@ Section transparent_funs.
  Qed.
 
 End transparent_funs.
+
+
+Notation "'∀∀' t1 .. tn ; P" :=
+  (∀.. (TS : TeleS (λ t1, .. (TeleS (λ tn, TeleO)) ..)),
+   @tele_app
+     (TeleS (λ t1, .. (TeleS (λ tn, TeleO)) ..))
+     _
+     (λ t1, .. (λ tn, P) ..) TS)%I
+  (at level 50,
+   t1 closed binder, tn closed binder).
+
+  (* Notation "'types' t1 .. tn ; P" := *)
+  (* (∀.. (TS : TeleS (λ t1, TeleS (λ (_ : Encode t1), .. (TeleS (λ tn, TeleS (λ (_ : Encode t1), TeleO))) ..))), *)
+  (*  @tele_app *)
+  (*    (TeleS (λ t1, TeleS (λ (_ : Encode t1), .. (TeleS (λ tn, TeleS (λ (_ : Encode t1), TeleO))) ..))) *)
+  (*    _ *)
+  (*    (λ t1 _, .. (λ tn _, P) ..) TS)%I *)
+  (* (at level 50, *)
+  (*  t1 closed binder, tn closed binder). *)
+
+Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
+  (□
+         iSpec
+           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
+           c
+           (λ a, .. (λ b, λ (m : microvx),
+             (∀ x, .. (∀ y,
+               P -∗ EWP m {{ v, Q }}
+             ) ..))
+           ..)
+       )%I
+  (at level 20,
+   x closed binder, y closed binder,
+   τ1, τn, τm at level 9, c at level 9, Q at level 200,
+   a closed binder, b closed binder,
+   v at level 200 as pattern,
+   format
+     "'[hv' {{ '[' ∀ x .. y ; P ']' } } '/  ' c  '[' a .. b ']'  ':'  '[' τ1  ..  τn  τm ']' '/' {{  '[' 'RET'  v ;  '/' Q ']' } } ']'")
+  : bi_scope.
+
+Notation "'{{' P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
+  (□
+         iSpec
+           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
+           c
+           (λ a, .. (λ b, λ (m : microvx),
+               P -∗ EWP m {{ v, Q }})
+           ..)
+       )%I
+  (at level 20,
+   τ1, τn, τm at level 9, c at level 9, Q at level 200,
+   a closed binder, b closed binder,
+   v at level 200 as pattern,
+   format
+     "'[hv' {{ '[' P ']' } } '/  ' c  '[' a .. b ']'  ':'  '[' τ1  ..  τn  τm ']' '/' {{  '[' 'RET'  v ;  '/' Q ']' } } ']'")
+  : bi_scope.
+
+Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
+  (□ iSpec (Tbase τ) c (λ a, .. (λ b, λ (m : microvx), (∀ x, .. (∀ y, P -∗ EWP m {{ v, Q }}) ..)) ..))%I
+    (at level 20, x closed binder, y closed binder, τ, c at level 9, Q at level 200,
+                  a closed binder, b closed binder, v at level 200 as pattern,
+     format "'[hv' {{  '[' ∀  x .. y ;  P  ']' } }  '/  ' c  '[' a .. b ']'  ':'   τ  '/' {{  '[' 'RET' v ;  '/' Q  ']' } } ']'")
+     : bi_scope.
+
+Notation "'{{' P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
+  (□ iSpec (Tbase τ) c (λ a, .. (λ b, λ (m : microvx), P -∗ EWP m {{ v, Q }}) ..))%I
+    (at level 20, τ, c at level 9, Q at level 200,
+                  a closed binder, b closed binder, v at level 200 as pattern,
+     format "'[hv' {{  '[' P  ']' } }  '/  ' c  '[' a .. b ']'  ':'   τ  '/' {{  '[' 'RET' v ;  '/' Q  ']' } } ']'")
+     : bi_scope.

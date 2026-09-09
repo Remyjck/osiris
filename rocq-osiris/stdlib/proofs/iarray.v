@@ -73,11 +73,11 @@ Section init_proof.
   Definition init_spec : Z → val → microvx → iProp Σ :=
     λ n f m,
       (∀ (A : Type) `(Encode A, Inhabited A) (I : list A → iProp Σ),
-         ⌜0 ≤ n ≤ max_array_length⌝ -∗
+         ⌜0 ≤ n ≤ max_array_length⌝ ∗
          (* [f] is a function [Z → A], such that [f i] preserves
             an invariant [I] over the results of all calls to [f i] so far. *)
-         □ iSpec τ[Z] f (λ i m, ∀ xs, ⌜0 ≤ i < n⌝ -∗ ⌜length xs = i⌝ -∗ I xs -∗
-                                      EWP m {{ x, I (xs ++ singleton x) }}) -∗
+         □ iSpec τ[Z] f (λ i m, ∀ xs, ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs -∗
+                                      EWP m {{ x, I (xs ++ singleton x) }}) ∗
          (* Calling [init f n] returns an array [a] such that [ownArray a xs],
             and such that [Φ i] holds for the [i]'th element of xs. *)
          I [] -∗
@@ -96,15 +96,15 @@ Section init_proof.
     iIntros (n f).
     change (VInt (int.repr n)) with #n.
     unfold init_spec.
-    iIntros (A HencA HinhA I) "%Hbounds #Hf HI".
+    iIntros (A HencA HinhA I) "(%Hbounds & #Hf & HI)".
     iApply imp_please; iNext.
     iPoseProof (in_env_mono with "Hlookup2 []") as "Hlookup2'".
     { iIntros (freeze). iApply imp_freeze_array. }
     iClear "Hlookup2".
     imp_app τ[array] with "[] [HI]".
     { imp_app τ[Z;val].
-      unfold array.init_spec. iIntros "Hm".
-      iApply ("Hm" $! A HencA HinhA I with "[%//] Hf HI"). }
+      iIntros "Hm".
+      iApply ("Hm" $! A HencA HinhA I with "[$HI $Hf //]"). }
     iIntros "(%xs & %Hlenxs & Hown & HI) Hm".
     iSpecialize ("Hm" with "Hown").
     iApply (imp_wand with "Hm").

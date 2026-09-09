@@ -6,56 +6,41 @@ From osiris.stdlib Require Import og_array.
 
 Open Scope Z.
 
-  Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpec τ c (λ a, .. (λ b, λ (m : microvx), (∀ x, .. (∀ y, P -∗ EWP m {{ v, Q }}) ..)) ..))%I
-    (at level 20, x closed binder, y closed binder, τ at level 200, c at level 9, Q at level 200,
-                  a closed binder, b closed binder, v at level 200 as pattern,
-     format "'[hv' {{  '[' ∀  x .. y ;  P  ']' } }  '/  ' c  '[' a .. b ']'  ':'   τ  '/' {{  '[' 'RET' v ;  '/' Q  ']' } } ']'")
-     : bi_scope.
-
-  Notation "'{{' P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpec τ c (λ a, .. (λ b, λ (m : microvx), P -∗ EWP m {{ v, Q }}) ..))%I
-    (at level 20, τ at level 200, c at level 9, Q at level 200,
-                  a closed binder, b closed binder, v at level 200 as pattern,
-     format "'[hv' {{  '['  P  ']' } }  '/  ' c  '[' a .. b ']'  ':'   τ  '/' {{  '[' 'RET' v ;  '/' Q  ']' } } ']'")
-     : bi_scope.
-
 Section init_proof.
 
   Context `{!osirisGS Σ}.
 
   Definition init_spec init : iProp Σ :=
     {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
-
         ⌜0 ≤ n ≤ max_array_length⌝ ∗ I [] ∗
         (* [f] is a function [Z → A], such that [f i] preserves
             an invariant [I] over the results of all calls to [f i] so far. *)
         {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
-        f i : τ[Z]
+        f i : Z
         {{ RET x; I (xs ++ singleton x) }}
     }}
-      init n f : τ[Z; val]
+      init n f : Z val
     (* Calling [init f n] returns an array [a] such that [ownArray a xs],
             and such that [Φ i] holds for the [i]'th element of xs. *)
     {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦∗ xs ∗ I xs }}.
 
   Definition init_spec' init : iProp Σ :=
     {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A → iProp Σ);
-      ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : τ[Z] {{ RET x; Φ i x }} }}
-    init n f : τ[Z; val]
+      ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; Φ i x }} }}
+    init n f : Z val
     {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦∗ xs ∗ [∗ listZ] i↦x ∈ xs, Φ i x }}.
 
   Definition init_pure_spec init : iProp Σ :=
     {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A);
-       ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : τ[Z] {{ RET x; ⌜x = Φ i⌝ }} }}
-    init n f : τ[Z; val]
+       ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; ⌜x = Φ i⌝ }} }}
+    init n f : Z val
     {{ RET a; a ↦∗ list_z.init n Φ }}.
 
   Lemma init_spec_spec' init :
     init_spec init -∗ init_spec' init.
   Proof.
     iIntros "#Hinit !>".
-    iApply (iSpec_mono with "Hinit"); simpl.
+    iApply (iSpec_mono with "Hinit"); simpl. iClear "Hinit".
     iIntros (n f m) "Hm".
     iIntros (A HencA HinhA Φ) "(%Hbounds & #Hf)".
     iApply ("Hm" $! A HencA HinhA (λ xs, [∗ listZ] i↦x ∈ xs, Φ i x)%I).
@@ -199,13 +184,13 @@ Section iter_proof.
 
   Definition invariant_preserving `{Encode A, Inhabited A} I xs f : iProp Σ :=
     {{ ∀ Xs; ⌜Xs ++ singleton X `prefix_of` xs⌝ ∗ I Xs }}
-       f X : τ[A]
+       f X : A
     {{ RET (); I (Xs ++ singleton X) }}.
 
   Definition iter_spec iter : iProp Σ :=
     {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
         a ↦∗{dq} xs ∗ invariant_preserving I xs f ∗ I [] }}
-    iter f a : τ[val; array]
+    iter f a : val array
     {{ RET (); I xs ∗ a ↦∗{dq} xs }}.
 
   Definition iter := (EAnonFun __iter).
@@ -286,7 +271,7 @@ Section iter_proof.
       iApply (imp_wand with "Hm").
       iIntros ([]) "$". iFrame.
       iPureIntro.
-      split; [ length; lia | assumption ].
+      split; [ length; reflexivity | assumption ].
     - iIntros ([]) "(Hslice & %Xs & HI & %HlenXs & %Hprefix)".
       (* Show that we have covered the full list. *)
       rewrite (complete_prefix Xs xs); [ | lia | assumption ].
@@ -313,10 +298,10 @@ Section iter2_spec.
          a ↦∗{dq1} xs ∗
          b ↦∗{dq2} ys ∗
          {{ ∀ (visited : list (A * B)); ⌜visited ++ singleton (x, y) `prefix_of` zip xs ys⌝ ∗ I visited }}
-         f x y : τ[A; B]
+         f x y : A B
          {{ RET (); I (visited ++ singleton (x, y)) }} ∗
          I [] }}
-  iter2 f a b : τ[val; array; array]
+  iter2 f a b : val array array
   {{ RET (); I (zip xs ys) ∗ a ↦∗{dq1} xs ∗ b ↦∗{dq2} ys }}.
 
 End iter2_spec.
@@ -331,7 +316,7 @@ Section map_spec.
   Definition map_spec map : iProp Σ :=
   {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) dq (xs : list A) (Φ : A → B → iProp Σ);
      a ↦∗{dq} xs ∗ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
-  map f a : τ[val; array]
+  map f a : val array
   {{ RET b; ∃ (ys : list B), b ↦∗ ys ∗ a ↦∗{dq} xs ∗
                              [∗ listZ] x;y ∈ xs;ys, Φ x y }}.
 
@@ -481,7 +466,7 @@ Section map_inplace_spec.
   Definition map_inplace_spec map_inplace : iProp Σ :=
   {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : A → A → iProp Σ);
      a ↦∗ xs ∗ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
-  map_inplace f a : τ[val; array]
+  map_inplace f a : val array
   {{ RET (); ∃ (ys : list A), a ↦∗ ys ∗ [∗ listZ] x;y ∈ xs;ys, Φ x y }}.
 
   Definition map_inplace := (EAnonFun __map_inplace).
@@ -572,8 +557,8 @@ Section mapi_inplace_spec.
       of [a], replacing each element with the result in place. *)
   Definition mapi_inplace_spec mapi_inplace : iProp Σ :=
   {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : Z → A → A → iProp Σ);
-     a ↦∗ xs ∗ {{ ⌜0 ≤ i < length xs⌝ }} f i x : τ[Z; A] {{ RET y; Φ i x y }} }}
-  mapi_inplace f a : τ[val; array]
+     a ↦∗ xs ∗ {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET y; Φ i x y }} }}
+  mapi_inplace f a : val array
   {{ RET (); ∃ (ys : list A), a ↦∗ ys ∗ [∗ listZ] i↦x;y ∈ xs;ys, Φ i x y }}.
 
   Definition mapi_inplace := (EAnonFun __mapi_inplace).
@@ -869,44 +854,44 @@ Section fold_left_spec.
 
 
   (** [fold_left f init a] computes [f (... (f (f init a.(0)) a.(1)) ...) a.(n-1)]. *)
-  Definition fold_left_spec A `{Encode A} : val → A → array → microvx → iProp Σ :=
-    λ f x a m,
-      (∀ `(Encode B, Inhabited B)
-         dq (xs : list B) (I : A → list B → iProp Σ),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A; B] f (λ (acc : A) (b : B) m,
-                              ∀ (visited : list B),
-                              ⌜visited ++ singleton b `prefix_of` xs⌝ -∗
-                              I acc visited -∗
-                              EWP m {{ (acc' : A), I acc' (visited ++ singleton b) }}) -∗
-         I x [] -∗
-         EWP m {{ (r : A), I r xs ∗ a ↦∗{dq} xs }})%I.
+  Definition fold_left_spec fold_left : iProp Σ :=
+  ∀∀ `(Encode A) `(Encode B);
+  {{ ∀ `(Inhabited B) dq (xs : list B) (I : A → list B → iProp Σ);
+     a ↦∗{dq} xs ∗
+     {{ ∀ visited; ⌜visited ++ singleton b `prefix_of` xs⌝ ∗ I acc visited }}
+     f acc b : A B
+     {{ RET acc'; I acc' (visited ++ singleton b) }} ∗
+     I x [] }}
+  fold_left f x a : val A array
+  {{ RET r; I r xs ∗ a ↦∗{dq} xs }}.
 
   (** [fold_left f init a] computes [f (... (f (f init a.(0)) a.(1)) ...) a.(n-1)]. *)
-  Definition fold_left_pure_spec A `{Encode A} : val → A → array → microvx → iProp Σ :=
-    λ f x a m,
-      (∀ `(Encode B, Inhabited B)
-         dq (xs : list B) (Φ : A → B → A),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A; B] f (λ (acc : A) (b : B) m, EWP m {{ acc', ⌜acc' = Φ acc b⌝ }}) -∗
-         EWP m {{ (r : A), ⌜r = fold_left Φ xs x⌝ ∗ a ↦∗{dq} xs }})%I.
+  Definition fold_left_pure_spec fold_left : iProp Σ :=
+  ∀∀ `(Encode A) `(Encode B);
+  {{ ∀ `(Inhabited B) dq (xs : list B) (Φ : A → B → A);
+     a ↦∗{dq} xs ∗
+     {{ True }} f acc b : A B {{ RET acc'; ⌜acc' = Φ acc b⌝ }} }}
+  fold_left f x a : val A array
+  {{ RET r; ⌜r = List.fold_left Φ xs x⌝ ∗ a ↦∗{dq} xs }}.
 
-  Lemma fold_left_spec_pure_spec `{Encode A} f x a m :
-    fold_left_spec A f x a m -∗ fold_left_pure_spec A f x a m.
+  Lemma fold_left_spec_pure_spec :
+    ∀ fold_left, fold_left_spec fold_left -∗ fold_left_pure_spec fold_left.
   Proof.
-    iIntros "Hflspec".
-    iIntros (B HencB HinhB dq xs Φ) "Hown #Hf".
-    iApply ("Hflspec" $! B _ _ dq xs (λ acc visited, ⌜acc = fold_left Φ visited x⌝)%I
-             with "Hown").
-    - iIntros "!>".
-      iApply (iSpec_mono with "Hf").
-      iIntros (acc b m') "Hm' %visited %Hpermitted %HI".
-      iApply (imp_wand with "Hm'").
-      iIntros (acc') "%Hacc'".
-      iPureIntro.
-      rewrite fold_left_app. rewrite <- HI.
-      apply Hacc'.
-    - iPureIntro. done.
+    iIntros (fl) "#Hflspec". unfold fold_left_pure_spec; simpl.
+    iIntros (A HencA B HencB) "!>".
+    iSpecialize ("Hflspec" $! A _ B _).
+    iApply (iSpec_mono with "Hflspec").
+    iIntros (f x a m) "Hm". iIntros (HinhB dq xs Φ) "(Hown & #Hf)".
+    iApply ("Hm" $! _ dq xs (λ acc visited, ⌜acc = fold_left Φ visited x⌝)%I with "[$Hown]").
+    iSplit; [ iModIntro | done ].
+    iApply (iSpec_mono with "Hf").
+    iIntros (acc b m') "Hm %visited (%Hvisited & %Hacc)".
+    iSpecialize ("Hm" with "[//]").
+    iApply (imp_wand with "Hm").
+    iPureIntro.
+    intros acc' Hacc'.
+    rewrite fold_left_app Hacc' Hacc.
+    reflexivity.
   Qed.
 
   Definition fold_left := (EAnonFun __fold_left).
@@ -914,7 +899,7 @@ Section fold_left_spec.
   Lemma imp_fold_left η :
     □ in_env "length" array_length_spec η -∗
     □ in_env "unsafe_get" array_get_spec η -∗
-    EWP (eval η fold_left) {{ c, □ ∀ `(Encode A), iSpec τ[val; A; array] c (fold_left_spec A) }}.
+    EWP (eval η fold_left) {{ fold_left_spec }}.
   Proof.
     iIntros "#Hlookup #Hlookup'".
     iApply imp_EAnon_poly_pers.

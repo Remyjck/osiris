@@ -70,15 +70,18 @@ Section verification.
     (* let a = .. *)
     iApply (imp_ELet_var (B:=array)).
     { (* [Array.init n (fun i -> i +)] *)
+      (* We weaken the spec of [Array.init] to one where the function is
+         known to be pure. *)
+      iAssert (path_spec ["Array";"init"] init_pure_spec η) as "Hinit".
+      { ltac2:(solve_path_spec ()). iIntros (init).
+        iApply (init_spec_pure_spec). }
       imp_app τ[Z;val].
       { (* (fun i -> i + 1) *)
         iApply (imp_EAnon_pers τ[Z] (λ i m, EWP m {{ j, ⌜(j = i + 1)%Z⌝ }})%I).
         iIntros (i) "!>". iApply imp_please; iNext. imp_arith. }
       iIntros "#Hf Hm".
-      (* We weaken the spec of [Array.init] to one where the function is known to be pure. *)
-      iPoseProof (init_spec_pure_spec with "Hm") as "Hm".
-      iApply ("Hm" $! Z with "[//]").
-      iIntros "!>".
+      iApply ("Hm" $! Z _ _ _ with "[Hf]").
+      iFrame "%". iIntros "!>".
       iApply (iSpec_mono with "Hf").
       iIntros (i m') "$ Hbound //". }
 
@@ -86,7 +89,8 @@ Section verification.
     iIntros (a) "HownArr".
     imp_app τ[val;Z;array].
     iIntros "#Hadd_ Hm".
-    (* Weaken the spec of [Array.fold_left] to one where the function is known to be pure. *)
+    (* Weaken the spec of [Array.fold_left] to one where the function is
+       known to be pure. *)
     iPoseProof (fold_left_spec_pure_spec with "Hm") as "Hm".
 
     unfold fold_left_pure_spec.
