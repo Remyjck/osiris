@@ -33,8 +33,7 @@ Section ewp.
         ewp_def E m' Ψ Q ∗
           (match μ with
            | None => state_interp (σ', κs, π)
-           | Some (ι', m') => ∃ φ' γ, state_interp (σ', κs, <[ι':= γ]>π) ∗
-                                        saved_prop.saved_pred_own γ DfracDiscarded φ' ∗
+           | Some (ι', m') => ∃ φ', state_interp (σ', κs, <[ι':= φ']>π) ∗
                                         ewp_def ⊤ m' ⊥ (λ o, □ φ' o)
           end).
   Proof.
@@ -91,9 +90,8 @@ Section ewp.
       intro_state_join. iMod (fupd_mask_subseteq E1) as "Hmod". set_solver.
       spec_state_join.
       iMod "Hwp". iModIntro.
-      destruct (π !! t) eqn:Hlookup.
-      - iDestruct "Hwp" as "(%φ'0 & $ & Hwp)".
-        iIntros "!> %o Ho". iSpecialize ("Hwp" with "Ho").
+      destruct (π !! t) as [φ'|] eqn:Hlookup.
+      - iIntros "!> %o Ho". iSpecialize ("Hwp" with "Ho").
         ewp_mask_elim. iMod "Hwp" as "(Hwp & Hforked)". iFrame.
         iMod "Hmod".
         iApply ("IH" with "Hwp Hmono").

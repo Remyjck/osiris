@@ -311,7 +311,6 @@ Section handle_rules.
       ewp_mask_intro "Hmod". iModIntro. iMod "Hmod". iModIntro. iFrame.
       ewp_unfold_all. clear κs. intro_state_join. spec_state_join. iMod "He". iModIntro.
       destruct (π !! ι); last done.
-      iDestruct "He" as "(%φ' & $ & He)".
       iIntros "!> %o Ho". iSpecialize ("He" with "Ho").
       ewp_mask_elim.
       iMod "He" as "(He & $)". iModIntro.
@@ -524,7 +523,6 @@ Section handler_proof.
       ewp_unfold_head. clear κs.
       intro_state_join. spec_state_join. iMod "Hwp".
       destruct (π !! ι); last done.
-      iDestruct "Hwp" as "(%φ' & $ & Hwp)".
       iIntros "!> !> %o Ho". iSpecialize ("Hwp" with "Ho").
       ewp_mask_elim. iMod "Hwp" as "(Hwp & $)".
       iModIntro. rewrite /continue.

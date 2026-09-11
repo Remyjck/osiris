@@ -211,7 +211,6 @@ Section ewp_rules.
     { simpl. ewp_unfold_all.
       intro_state_join. spec_state_join. iMod "Hwp".
       destruct (π !! x); last done.
-      iDestruct "Hwp" as "(%φ' & $ & Hwp)".
       iIntros "!> !> %o Ho". iSpecialize ("Hwp" with "Ho").
       ewp_mask_elim.
       iMod "Hwp" as "[Hwp $]".
@@ -328,7 +327,6 @@ Section ewp_rules.
         clear κs.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H1".
         destruct (π !! x); last done.
-        iDestruct "H1" as "(%φ' & $ & H1)".
         iIntros "!> !> %o Ho". iSpecialize ("H1" with "Ho").
         ewp_mask_elim. iMod "H1" as "(H1 & $)".
         iApply ("IH" with "H1 H2 Hjoin").
@@ -381,7 +379,6 @@ Section ewp_rules.
         clear κs.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H2".
         destruct (π !! x); last done.
-        iDestruct "H2" as "(%φ' & $ & H2)".
         iIntros "!> !> %o Ho". iSpecialize ("H2" with "Ho").
         ewp_mask_elim. iMod "H2" as "(H2 & $)".
         iApply ("IH" with "H1 H2 Hjoin").

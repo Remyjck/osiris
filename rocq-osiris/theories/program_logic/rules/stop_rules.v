@@ -508,10 +508,9 @@ Section imp_stop_concurrent.
     construct_wp_nonret.
     destruct_subjective_step.
     iMod (thread_alloc π ι _ (not_elem_of_dom_1 _ _ H0) with "Hti")
-      as "(%γ & Hti & #Hvalid & #Hsaved)".
+      as "(Hti & #Hvalid)".
     ewp_mask_elim.
-    iAssert (valid_thread ι _) as "Hvalid'". iFrame "#".
-    iDestruct ("Hfork" with "Hvalid'") as "[Hcall Hcontinue]".
+    iDestruct ("Hfork" with "Hvalid") as "[Hcall Hcontinue]".
     iFrame "#∗".
     iApply (ewp_mono with "Hcall").
     iIntros ([|]) "/="; iIntros "(%a' & -> & #Hφ)"; iModIntro;
@@ -545,11 +544,14 @@ Section imp_stop_concurrent.
     iIntros "Hι Hk".
     ewp_unfold_head. intro_state_join.
     ewp_mask_intro "Hmod".
-    iPoseProof (valid_thread_lookup with "Hti Hι") as "(Hti & %γ & %Hlookup & Hsaved)".
+    iPoseProof (valid_thread_lookup with "Hti Hι") as "(Hti & %Q & %Hlookup & #Hagree)".
     assert (ι' ∈ dom π) as Hdom by (apply (elem_of_dom π ι'); eexists; eassumption).
     rewrite Hlookup.
     iFrame.
     iIntros "!> %o #Ho".
+    (* The pool stores [Q]; [isThread] names the same predicate, but only up
+       to a step-indexed equality. We are under the [▷], so we may use it. *)
+    iRewrite ("Hagree" $! o) in "Ho".
     ewp_mask_elim. rewrite /continue /discontinue.
     destruct o; [ iDestruct "Hk" as "[Hk _]" | iDestruct "Hk" as "[_ Hk]" ];
       iDestruct "Ho" as "(%v & -> & Hφ)"; iApply ("Hk" $! v with "Hφ").

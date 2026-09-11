@@ -19,8 +19,10 @@ Section subjective_step.
     | _ => None
     end.
 
-  Definition post_map (_ : gFunctors) := gmap thread gname.
-  Instance lookup_post_map : Lookup thread gname (post_map Σ).
+  (* A thread pool's postconditions, indexed by thread id. The predicates are
+     stored directly, so no gname indirection is needed to reach them. *)
+  Definition post_map (Σ' : gFunctors) := gmap thread (outcome2 val exn -d> iPropO Σ').
+  Instance lookup_post_map : Lookup thread (outcome2 val exn -d> iPropO Σ) (post_map Σ).
   Proof. apply _. Defined.
 
   Definition th_config A X : Type := store * (micro A X) * (gset thread).
