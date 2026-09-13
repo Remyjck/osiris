@@ -161,7 +161,7 @@ Section ewp_rules.
       ewp_unfold_all. rewrite Hhm. rewrite Hhm2.
       (* Process a step of computation. *)
       intro_state. spec_state.
-      iModIntro. pose proof Hstep as Hcp. apply invert_can_progress in Hstep.
+      iModIntro. pose proof Hstep as Hcp. apply invert_reducible in Hstep.
       destruct Hstep as [ Hstep | Hstep ].
       { (* Case: [m1] is [Join _]. *)
         destruct Hstep as (ι' & k & -> & Hdom).
@@ -180,7 +180,7 @@ Section ewp_rules.
         iApply ("IH" with "Hwp"). }
       destruct Hstep as [ Hstep | Hstep ].
       { destruct Hstep as (Y & c & y & k & ->).
-        iSplitR; [ iPureIntro; by apply can_progress_try2 | ].
+        iSplitR; [ iPureIntro; by apply reducible_try2 | ].
         simpl try2. cbn match.
         iIntros (σ' m' μ) "%Hstep2".
         dependent destruction Hstep2.
@@ -335,7 +335,7 @@ Section ewp_rules.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
         clear κs.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
-        iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+        iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".
         dependent destruction Hstep2.
         { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }
@@ -388,7 +388,7 @@ Section ewp_rules.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
         clear κs.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
-        iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+        iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".
         dependent destruction Hstep2.
         { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }

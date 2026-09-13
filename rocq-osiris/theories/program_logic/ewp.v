@@ -168,7 +168,7 @@ Section ewp_def.
        | WPStep =>
            ∀ σ κ κs π,
              state_interp (σ, κ ++ κs, π) ={E, ∅}=∗
-             ⌜can_progress σ (dom π) m⌝ ∗
+             ⌜reducible m σ (dom π)⌝ ∗
              ∀ σ' m' μ,
                ⌜subjective_step (σ, m, dom π) κ (σ', m', μ)⌝ ={∅}=∗ ▷ (|={∅,E}=>
                ewp E m' Ψ φ ∗

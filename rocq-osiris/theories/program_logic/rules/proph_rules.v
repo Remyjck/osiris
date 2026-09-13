@@ -112,7 +112,7 @@ Section proph.
          the prophecy is left untouched. *)
       iMod ("Hwp" $! σ [] κs π with "Hsi") as "[_ Hwp]".
       iModIntro. iSplit.
-      { iPureIntro. eapply can_progress_resolve; [ exact Hcs | apply Hat ]. }
+      { iPureIntro. eapply reducible_resolve; [ exact Hcs | apply Hat ]. }
       iIntros (σ' m' μ) "%Hstep".
       (* [dependent destruction] wants the payload to be a variable. *)
       remember (x, p, v) as y eqn:Hy.
@@ -135,7 +135,7 @@ Section proph.
         as "[_ Hwp]".
       { by iFrame "Hsi". }
       iModIntro. iSplit.
-      { iPureIntro. eapply can_progress_resolve; [ exact Hcs | apply Hat ]. }
+      { iPureIntro. eapply reducible_resolve; [ exact Hcs | apply Hat ]. }
       iIntros (σ' m' μ) "%Hstep".
       remember (x, p, v) as y eqn:Hy.
       dependent destruction Hstep.

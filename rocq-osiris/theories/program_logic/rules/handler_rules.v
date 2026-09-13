@@ -322,7 +322,7 @@ Section handle_rules.
       ewp_mask_intro "Hmod". iModIntro. iMod "Hmod". iModIntro. iFrame.
       clear κs.
       ewp_unfold_all. intro_state. spec_state. iModIntro.
-      iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+      iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
       iIntros (σ'' m'' μ) "%Hstep2".
       dependent destruction Hstep2.
       { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }
@@ -534,7 +534,7 @@ Section handler_proof.
       rewrite /impure (ewp_unfold (Stop (CResolve c) y k)) /ewp_pre /=.
       ewp_unfold_head. clear κs.
       intro_state. spec_state. iModIntro.
-      iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+      iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
       iIntros (σ'' m'' μ) "%Hstep2".
       dependent destruction Hstep2.
       { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }

@@ -93,7 +93,7 @@ Lemma safe_not_crash σ π ι :
 Proof.
   intros Hsafe Hι.
   destruct (Hsafe σ π (rtc_refl _ _) ι Crash Hι) as [ [] | [ Hcp | [] ] ].
-  destruct (subjective_step.invert_can_progress _ _ _ Hcp) as [ H | [ H | [ H | H ] ] ];
+  destruct (subjective_step.invert_reducible _ _ _ Hcp) as [ H | [ H | [ H | H ] ] ];
     try by destruct H as (?&?&?&?).
   - by destruct H as (?&?&?&?&?).
   - by eapply invert_can_step_Crash.
@@ -210,10 +210,10 @@ Lemma not_stuck_call {A E X Y} σ (π : gset thread) (c : code X Y exn) x
 Proof.
   intros Hc. destruct c; try done;
     try (right; left;
-         apply subjective_step.can_step_can_progress, can_step_stop;
+         apply subjective_step.can_step_reducible, can_step_stop;
          split; [ done | by intros [] ]).
   - (* a fork makes progress by creating a thread *)
-    right; left. by apply subjective_step.can_progress_fork.
+    right; left. by apply subjective_step.reducible_fork.
   - (* a join is waiting *)
     by right; right.
 Qed.
@@ -1481,11 +1481,11 @@ Proof.
   - by destruct (safe_not_crash _ _ _ Hsafe Hι).
   - dependent destruction Hm.
     right; left.
-    by apply subjective_step.can_step_can_progress, can_step_handle.
+    by apply subjective_step.can_step_reducible, can_step_handle.
   - dependent destruction Hm.
     + apply not_stuck_call. eapply not_stuck_call_code; [ done | ].
       by eapply (Hsafe σ π (rtc_refl _ _)).
-    + right; left. apply subjective_step.can_step_can_progress, can_step_stop;
+    + right; left. apply subjective_step.can_step_reducible, can_step_stop;
         split; [ done | by intros [] ].
     + apply not_stuck_call. eapply not_stuck_resolve_code; [ done | ].
       by eapply (Hsafe σ π (rtc_refl _ _)).
@@ -1493,7 +1493,7 @@ Proof.
       erase_result_step; erase_not_stuck_finish.
     + erase_result_step; erase_not_stuck_finish.
   - dependent destruction Hm.
-    right; left. by apply subjective_step.can_step_can_progress, can_step_par.
+    right; left. by apply subjective_step.can_step_reducible, can_step_par.
 Qed.
 
 Lemma erase_not_stuck σ π σe πe :

@@ -98,14 +98,14 @@ Module ewp_rules_tactics.
         iSplitL ""; [ | iPureIntro; by tac ]
     end.
 
-  Ltac prove_can_progress :=
+  Ltac prove_reducible :=
     unfold stop;
-    (eauto with step can_progress) ||
-    (apply can_step_can_progress; auto with step can_step).
+    (eauto with step reducible) ||
+    (apply can_step_reducible; auto with step can_step).
 
   Ltac construct_wp_nonret :=
-    (* Prove [can_step]: *)
-    (discharge_pure prove_can_progress);
+    (* Prove [reducible]: *)
+    (discharge_pure prove_reducible);
     (* Introduce a hypothetical step: *)
     intro_step.
 

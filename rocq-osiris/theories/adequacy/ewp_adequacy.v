@@ -28,7 +28,7 @@ Definition is_join {A E} (m : micro A E) : Prop :=
   end.
 
 Definition not_stuck {A E} (m : micro A E) σ (π : gset thread) :=
-  is_final m ∨ can_progress σ π m ∨ is_join m.
+  is_final m ∨ reducible m σ π ∨ is_join m.
 
 
 (* -------------------------------------------------------------------------- *)
@@ -192,9 +192,9 @@ Qed.
 
 Include ewp_rules_tactics.
 
-Ltac invert_can_progress :=
+Ltac invert_reducible :=
     lazymatch goal with
-    | h: can_progress _ _ ?e |- _ =>
+    | h: reducible ?e _ _ |- _ =>
         let hstep := fresh "Htstep" in
         let ι' := fresh "ι'" in
         let k := fresh "k" in
@@ -209,7 +209,7 @@ Ltac invert_can_progress :=
         let Y := fresh "Y" in
         let c := fresh "c" in
         let y := fresh "y" in
-        apply invert_can_progress in h as hstep;
+        apply invert_reducible in h as hstep;
         destruct hstep as
           [(ι' & k & Heq_e & Hdom)
           | [ (v1 & v2 & k & Heq_e) |
@@ -257,7 +257,7 @@ Section satisfiability_weakest_pre.
          and never take the step. That is what lets a resolution, whose
          step carries a label we do not know here, go through like any
          other. This is Iris's [wp_not_stuck]. *)
-      iAssert (|={E,∅}=> ⌜can_progress σ (dom πp) e⌝)%I with "[Hsi Hwp]" as "Hcp".
+      iAssert (|={E,∅}=> ⌜reducible e σ (dom πp)⌝)%I with "[Hsi Hwp]" as "Hcp".
       { spec_state. iModIntro. iPureIntro. exact Hstep. }
       iMod (fupd_plain_mask with "Hcp") as %Hprog.
       iApply step_fupd_intro; first set_solver.

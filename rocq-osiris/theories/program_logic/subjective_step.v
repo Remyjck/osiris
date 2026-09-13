@@ -120,28 +120,30 @@ Ltac destruct_subjective_step :=
   try rewrite bi.sep_emp.
 
 
-Section can_progress.
+Section reducible.
 
   Context {Σ : gFunctors}.
 
 (* -------------------------------------------------------------------------- *)
 
-  Definition can_progress {A E} σ (π : gset thread) (m : micro A E) :=
+  (* The counterpart of Iris's [reducible e σ]. A join counts as reducible
+     as soon as the thread it waits on exists. *)
+  Definition reducible {A E} (m : micro A E) σ (π : gset thread) :=
     match m with
     | Stop CJoin ι' k => ι' ∈ π
     | _ => ∃ κ σ' m' (μ : option (thread * microvx)),
       subjective_step (σ, m, π) κ (σ', m', μ)
     end.
 
-  Lemma invert_can_progress {A E} σ π m :
-    @can_progress A E σ π m ->
+  Lemma invert_reducible {A E} m σ π :
+    @reducible A E m σ π ->
     ((∃ ι' k, m = Stop CJoin ι' k ∧ ι' ∈ π) ∨
       (∃ v1 v2 k, m = Stop CFork (v1, v2) k) ∨
       (∃ Y (c : code Y val exn) y k, m = Stop (CResolve c) y k) ∨
       (can_step (σ, m))).
   Proof.
     intros Hcp.
-    unfold can_progress in Hcp.
+    unfold reducible in Hcp.
     (* Cases on the micro computation. *)
     destruct m;
       (* If that computation is a Stop, destruct the code *)
@@ -160,26 +162,26 @@ Section can_progress.
     - left. repeat eexists. apply Hcp.
   Qed.
 
-  Arguments can_progress : simpl never.
+  Arguments reducible : simpl never.
 
-  Lemma can_step_can_progress {A E} σ (m : micro A E) :
+  Lemma can_step_reducible {A E} (m : micro A E) σ :
     ∀ π,
       can_step (σ, m) ->
-      can_progress σ π m.
+      reducible m σ π.
   Proof.
     intros π ([σ' m'] & Hstep).
-    unfold can_progress.
+    unfold reducible.
     destruct_step;
       do 4 eexists;
       by (eapply BaseS; eauto with step can_step).
     Unshelve. apply b.
   Qed.
 
-  Lemma can_progress_fork {A E} σ π x (k : _ -> micro A E) :
-    can_progress σ π (Stop CFork x k).
+  Lemma reducible_fork {A E} σ π x (k : _ -> micro A E) :
+    reducible (Stop CFork x k) σ π.
   Proof.
     destruct x.
-    unfold can_progress.
+    unfold reducible.
     do 4 eexists. eapply ForkS.
     apply is_fresh.
   Qed.
@@ -188,26 +190,26 @@ Section can_progress.
      and that step lands on an outcome, which is exactly [ResolveS]'s
      [is_result] premise. *)
 
-  Lemma can_progress_resolve {A E X} σ π (c : code X val exn) x p v
+  Lemma reducible_resolve {A E X} σ π (c : code X val exn) x p v
     (k : outcome2 val exn -> micro A E) :
     can_step (σ, stop c x) ->
     (∀ σ' m', step (σ, stop c x) (σ', m') ->
        (∃ w, m' = Ret w) ∨ (∃ e, m' = Throw e) ∨ m' = Crash) ->
-    can_progress σ π (Stop (CResolve c) (x, p, v) k).
+    reducible (Stop (CResolve c) (x, p, v) k) σ π.
   Proof.
     intros Hcs Hat.
-    unfold can_progress.
+    unfold reducible.
     destruct Hcs as ([σ' m'] & Hstep).
     do 4 eexists. eapply ResolveS; [ exact Hstep | ].
     by destruct (Hat _ _ Hstep) as [(w & ->) | [(e & ->) | ->]].
   Qed.
 
-  Lemma can_progress_join {A E} σ π ι' (k : _ -> micro A E) :
+  Lemma reducible_join {A E} σ π ι' (k : _ -> micro A E) :
     ι' ∈ π ->
-    can_progress σ π (Stop CJoin ι' k).
+    reducible (Stop CJoin ι' k) σ π.
   Proof.
     intros Hπ; simpl.
-    unfold can_progress.
+    unfold reducible.
     assumption.
   Qed.
 
@@ -215,12 +217,12 @@ Section can_progress.
      depend on it. This is what the congruence rules need: [try2] and the
      [Par]/[Handle] float-ups all change only the continuation. *)
 
-  Lemma can_progress_resolve_cont {A B E E' X} σ π (c : code X val exn) y
+  Lemma reducible_resolve_cont {A B E E' X} σ π (c : code X val exn) y
     (k : outcome2 val exn -> micro A E) (k' : outcome2 val exn -> micro B E') :
-    can_progress σ π (Stop (CResolve c) y k) ->
-    can_progress σ π (Stop (CResolve c) y k').
+    reducible (Stop (CResolve c) y k) σ π ->
+    reducible (Stop (CResolve c) y k') σ π.
   Proof.
-    unfold can_progress.
+    unfold reducible.
     intros (κ & σ' & m' & μ & Hcp).
     dependent destruction Hcp.
     - exfalso. eapply (no_step_Resolve _ c y k); exact H.
@@ -230,32 +232,32 @@ Section can_progress.
   (* [try2] pushes into continuations, and no rule of [subjective_step] looks
      at a continuation, so progress is preserved by it. *)
 
-  Lemma can_progress_try2 {A B E E'} σ π (m : micro A E)
+  Lemma reducible_try2 {A B E E'} (m : micro A E) σ π
     (f : outcome2 A E -> micro B E') :
-    can_progress σ π m ->
-    can_progress σ π (try2 m f).
+    reducible m σ π ->
+    reducible (try2 m f) σ π.
   Proof.
     intros Hcp.
     pose proof Hcp as Hcp'.
-    apply invert_can_progress in Hcp'.
+    apply invert_reducible in Hcp'.
     destruct Hcp' as [ (ι' & k & -> & Hdom)
                      | [ (v1 & v2 & k & ->)
                      | [ (Y & c & y & k & ->) | Hcs ] ] ].
-    - by apply can_progress_join.
-    - apply can_progress_fork.
+    - by apply reducible_join.
+    - apply reducible_fork.
     - (* [try2] only changes the continuation. *)
       simpl try2. cbn match.
-      by eapply can_progress_resolve_cont.
-    - apply can_step_can_progress. by apply can_step_try2.
+      by eapply reducible_resolve_cont.
+    - apply can_step_reducible. by apply can_step_try2.
   Qed.
 
-  Lemma inv_can_progress_join {A E} σ (π : post_map Σ) ι' (k : _ -> micro A E) :
-    can_progress σ (dom π) (Stop CJoin ι' k) ->
+  Lemma inv_reducible_join {A E} σ (π : post_map Σ) ι' (k : _ -> micro A E) :
+    reducible (Stop CJoin ι' k) σ (dom π) ->
     ∃ φ, π !! ι' = Some φ.
   Proof.
     intros Hprog; simpl.
     apply (elem_of_dom π ι').
-    unfold can_progress in Hprog.
+    unfold reducible in Hprog.
     apply Hprog.
   Qed.
 
@@ -321,15 +323,15 @@ Section can_progress.
       exfalso; eauto with invert_can_step.
   Qed.
 
-End can_progress.
+End reducible.
 
-Global Opaque can_progress.
+Global Opaque reducible.
 
-Create HintDb can_progress.
+Create HintDb reducible.
 
 Global Hint Resolve
-  can_progress_join
-  can_progress_fork : can_progress.
+  reducible_join
+  reducible_fork : reducible.
 
 Section Atomicity.
 
