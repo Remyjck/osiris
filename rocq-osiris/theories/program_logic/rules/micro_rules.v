@@ -48,11 +48,30 @@ Section ewp_basic_rules.
     by rewrite ewp_unfold /ewp_pre.
   Qed.
 
-  Lemma ewp_crash_inv :
+  (* [Crash] is never reducible, so its [ewp] is refuted as soon as a state
+     interpretation is at hand. *)
+  Lemma ewp_crash_inv σ κs π :
+    osiris_state_interp σ -∗ osiris_proph_interp σ κs -∗ osiris_thread_interp π -∗
     ewp_def E (Crash : micro A X) Ψ Q ={E}=∗ False.
   Proof.
     ewp_unfold (@Crash A X).
-    by iIntros "Hsi".
+    iIntros "Hsi Hpi Hti Hwp".
+    iCombine "Hsi Hpi Hti" as "Hsi".
+    iMod ("Hwp" $! σ [] κs π with "Hsi") as "[%Hred _]".
+    by apply not_reducible_Crash in Hred.
+  Qed.
+
+  (* Any state refutes an [ewp] of [Crash], so one such [ewp] gives all the
+     others, whatever their protocol and postcondition. *)
+  Lemma ewp_crash_any {B Y} Ψ' (Q' : outcome2 B Y → iProp Σ) :
+    ewp_def E (Crash : micro A X) Ψ Q -∗ ewp_def E (Crash : micro B Y) Ψ' Q'.
+  Proof.
+    iIntros "Hwp".
+    ewp_unfold_head.
+    iEval (rewrite ewp_unfold /ewp_pre /=) in "Hwp".
+    iIntros (σ κ κs π) "Hsi".
+    iMod ("Hwp" with "Hsi") as "[%Hred _]".
+    by apply not_reducible_Crash in Hred.
   Qed.
 
   Lemma ewp_outcome2 o :
@@ -92,11 +111,11 @@ Ltac ewp_invert :=
   (* ewp_def ret *)
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ (ret _) _ _)] =>
       iPoseProof (ewp_ret_inv with "[$]") as "HΦ"
-  (* ewp_def crash *)
+  (* ewp_def crash: needs the state interpretation, as [Hsi], [Hpi], [Hti] *)
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ Crash _ _)] =>
-      iMod (ewp_crash_inv with "[$]") as "%"
+      iMod (ewp_crash_inv with "Hsi Hpi Hti [$]") as "%"
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ (crash _) _ _)] =>
-      iMod (ewp_crash_inv with "[$]") as "%"
+      iMod (ewp_crash_inv with "Hsi Hpi Hti [$]") as "%"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -145,10 +164,6 @@ Section ewp_rules.
     { rewrite try2_inject2.
       iPoseProof (ewp_outcome2_inv with "Hwp") as "Hret"; cbn.
       iApply (fupd_ewp with "Hret"). }
-    (* Case : [m1] is [crash]; trivial  *)
-    { iClear "IH".
-      iApply fupd_ewp.
-      ewp_unfold (@Crash A X); by iMod "Hwp". }
     (* Case : [m1] is [Perform _ _]. *)
     { cbn.
       ewp_unfold_all.
@@ -346,7 +361,7 @@ Section ewp_rules.
           iSpecialize ("H1" $! _ _ _ Hs);
           ewp_mask_elim; iMod "H1" as "(H1 & $)".
         + rewrite try2_inject2. iApply ("IH" with "H1 H2 Hjoin").
-        + iApply fupd_ewp; iMod (ewp_crash_inv with "H1") as "[]". }
+        + simpl try2. iModIntro. by iApply (ewp_crash_any with "H1"). }
 
     { (* [StepThroughParRight]. *)
       destruct_code.
@@ -398,7 +413,7 @@ Section ewp_rules.
           iSpecialize ("H2" $! _ _ _ Hs);
           ewp_mask_elim; iMod "H2" as "(H2 & $)".
         + rewrite try2_inject2. iApply ("IH" with "H1 H2 Hjoin").
-        + iApply fupd_ewp; iMod (ewp_crash_inv with "H2") as "[]". }
+        + simpl try2. iModIntro. by iApply (ewp_crash_any with "H2"). }
 
     { (* [ParLeft] *)
       eapply BaseS in H as Hstep.

@@ -249,7 +249,6 @@ Section satisfiability_weakest_pre.
         iIntros (o' Heq).
         destruct o; destruct o'; unfold inject2 in Heq;
           inversion Heq; iApply "Hwp".
-    - (* Case: [e] is a [crash]. *) by iMod "Hwp".
     - (* Case: [e] is a [perform]. *)
       iMod "Hwp" as "(% & [] & Hwp)".
     - (* Case: [e] takes a subjective_step. Being able to progress is exactly

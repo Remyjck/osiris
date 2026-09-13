@@ -64,9 +64,6 @@ Section ewp.
     { iApply ("Hmono" with "[> -]").
       by iApply (fupd_mask_mono E1 _). }
 
-    (* Case: [m] is a [WPCrash]. *)
-    { by iApply (fupd_mask_mono E1 _). }
-
     { (* Case: [m] is a [WPPerform]. We use [prot_mono]. *)
       iApply (fupd_mask_mono E1 _). set_solver.
       iMod "Hwp"; iModIntro.
@@ -142,7 +139,6 @@ Section ewp.
     ewp_unfold_all.
     ewp_case m.
     { by iDestruct "Hm" as ">>> $". }
-    { by iDestruct "Hm" as ">> []". }
     { inversion Heff. }
     { intro_state.
       iMod "Hm".
@@ -151,15 +147,22 @@ Section ewp.
 
       construct_wp_nonret.
       iSpecialize ("Hm" $! σ' m' μ Hstep0).
-      ewp_mask_elim. iMod "Hm" as "(Hewp & $)".
+      ewp_mask_elim. iMod "Hm" as "(Hewp & Hsi)".
       (* Use atomicity. *)
       edestruct H; first eassumption; rewrite H0.
-      - ewp_unfold_all.
+      - iFrame "Hsi". ewp_unfold_all.
         by iDestruct "Hewp" as ">>$".
-      - ewp_unfold_all.
+      - iFrame "Hsi". ewp_unfold_all.
         by iDestruct "Hewp" as ">>$".
-      - ewp_unfold_all.
-        by iDestruct "Hewp" as ">[]". }
+      - (* A crash is not reducible: refute it with the state interpretation
+           we still hold, while the mask is [E2]. *)
+        ewp_unfold_all.
+        destruct μ as [[ι' mf]|]; iSimpl in "Hsi".
+        + iDestruct "Hsi" as (φ') "[Hsi _]".
+          iMod ("Hewp" $! _ [] _ _ with "Hsi") as "[%Hred _]".
+          by apply not_reducible_Crash in Hred.
+        + iMod ("Hewp" $! _ [] _ _ with "Hsi") as "[%Hred _]".
+          by apply not_reducible_Crash in Hred. }
 
     { inversion Hjoin. }
   Qed.
@@ -248,8 +251,6 @@ Section ewp_pure.
     - iModIntro. destruct o; iPureIntro.
       + by eapply invert_pure_wp_ret in Hm.
       + by eapply invert_pure_wp_throw in Hm.
-    - (* [crash]'s satisfy [ψ] *)
-      by eapply invert_pure_wp_crash in Hm.
     - (* [perform] is not immediately pure *)
       by apply invert_pure_wp_stop in Hm.
     - (* Case: [m] can step *)

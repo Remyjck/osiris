@@ -213,6 +213,14 @@ Section reducible.
     assumption.
   Qed.
 
+  Lemma not_reducible_Crash {A E} σ π :
+    ¬ @reducible A E Crash σ π.
+  Proof.
+    unfold reducible. intros (κ & σ' & m' & μ & Hstep).
+    dependent destruction Hstep.
+    eapply invert_can_step_Crash. eexists. eassumption.
+  Qed.
+
   (* No rule for [Resolve] inspects its continuation, so progress does not
      depend on it. This is what the congruence rules need: [try2] and the
      [Par]/[Handle] float-ups all change only the continuation. *)

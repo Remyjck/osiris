@@ -451,12 +451,13 @@ Section micro_constructors.
     iModIntro. iFrame. auto.
   Qed.
 
-  Lemma invert_imp_Crash :
+  Lemma invert_imp_Crash σ κs π :
+    osiris_state_interp σ -∗ osiris_proph_interp σ κs -∗ osiris_thread_interp π -∗
     EWP Crash @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
     |={E}=> False.
   Proof.
-    iIntros "Himp".
-    iPoseProof (ewp_crash_inv with "Himp") as ">False".
+    iIntros "Hsi Hpi Hti Himp".
+    iPoseProof (ewp_crash_inv with "Hsi Hpi Hti Himp") as ">False".
     auto.
   Qed.
 

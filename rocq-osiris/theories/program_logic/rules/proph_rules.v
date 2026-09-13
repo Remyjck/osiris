@@ -130,7 +130,13 @@ Section proph.
         iMod ("Hwp" $! σ' Crash None with "[%]") as "Hwp";
           first by apply BaseS.
         iModIntro. iNext. iMod "Hwp" as "[Hwp $]".
-        ewp_unfold (@Crash val exn). by iMod "Hwp".
+        (* Both sides are [ewp]s of [Crash]: the state the goal hands us
+           refutes the hypothesis. *)
+        iModIntro. ewp_unfold_head.
+        iEval (rewrite ewp_unfold /ewp_pre /=) in "Hwp".
+        iIntros (σ0 κ0 κs0 π0) "Hsi0".
+        iMod ("Hwp" with "Hsi0") as "[%Hred _]".
+        by apply not_reducible_Crash in Hred.
     - iMod ("Hwp" $! σ [] (((p', (w', v')) :: κ'') ++ κs) π with "[Hsi]")
         as "[_ Hwp]".
       { by iFrame "Hsi". }

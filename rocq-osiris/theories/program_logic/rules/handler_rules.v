@@ -332,11 +332,10 @@ Section handle_rules.
         iSpecialize ("He" $! _ _ _ Hs);
         ewp_mask_elim; iMod "He" as "(He & $)"; iModIntro.
       + rewrite try2_inject2. iApply ("IH" with "He Hsh").
-      + ewp_unfold (@Crash val exn). by iMod "He". }
+      + simpl try2. by iApply (micro_rules.ewp_crash_any with "He"). }
 
     { (* [StepHandleCrash] *)
-      ewp_unfold (@Crash val exn).
-      by iMod "He". }
+      by iMod (micro_rules.ewp_crash_inv with "Hsi Hpi Hti He") as "[]". }
 
     { (* [StepHandleLeft] *)
       eassert (subjective_step (σ, e, dom π') _ _) as Hstep.
@@ -544,10 +543,10 @@ Section handler_proof.
         iSpecialize ("Hwp" $! _ _ _ Hs);
         ewp_mask_elim; iMod "Hwp" as "(Hwp & $)"; iModIntro.
       + rewrite try2_inject2. iApply ("IH" with "Hwp Hdh").
-      + by iPoseProof (invert_imp_Crash with "Hwp") as ">HFalse". }
+      + simpl try2. by iApply (micro_rules.ewp_crash_any with "Hwp"). }
 
     { (* [StepHandleCrash] *)
-      by iPoseProof (invert_imp_Crash with "Hwp") as ">HFalse". }
+      by iMod (invert_imp_Crash with "Hsi Hpi Hti Hwp") as "[]". }
 
     { (* [StepHandleLeft] *)
       eapply BaseS in H1 as Hstep.

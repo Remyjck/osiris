@@ -90,15 +90,15 @@ End discrete_fun2.
 
       Either
       (1) a terminated computation with result of type (outcome2 A E),
-      (2) a crash
-      (3) a performed effect
-      (4) a computation that can take a step
-      (5) a join
+      (2) a performed effect
+      (3) a computation that must take a step
+      (4) a join
+
+   A crash falls under (3): it is never [reducible], as in Iris.
  *)
 
 Inductive ewp_case (A E : Type) : Type :=
   WPOutcome : (outcome2 A E) → ewp_case A E
-| WPCrash : ewp_case A E
 | WPPerform : C.eff -> (outcome2 val exn -> micro A E) → ewp_case A E
 | WPStep : ewp_case A E
 | WPJoin : thread → (outcome2 val exn → micro A E) → ewp_case A E.
@@ -106,7 +106,6 @@ Inductive ewp_case (A E : Type) : Type :=
 Arguments ewp_case {A E}.
 
 Arguments WPOutcome {A E}.
-Arguments WPCrash {A E}.
 Arguments WPPerform {A E}.
 Arguments WPStep {A E}.
 Arguments WPJoin {A E}.
@@ -116,7 +115,6 @@ Definition is_ewp_case {A X} (m : micro A X) : ewp_case :=
   match m with
   | Ret v => WPOutcome (O2Ret v)
   | Throw e => WPOutcome (O2Throw e)
-  | Crash => WPCrash
   | Stop CPerf e k => WPPerform e k
   | Stop CJoin ι' k => WPJoin ι' k
   | _ => WPStep
@@ -158,13 +156,13 @@ Section ewp_def.
       (match is_ewp_case m with
        (* [EWP1]: Returned values and raised exceptions. *)
        | WPOutcome o => |={E}=> φ o
-       (* [EWP2]: Undefined and undesirable behaviour. *)
-       | WPCrash => |={E}=> False
-       (* [EWP3]: Effectful case
+       (* [EWP2]: Effectful case
           The effect [e] satisfies protocol Ψ and the permitted replies
           satisfy the [ewp] when continued with the continuation [k]. *)
        | WPPerform e k =>
            |={E}=> Ψ allows perform e << λ o, ▷ ewp E (k o) Ψ φ >>
+       (* [EWP3]: Everything else must be [reducible]. A crash never is,
+          so it needs no case of its own. *)
        | WPStep =>
            ∀ σ κ κs π,
              state_interp (σ, κ ++ κs, π) ={E, ∅}=∗
@@ -178,7 +176,7 @@ Section ewp_def.
                    ∃ φ', state_interp (σ', κs, <[ι' := φ']> π) ∗
                          ewp ⊤ mforked ⊥ (λ o, □ φ' o)
                end)
-       (* [EWP5]: A request to join a thread [ι']. *)
+       (* [EWP4]: A request to join a thread [ι']. *)
        | WPJoin ι' k =>
            ∀ σ κs π,
              state_interp (σ, κs, π) ={E, ∅}=∗
