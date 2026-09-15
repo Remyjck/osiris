@@ -184,23 +184,15 @@ Section state_interp.
   Definition osiris_state_interp (σ : store) : iProp Σ :=
     @gen_heap_interp locations.loc _ _ mem_block Σ _ σ ∗ array_interp σ.
 
-  (* The prophecy interpretation. Unlike every other component of the state
-     interpretation, [proph_map_interp] does not describe the present: [κs]
-     is the list of observations the execution has yet to produce, and
-     [proph_map_interp κs ps] ties the [proph p vs] assertions to it. That
-     is what makes a prediction meaningful, and why the trace must reach
-     adequacy; see [ewp_adequacy.v].
-
-     [ps] is the set of prophecy identifiers allocated so far; it is
-     existentially quantified here because no rule needs to name it. *)
+  (* The prophecy interpretation. [κs] is the list of observations the
+     execution has yet to produce, and [proph_map_interp κs ps] ties the
+     [proph p vs] assertions to it. *)
 
   (* [ps] is the set of prophecy identifiers allocated so far. It is
-     pinned to the store's domain, and that is not bookkeeping: allocating
-     a prophecy needs an identifier fresh for [ps], while the operational
-     rule [StepNewProph] only offers one fresh for the store. Tying the
-     two is what lets the two freshness conditions meet. Nothing ever
-     removes a location from the store, so the inclusion is easy to
-     maintain; see [osiris_proph_interp_mono]. *)
+     pinned to the store's domain: allocating a prophecy needs a fresh
+     identifier for [ps], while the operational rule [StepNewProph] offers
+     a fresh one for the store. Tying the two lets the freshness conditions
+     meet. *)
 
   Definition osiris_proph_interp (σ : store) (κs : list observation) : iProp Σ :=
     ∃ ps, ⌜ps ⊆ dom σ⌝ ∗ proph_map_interp κs ps.
