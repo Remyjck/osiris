@@ -44,7 +44,7 @@ Section inline_record_reasoning.
       rewrite Hlength_ls. rewrite to_vals_length. assumption. }
     iIntros (r) "(Hmut & Hblocks)".
     (* As in [imp_ERecord]: [ownBlock] holds the tag persistently. *)
-    iMod (isBlock_persist with "Hmut") as "#Htag".
+    iMod (blockTag_persist with "Hmut") as "#Htag".
     iApply imp_ret. encode.
     rewrite bi_texist_equiv. iFrame "∗#".
   Qed.

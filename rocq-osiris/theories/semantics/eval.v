@@ -1281,13 +1281,13 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       l ← alloc_block t ls;
       ret (VRecord l)
   | ERecordUpdate e fes =>
-      '(r, fvs') ← par (as_record (eval η e)) (evalfs η fes) ;
+      '(r, fvs) ← par (as_record (eval η e)) (evalfs η fes) ;
       '(t, ls) ← load_block r ;
       (* Copy the values in record [e] into a new block. *)
       vs ← loadn ls ;
       ls ← allocn vs ;
       (* The new components override existing components by the same name. *)
-      '() ← update ls fvs' ;
+      '() ← update ls fvs ;
       l ← alloc_block t ls ;
       ret (VRecord l)
   | ERecordAccess e f =>

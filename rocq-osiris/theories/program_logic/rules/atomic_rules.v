@@ -306,7 +306,7 @@ Section imp_atomic_rules.
 
   (* The [VInline] variant of [imp_cas_atomic]; see [imp_stop_cas_inline].
      The expected value [seen] must be an inline record, and the physical
-     comparison is resolved by the [isBlock] fractions provided for the
+     comparison is resolved by the [blockTag] fractions provided for the
      current and expected blocks. *)
   Lemma imp_cas_inline_atomic (E2 E1 : coPset) η e1 e2 e3
       (Φ1 : loc → _) (Φ2 Φ3 : val → _) (Φ : bool → _) :
@@ -318,9 +318,9 @@ Section imp_atomic_rules.
          Φ1 l -∗ Φ2 seen -∗ Φ3 v' -∗
          ∃ c cs (r rs : record) dq1 dq2 t,
            ⌜seen = VInline cs rs⌝ ∗
-           ▷ l ↦ VInline c r ∗ ▷ isBlock r dq1 t ∗ ▷ isBlock rs dq2 Mut ∗
+           ▷ l ↦ VInline c r ∗ ▷ blockTag r dq1 t ∗ ▷ blockTag rs dq2 Mut ∗
            ▷ (l ↦ (if locations.eqb r rs then v' else VInline c r) -∗
-              isBlock r dq1 t -∗ isBlock rs dq2 Mut -∗
+              blockTag r dq1 t -∗ blockTag rs dq2 Mut -∗
               |={E2,E1}=> Φ (locations.eqb r rs))) -∗
     impure E1 (eval η (ECAS e1 e2 e3)) Ψ ζ Φ.
   Proof.
@@ -337,14 +337,14 @@ Section imp_atomic_rules.
   Qed.
 
   (* Atomically reading a record field. The evaluation of [ERecordAccess]
-     performs a ghost block lookup (via the persistent [isBlockLocs]
+     performs a ghost block lookup (via the persistent [blockLocs]
      knowledge) followed by a single atomic load of the field's location.
      Ownership of that location is only required inside the atomic step,
      which allows it to come from an invariant. *)
   Lemma imp_ERecordAccess_atomic `{Encode A} (E2 E1 : coPset) η e f ls (r : record)
       (Φ : A → _) :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     impure E1 (eval η e) Ψ ζ (λ r' : record, ⌜r' = r⌝) -∗
     ▷ (|={E1,E2}=>
          ∃ a, ▷ (ls !!! f) ↦ #a ∗
@@ -368,7 +368,7 @@ Section imp_atomic_rules.
   Lemma imp_ERecordSet_atomic `{Encode A} (E2 E1 : coPset) η e1 e2 f ls (r : record)
       (Φ2 : A → _) (Φ : unit → _) :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     impure E1 (eval η e1) Ψ ζ (λ r' : record, ⌜r' = r⌝) -∗
     impure E1 (eval η e2) Ψ ζ Φ2 -∗
     ▷ (∀ a, Φ2 a -∗
@@ -426,7 +426,7 @@ Section imp_atomic_rules.
   Lemma ipat_PRecord_atomic `{Encode A} (E2 E1 : coPset) η δ x (f : field) (r : record)
       (ls : list loc) (dq : dfrac) (Φ : env → iProp Σ) (ψ : iProp Σ) :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     ▷ (|={E1,E2}=> ∃ (v : A), ▷ (ls !!! f) ↦{dq} #v ∗
          ▷ ((ls !!! f) ↦{dq} #v -∗ |={E2,E1}=> Φ ((x, #v) :: δ))) -∗
     ipattern (E:=E1) (Ψ:=Ψ) η δ (PRecord [(f, PVar x)]) (VRecord r) Φ ψ.
@@ -459,7 +459,7 @@ Section imp_atomic_rules.
   Lemma ipat_PRecord_pers `{Encode A} (E1 : coPset) η δ x (f : field) (r : record)
       (ls : list loc) (dq : dfrac) (v : A) (Φ : env → iProp Σ) (ψ : iProp Σ) :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     ▷ (ls !!! f) ↦{dq} #v -∗
     ▷ ((ls !!! f) ↦{dq} #v -∗ Φ ((x, #v) :: δ)) -∗
     ipattern (E:=E1) (Ψ:=Ψ) η δ (PRecord [(f, PVar x)]) (VRecord r) Φ ψ.

@@ -134,7 +134,7 @@ Lemma vertex_content_ptr {ζ : exn → iProp Σ} {Ψ η} γ z i e :
   vertex γ z i -∗
   EWP (eval η e) @ ⊤ <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (z' : elem), ⌜z' = z⌝ }} -∗
   EWP (eval η (EAtomicLoc e content_field)) @ ⊤ <|Ψ|> ⟨⟨ ζ ⟩⟩
-    {{ (l : locations.loc), ∃ li, isBlockLocs z [li; l] }}.
+    {{ (l : locations.loc), ∃ li, blockLocs z [li; l] }}.
 Proof.
   iIntros "#Hz He".
   iDestruct "Hz" as (li lc) "(_ & #Hlocs & _ & _)".

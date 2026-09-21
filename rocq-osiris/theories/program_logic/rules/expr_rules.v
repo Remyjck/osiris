@@ -152,8 +152,8 @@ Section imp_rules_expr.
 
   Lemma imp_EFreeze2 {ζ} (Φ : array → iProp Σ) (Φ' : array → iProp Σ) η e :
     impure E (eval η e) Ψ ζ Φ' -∗
-    (∀ l, Φ' l -∗ ∃ t, ▷ isBlock l (DfracOwn 1) t ∗ Φ l) -∗
-    impure E (eval η (EFreeze e)) Ψ ζ (λ l, Φ l ∗ isBlock l (DfracOwn 1) Immut).
+    (∀ l, Φ' l -∗ ∃ t, ▷ blockTag l (DfracOwn 1) t ∗ Φ l) -∗
+    impure E (eval η (EFreeze e)) Ψ ζ (λ l, Φ l ∗ blockTag l (DfracOwn 1) Immut).
   Proof.
     iIntros "He Hcov".
     simpl_eval.
@@ -169,9 +169,9 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_EFreeze {ζ} (l : array) t η e :
-    ▷ isBlock l (DfracOwn 1) t -∗
+    ▷ blockTag l (DfracOwn 1) t -∗
     impure E (eval η e) Ψ ζ (λ l', ⌜l' = l⌝) -∗
-    impure E (eval η (EFreeze e)) Ψ ζ (λ l', ⌜l' = l⌝ ∗ isBlock l (DfracOwn 1) Immut).
+    impure E (eval η (EFreeze e)) Ψ ζ (λ l', ⌜l' = l⌝ ∗ blockTag l (DfracOwn 1) Immut).
   Proof.
     iIntros "Hl He".
     iApply (imp_wand with "[-]").
@@ -184,8 +184,8 @@ Section imp_rules_expr.
 
   Lemma imp_EUnfreeze {ζ} (Φ' : array → iProp Σ) (Φ : array → iProp Σ) η e :
     impure E (eval η e) Ψ ζ Φ' -∗
-    (∀ l, Φ' l -∗ ∃ t, isBlock l (DfracOwn 1) t ∗ Φ l) -∗
-    impure E (eval η (EUnfreeze e)) Ψ ζ (λ l, Φ l ∗ isBlock l (DfracOwn 1) Mut).
+    (∀ l, Φ' l -∗ ∃ t, blockTag l (DfracOwn 1) t ∗ Φ l) -∗
+    impure E (eval η (EUnfreeze e)) Ψ ζ (λ l, Φ l ∗ blockTag l (DfracOwn 1) Mut).
   Proof.
     iIntros "He Hcov".
     simpl_eval.
@@ -467,11 +467,11 @@ Section imp_rules_expr.
   (* Physical equality of two (non-inline) records. Unlike [loc], deciding
      physical equality of a [VRecord] requires consulting the store (to
      check that at least one operand is a mutable block), hence the extra
-     [isBlock ... DfracDiscarded t] knowledge threaded through [Φ1]/[Φ2]. *)
+     [blockTag ... DfracDiscarded t] knowledge threaded through [Φ1]/[Φ2]. *)
   Lemma imp_EOpPhysEq_record {ζ} η e1 e2 (Φ1 Φ2 : record → iProp Σ) (Φ : bool → iProp Σ) t1 t2 :
     t1 = Mut ∨ t2 = Mut →
-    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, Φ1 l ∗ isBlock l DfracDiscarded t1 }} -∗
-    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, Φ2 l ∗ isBlock l DfracDiscarded t2 }} -∗
+    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, Φ1 l ∗ blockTag l DfracDiscarded t1 }} -∗
+    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, Φ2 l ∗ blockTag l DfracDiscarded t2 }} -∗
     ▷ (∀ l1 l2, Φ1 l1 -∗ Φ2 l2 -∗ Φ (locations.eqb l1 l2)) -∗
     EWP eval η (EOpPhysEq e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.

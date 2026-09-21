@@ -273,7 +273,7 @@ Section encoded_fields.
 
   (* ...and still enough to read a field. Before, a discarded share could
      not be written at all at the [ownRecord] level, and clients had to
-     drop down to [isBlockLocs] plus a raw per-field points-to. *)
+     drop down to [blockLocs] plus a raw per-field points-to. *)
 
   Lemma imp_point_read_discarded η e (r : record) (p : point) :
     ▷ r ⤇□ p -∗

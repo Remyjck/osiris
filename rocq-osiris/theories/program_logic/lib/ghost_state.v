@@ -8,7 +8,7 @@ From osiris Require Import base.
 From osiris.lang Require Import thread_ids syntax locations encode.
 From osiris.semantics Require Import semantics.
 Require Import subjective_step.
-Require Export thread_post.
+Require Export thread_post block_map.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -33,7 +33,7 @@ Section ghost_instances.
       #[global] osiris_gen_GpreS :: gen_heapGpreS locations.loc mem_block Σ;
       #[global] osiris_threadPostG :: threadPostG Σ;
       osiris_tokenG :: tokenG Σ;
-      #[global] osiris_array_ghostG :: ghost_mapG Σ locations.loc (list locations.loc);
+      #[global] osiris_block_mapG :: blockMapG Σ;
       #[global] osiris_prophGpreS :: proph_mapGpreS locations.loc (val * val) Σ;
     }.
 
@@ -54,9 +54,9 @@ Section ghost_instances.
          predicates are stored in it directly, indexed by thread id. *)
       osiris_post_name : gname;
       (* This gives us tokens, for resource transfer when joining threads *)
-      (* This gives us a ghost map tracking array locations (persistent per array). *)
-      osiris_array_ghostGS :: ghost_mapG Σ locations.loc (list locations.loc);
-      osiris_array_name : gname;
+      (* This names the block ghost map: each block's element locations,
+         persistent per block. See [block_map.v]. *)
+      osiris_block_name : gname;
       (* This gives us the prophecy map, relating [proph] assertions to
          the observations the execution has yet to produce. *)
       osiris_prophGS :: proph_mapGS locations.loc (val * val) Σ;
@@ -70,7 +70,7 @@ Definition osirisΣ : gFunctors :=
      gen_heapΣ locations.loc mem_block;
      threadPostΣ;
      tokenΣ;
-     ghost_mapΣ locations.loc (list locations.loc);
+     blockMapΣ;
      proph_mapΣ locations.loc (val * val)
     ].
 
@@ -78,7 +78,7 @@ Definition osirisΣ : gFunctors :=
 Global Instance subG_heapGpreS {Σ} : subG osirisΣ Σ → osirisGpreS Σ.
 Proof. solve_inG. Qed.
 
-#[global] Arguments OsirisGS Σ {_ _ _ _ _ _ _} : assert.
+#[global] Arguments OsirisGS Σ {_ _ _ _ _ _} : assert.
 
 
 (* -------------------------------------------------------------------------- *)
@@ -109,21 +109,7 @@ Definition isShot `{osirisGS} (k : cont) : iProp Σ :=
 Global Instance osiris_block_heapGS `{osirisGS Σ} : gen_heap.gen_heapGS locations.loc mem_block Σ.
 Proof. apply (osiris_genGS Σ). Defined.
 
-Definition isBlock `{osirisGS Σ} (b : locations.loc) dq t : iProp Σ :=
-  ∃ ls, gen_heap.pointsto b dq (Block t ls).
-
-(* Taking a freshly allocated block's exclusive tag to the persistent
-   form above. Every block that enters a shared invariant goes through
-   this. *)
-
-Lemma isBlock_persist `{osirisGS Σ} b t :
-  isBlock b (DfracOwn 1) t ==∗ isBlock b DfracDiscarded t.
-Proof.
-  iIntros "H".
-  iDestruct "H" as (ls) "H".
-  iMod (gen_heap.pointsto_persist with "H") as "H".
-  iModIntro. iExists ls. iFrame.
-Qed.
+(* The block resources [blockTag] and [blockLocs] are in [block_resources.v]. *)
 
 (* -------------------------------------------------------------------------- *)
 (* Definition of the state interpretation. *)
@@ -139,17 +125,17 @@ Section state_interp.
   (* The heap interpretation [osiris_state_interp σ] has two components.
      The main component is a [gen_heap] authoritative resource over the
      physical store [σ], which gives exclusive ownership of individual memory
-     cells via [l ↦ v]. The auxiliary component is a ghost map that records,
-     for each allocated array block, its list of element locations. The
-     [array_coherent] predicate ties the two: every entry in the ghost map
-     points to a [Block] block in [σ] with the same locations. *)
+     cells via [l ↦ v]. The auxiliary component is the block ghost map, which
+     records, for each allocated block (array or record), its list of element
+     locations. The [block_coherent] predicate ties the two: every entry in
+     the ghost map points to a [Block] in [σ] with the same locations. *)
 
-  (* The ghost map for arrays is kept separate from the heap because array
+  (* The block ghost map is kept separate from the heap because a block's
      identity must be persistent: once a block is allocated its location list
      never changes. On allocation we immediately persist the fragment and hand
-     it out as [isBlockLocs a ls], a read-only token that can be shared freely
+     it out as [blockLocs a ls] (see [block_resources.v]), a read-only token that can be shared freely
      between concurrent threads and used to look up element locations.
-     Crucially, [isBlockLocs] does not track the mutability tag, so the tag can
+     Crucially, [blockLocs] does not track the mutability tag, so the tag can
      be updated freely without invalidating any ghost resources. *)
 
   (* The thread-pool interpretation [osiris_thread_interp π] is a ghost map
@@ -172,17 +158,17 @@ Section state_interp.
   Global Instance valid_thread_contractive ι : Contractive (valid_thread ι).
   Proof. apply _. Qed.
 
-  (* Coherence between the ghost array map σ' and the physical store σ:
-     every array registered in σ' has a corresponding block in σ with the same locations. *)
-  Definition array_coherent (σ' : gmap locations.loc (list loc)) (σ : store) : Prop :=
+  (* Coherence between the block ghost map σ' and the physical store σ:
+     every block registered in σ' is a [Block] in σ with the same locations. *)
+  Definition block_coherent (σ' : gmap locations.loc (list loc)) (σ : store) : Prop :=
     ∀ (a : loc) (ls : list loc),
       σ' !! (a : loc) = Some ls → ∃ t : mut_tag, σ !! a = Some (Block t ls).
 
-  Definition array_interp (σ : store) : iProp Σ :=
-    ∃ σ', ghost_map_auth (osiris_array_name Σ) 1 σ' ∗ ⌜array_coherent σ' σ⌝.
+  Definition block_interp (σ : store) : iProp Σ :=
+    ∃ σ', block_map_auth (osiris_block_name Σ) σ' ∗ ⌜block_coherent σ' σ⌝.
 
   Definition osiris_state_interp (σ : store) : iProp Σ :=
-    @gen_heap_interp locations.loc _ _ mem_block Σ _ σ ∗ array_interp σ.
+    @gen_heap_interp locations.loc _ _ mem_block Σ _ σ ∗ block_interp σ.
 
   (* The prophecy interpretation. [κs] is the list of observations the
      execution has yet to produce, and [proph_map_interp κs ps] ties the
@@ -209,31 +195,6 @@ Section state_interp.
     (λ '(σ, κs, π),
        osiris_state_interp σ ∗ osiris_proph_interp σ κs ∗ osiris_thread_interp π)%I.
 
-  (* [isBlockLocs a ls] is the persistent ghost knowledge that array [a] has locations [ls]. *)
-  Definition isBlockLocs (a : loc) (ls : list locations.loc) : iProp Σ :=
-    (a ↪[osiris_array_name Σ]□ ls ∗ ⌜(list_z.length ls ≤ int.max_array_length)%Z⌝)%I.
-
-  Global Instance isBlockLocs_pers a ls : Persistent (isBlockLocs a ls).
-  Proof. apply _. Qed.
-
-  Global Instance isBlockLocs_pers_array (a : syntax.array) ls : Persistent (isBlockLocs a ls) :=
-    isBlockLocs_pers a ls.
-
-  Global Instance isBlockLocs_pers_record (a : syntax.record) ls : Persistent (isBlockLocs a ls) :=
-    isBlockLocs_pers a ls.
-
-  Lemma isBlockLocs_valid a ls1 ls2 :
-    isBlockLocs a ls1 -∗ isBlockLocs a ls2 -∗ ⌜ls2 = ls1⌝.
-  Proof.
-    iIntros "(Ha & _) (Ha' & _)".
-    iPoseProof (ghost_map_elem_agree with "Ha Ha'") as "%H".
-    iPureIntro. exact (eq_sym H).
-  Qed.
-
-  Lemma isBlockLocs_length a ls :
-    isBlockLocs a ls -∗ ⌜(list_z.length ls ≤ int.max_array_length)%Z⌝.
-  Proof. iIntros "(_ & $)". Qed.
-
   (* -------------------------------------------------------------------- *)
   (** [osiris_state_interp] operations. *)
 
@@ -244,13 +205,13 @@ Section state_interp.
     iApply (gen_heap_valid with "Hmem Hl").
   Qed.
 
-  Lemma osiris_state_valid_array σ (l : loc) ls :
+  Lemma osiris_state_valid_block σ (l : loc) ls :
     osiris_state_interp σ -∗
-    l ↪[osiris_array_name Σ]□ ls -∗
+    block_map_elem (osiris_block_name Σ) l ls -∗
     ∃ t, ⌜σ !! (l : locations.loc) = Some (Block t ls)⌝.
   Proof.
     iIntros "(_ & %A & Hauth & %Hcoh) #Hfrag".
-    iDestruct (ghost_map_lookup with "Hauth Hfrag") as "%Hlookup".
+    iDestruct (block_map_lookup with "Hauth Hfrag") as "%Hlookup".
     destruct (Hcoh l ls Hlookup) as (t & Hσl).
     iExists t. iPureIntro. exact Hσl.
   Qed.
@@ -270,21 +231,20 @@ Section state_interp.
     osiris_state_interp σ ==∗
     osiris_state_interp (<[l := v]>σ) ∗ pointsto l (DfracOwn 1) v ∗ meta_token l ⊤ ∗
     match block_view v with
-    | view_block _ ls => (l : loc) ↪[osiris_array_name Σ]□ ls
+    | view_block _ ls => block_map_elem (osiris_block_name Σ) l ls
     | view_nonblock _ _ => True
     end.
   Proof.
     iIntros (Hfresh) "(Hmem & (%σ' & Hauth & %Hcoh))".
     iMod (gen_heap_alloc σ l v with "Hmem") as "(Hmem & Hl & Hmeta)"; first done.
     destruct (block_view v).
-    - (* Block: register the new block in the ghost array map. *)
+    - (* Block: register the new block in the block ghost map. *)
       iAssert ⌜σ' !! (l : loc) = None⌝%I as "%HA_fresh".
       { iPureIntro. apply not_elem_of_dom. intros Hin.
         apply elem_of_dom in Hin as (ls' & Hlookup).
         destruct (Hcoh l ls' Hlookup) as (? & Hσl).
         rewrite Hσl in Hfresh. done. }
-      iMod (ghost_map_insert (l : loc) ls with "Hauth") as "(Hauth & Hfrag)"; first done.
-      iMod (ghost_map.ghost_map_elem_persist with "Hfrag") as "Hfrag".
+      iMod (block_map_insert _ _ l ls with "Hauth") as "(Hauth & Hfrag)"; first done.
       iModIntro. iSplitL "Hmem Hauth"; last iFrame.
       iFrame "Hmem". iExists (<[(l : loc) := ls]>σ'). iFrame. iPureIntro.
       intros a ls_a Hlookup.

@@ -1,6 +1,6 @@
 From iris.proofmode Require Import base ltac_tactics classes.
 From iris.base_logic.lib Require Import iprop wsat gen_heap own token.
-From iris.algebra Require Import gmap_view agree.
+From iris.algebra Require Import gmap_view agree auth gmap.
 
 From osiris.lang Require Import thread_ids.
 From osiris.semantics Require Import eval.
@@ -650,23 +650,23 @@ Proof.
   eapply SAT_frame_resource with (R := view _) in Hsat; last apply _.
   eapply SAT_frame_resource with (R := supply _) in Hsat; last apply _.
   eapply (SAT_gen_heap_init σ) in Hsat as [Hgen Hsat].
-  (* The thread postconditions are a plain [gmap_view] over predicates, so
-     they are allocated with the generic resource allocation rather than with
-     a [gen_heap]. *)
-  assert (Hva : ✓ (gmap_view_auth (K := thread)
-            (V := agreeR (outcome2 val exn -d> laterO (iPropO Σ))) (DfracOwn 1) ∅))
-    by apply gmap_view_auth_valid.
+  (* The thread postconditions and the block map are authoritative maps of
+     agreements, allocated with the generic resource allocation. *)
+  assert (Hva : ✓ (● (∅ : thread_postUR Σ))).
+  { apply auth_auth_valid. exact (ucmra_unit_valid (A := thread_postUR Σ)). }
   eapply (SAT_alloc_res _ _ _ _ Hva) in Hsat as [γpost Hsat].
   eapply (SAT_proph_map_init κs ∅) in Hsat as [Hproph Hsat].
-  eapply (SAT_ghost_map_alloc (∅ : gmap locations.loc (list locations.loc))) in Hsat as [γ Hsat].
+  assert (Hvb : ✓ (● (∅ : block_mapUR))).
+  { apply auth_auth_valid. exact (ucmra_unit_valid (A := block_mapUR)). }
+  eapply (SAT_alloc_res _ _ _ _ Hvb) in Hsat as [γ Hsat].
   do 2 apply SAT_unframe_resource in Hsat.
-  pose (hg := (@OsirisGS Σ _ _ Hgen γpost _ γ Hproph)).
+  pose (hg := (@OsirisGS Σ _ _ Hgen γpost γ Hproph)).
   exists hg.
   eapply SAT_mono; last apply Hsat.
-  iIntros "(Harri & _ & Hproph & Hpost & Hgen & _ & _)".
+  iIntros "(Harri & Hproph & Hpost & Hgen & _ & _)".
   iFrame "Hgen".
   iSplitL "Harri".
-  { iExists ∅. iFrame "Harri". iPureIntro.
+  { iExists ∅. rewrite block_map_auth_empty. iFrame "Harri". iPureIntro.
     intros a ls Hlookup. rewrite lookup_empty in Hlookup. discriminate. }
   iSplitL "Hproph".
   { iExists ∅. iFrame "Hproph". iPureIntro. set_solver. }

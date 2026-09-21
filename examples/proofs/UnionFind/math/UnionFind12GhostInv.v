@@ -401,7 +401,7 @@ Definition uf_frame (γ : uf_names) z j
 
 Lemma uf_inv_split γ z j lzi lzc :
   z ↪[γ.(uf_vert)]□ j -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   ▷ uf_inv γ -∗
   ◇ ∃ (c : content) (D : gset elem) (R : elem → elem) (V : elem → val),
     ⌜z ∈ D⌝ ∗
@@ -419,7 +419,7 @@ Proof.
   iDestruct "HM" as "[Hvo HM]".
   iDestruct "Hvo" as (li' lc' c) "(#Hzlocs' & Hlc & Hcell)".
   iAssert (▷ ⌜[lzi; lzc] = [li'; lc']⌝)%I with "[]" as ">%Heql".
-  { iNext. iApply (isBlockLocs_valid with "Hzlocs' Hzlocs"). }
+  { iNext. iApply (blockLocs_valid with "Hzlocs' Hzlocs"). }
   simplify_eq.
   iExists c, (dom M), R, V.
   iModIntro.
@@ -432,7 +432,7 @@ Qed.
 
 Lemma uf_inv_reassemble γ z j lzi lzc c' D R V :
   UF γ D R V -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   lzc ↦ #c' -∗
   cell_own γ R V z j c' -∗
   uf_frame γ z j D R V -∗
@@ -455,7 +455,7 @@ Qed.
 
 Lemma uf_inv_acc γ z j lzi lzc :
   z ↪[γ.(uf_vert)]□ j -∗
-  isBlockLocs z [lzi;lzc] -∗
+  blockLocs z [lzi;lzc] -∗
   ▷ uf_inv γ -∗
   ◇ ∃ c D R V,
     ⌜z ∈ D⌝ ∗
@@ -493,7 +493,7 @@ Lemma uf_close_intro γ z j lzi lzc M L N R V :
   M !! z = Some j →
   dom L = dom M →
   (∀ x i, M !! x = Some i → representable i) →
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   ghost_map_auth γ.(uf_vert) 1 M -∗
   ghost_map_auth γ.(uf_link) 1 L -∗
   ghost_map_auth γ.(uf_ids) 1 N -∗
@@ -541,7 +541,7 @@ Qed.
 Lemma uf_inv_acc_update γ z j lzi lzc (y : elem) (k : Z) :
   z ↪[γ.(uf_vert)]□ j -∗
   y ↪[γ.(uf_vert)]□ k -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   ▷ uf_inv γ -∗
   ◇ ∃ (c : content) (M : gmap elem Z) (R : elem → elem) (V : elem → val),
     ⌜M !! z = Some j⌝ ∗ ⌜M !! y = Some k⌝ ∗
@@ -551,7 +551,7 @@ Lemma uf_inv_acc_update γ z j lzi lzc (y : elem) (k : Z) :
     ▷ cell_own γ R V z j c ∗
     ▷ (uf_close γ z j lzc M R V
        ∧ (∀ (rc : record) (lp : locations.loc),
-            isBlockLocs rc [lp] -∗ z ↪[γ.(uf_link)] None ==∗
+            blockLocs rc [lp] -∗ z ↪[γ.(uf_link)] None ==∗
             linked γ z rc lp ∗ uf_close γ z j lzc M R V)).
 Proof.
   iIntros "#Hzfrag #Hyfrag #Hzlocs H".
@@ -564,7 +564,7 @@ Proof.
   iDestruct "HM" as "[Hvo HM]".
   iDestruct "Hvo" as (li' lc' c) "(#Hzlocs' & Hlc & Hcell)".
   iAssert (▷ ⌜[lzi; lzc] = [li'; lc']⌝)%I with "[]" as ">%Heql".
-  { iNext. iApply (isBlockLocs_valid with "Hzlocs' Hzlocs"). }
+  { iNext. iApply (blockLocs_valid with "Hzlocs' Hzlocs"). }
   simplify_eq.
   iExists c, M, R, V.
   iModIntro.
@@ -864,7 +864,7 @@ Implicit Types γ : uf_names.
 Lemma uf_vertex_content_acc γ z i lzi lzc (Φ : content → iProp Σ) :
   is_uf γ -∗
   vertex γ z i -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   ▷ (∀ c : content, content_info γ z c -∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
     ▷ (lzc ↦ #c) ∗ ▷ (lzc ↦ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
@@ -888,7 +888,7 @@ Qed.
 Lemma uf_vertex_content_acc_linked γ z j lzi lzc rc lp (Φ : content → iProp Σ) :
   is_uf γ -∗
   vertex γ z j -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   linked γ z rc lp -∗
   ▷ (∀ c : content, ⌜c = CtLink rc⌝ -∗ content_info γ z c -∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
@@ -916,7 +916,7 @@ Lemma uf_vertex_content_acc_or_linked γ z j lzi lzc (P Q : iProp Σ)
     (Φ : content → iProp Σ) :
   is_uf γ -∗
   vertex γ z j -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   (P ∨ (∃ rc lp, linked γ z rc lp) ∗ Q) -∗
   ▷ (∀ c : content, content_info γ z c -∗
        (P ∨ ⌜content_root c = false⌝ ∗ Q) -∗ Φ c) -∗
@@ -957,7 +957,7 @@ Lemma uf_find_content_acc γ (z : elem) j lzi lzc
     (Φ : content → iProp Σ) :
   is_uf γ -∗
   z ↪[γ.(uf_vert)]□ j -∗
-  isBlockLocs z [lzi; lzc] -∗
+  blockLocs z [lzi; lzc] -∗
   ▷ (∀ (c : content) D (R : elem → elem) (V : elem → val),
        ⌜z ∈ D⌝ -∗
        ⌜content_root c = true → R z = z⌝ -∗
@@ -1148,7 +1148,7 @@ Lemma uf_cas_link_fupd γ (a b : elem) ia ib lac
   (ib < ia)%Z →
   is_uf γ -∗
   vertex γ a ia -∗
-  (∃ li, isBlockLocs a [li; lac]) -∗
+  (∃ li, blockLocs a [li; lac]) -∗
   root_val rce vexp -∗
   vertex γ b ib -∗
   rcn ⤇ {| link_parent := b |} -∗
@@ -1173,9 +1173,9 @@ Lemma uf_cas_link_fupd γ (a b : elem) ia ib lac
        (if res then Ψ else P ∗ rcn ⤇ {| link_parent := b |}) -∗ Φ res) -∗
   |={⊤,⊤ ∖ ↑ufN}=>
     ∃ (c : content) dq1 dq2 t,
-      ▷ lac ↦ #c ∗ ▷ isBlock (content_loc c) dq1 t ∗ ▷ isBlock rce dq2 Mut ∗
+      ▷ lac ↦ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
       ▷ (lac ↦ #(if locations.eqb (content_loc c) rce then CtLink rcn else c) -∗
-         isBlock (content_loc c) dq1 t -∗ isBlock rce dq2 Mut -∗
+         blockTag (content_loc c) dq1 t -∗ blockTag rce dq2 Mut -∗
          |={⊤ ∖ ↑ufN,⊤}=> Φ (locations.eqb (content_loc c) rce)).
 Proof.
   intros Hab.
@@ -1185,7 +1185,7 @@ Proof.
   iInv "Hinv" as "H" "Hclose".
   iMod (uf_inv_acc_update with "Hafrag Hbfrag Halocs H") as (c M Rp Vp)
     "(%HMa & %HMb & %HRp & %HVp & Hcont & Hlc & Hcell & Hframe)".
-  iAssert (▷ (isBlock (content_loc c) DfracDiscarded Mut ∗
+  iAssert (▷ (blockTag (content_loc c) DfracDiscarded Mut ∗
               cell_own γ Rp Vp a ia c))%I with "[Hcell]" as "[#HcP Hcell]".
   { iNext. iDestruct (cell_own_info with "Hcell") as "(_ & [#Hb1 _] & _ & $)".
     iExact "Hb1". }
@@ -1213,7 +1213,7 @@ Proof.
   iAssert ⌜Vp a = vexp⌝%I as %Hval.
   { iDestruct "Hrv" as (lv) "(#Hl1 & _ & #Hp1)".
     iDestruct "Hrv0" as (lv') "(#Hl2 & _ & #Hp2)".
-    iDestruct (isBlockLocs_valid with "Hl1 Hl2") as %[= ->].
+    iDestruct (blockLocs_valid with "Hl1 Hl2") as %[= ->].
     by iDestruct (gen_heap.pointsto_agree with "Hp2 Hp1") as %[= ->]. }
 
   (* The two classes are distinct: [b]'s representative sits at or below
@@ -1262,7 +1262,7 @@ Lemma uf_cas_set_fupd γ (x : elem) i lxc
     (rce rcn : record) (vexp v : val) (P Ψ : iProp Σ) (Φ : bool → iProp Σ) :
   is_uf γ -∗
   vertex γ x i -∗
-  (∃ li, isBlockLocs x [li; lxc]) -∗
+  (∃ li, blockLocs x [li; lxc]) -∗
   root_val rce vexp -∗
   rcn ⤇ {| root_value := v |} -∗
   (* The caller's linearization resources, spent only if the CAS
@@ -1278,9 +1278,9 @@ Lemma uf_cas_set_fupd γ (x : elem) i lxc
        (if res then Ψ else P ∗ rcn ⤇ {| root_value := v |}) -∗ Φ res) -∗
   |={⊤,⊤ ∖ ↑ufN}=>
     ∃ c dq1 dq2 t,
-      ▷ lxc ↦ #c ∗ ▷ isBlock (content_loc c) dq1 t ∗ ▷ isBlock rce dq2 Mut ∗
+      ▷ lxc ↦ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
       ▷ (lxc ↦ #(if locations.eqb (content_loc c) rce then CtRoot rcn else c) -∗
-         isBlock (content_loc c) dq1 t -∗ isBlock rce dq2 Mut -∗
+         blockTag (content_loc c) dq1 t -∗ blockTag rce dq2 Mut -∗
          |={⊤ ∖ ↑ufN,⊤}=> Φ (locations.eqb (content_loc c) rce)).
 Proof.
   iIntros "#Hinv #Hx (%lxi & #Hxlocs) #Hrv Hrcn HP Hhook HΦ".
@@ -1290,7 +1290,7 @@ Proof.
      to ask the accessor for: [x] plays the part of both. *)
   iMod (uf_inv_acc_update with "Hxfrag Hxfrag Hxlocs H") as (c M Rp Vp)
     "(%HMx & %_ & %HRp & %HVp & Hcont & Hlc & Hcell & Hframe)".
-  iAssert (▷ (isBlock (content_loc c) DfracDiscarded Mut ∗
+  iAssert (▷ (blockTag (content_loc c) DfracDiscarded Mut ∗
               cell_own γ Rp Vp x i c))%I with "[Hcell]" as "[#HcP Hcell]".
   { iNext. iDestruct (cell_own_info with "Hcell") as "(_ & [#Hb1 _] & _ & $)".
     iExact "Hb1". }
@@ -1318,7 +1318,7 @@ Proof.
   iAssert ⌜Vp x = vexp⌝%I as %Hval.
   { iDestruct "Hrv" as (lv) "(#Hl1 & _ & #Hp1)".
     iDestruct "Hrv0" as (lv') "(#Hl2 & _ & #Hp2)".
-    iDestruct (isBlockLocs_valid with "Hl1 Hl2") as %[= ->].
+    iDestruct (blockLocs_valid with "Hl1 Hl2") as %[= ->].
     by iDestruct (gen_heap.pointsto_agree with "Hp2 Hp1") as %[= ->]. }
 
   (* The linearization point proper: [x] is a root, and its class is what

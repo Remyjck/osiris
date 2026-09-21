@@ -180,7 +180,7 @@ Section ExternalsDef.
   Definition Externals__array_length_expr := EEta1 EArrayLength.
 
   Definition array_length_spec length : iProp Σ :=
-    {{ ∀ (ls : list loc); isBlockLocs a ls }}
+    {{ ∀ (ls : list loc); blockLocs a ls }}
     length a : array
     {{ RET n'; ⌜n' = list_z.length ls⌝ }}.
 
@@ -299,9 +299,9 @@ Section ExternalsDef.
   Definition Externals__freeze_expr : expr := EEta1 EFreeze.
 
   Definition freeze_spec freeze : iProp Σ :=
-    {{ ∀ t; isBlock l (DfracOwn 1) t }}
+    {{ ∀ t; blockTag l (DfracOwn 1) t }}
     freeze l : array
-    {{ RET l'; ⌜l' = l⌝ ∗ isBlock l (DfracOwn 1) Immut }}.
+    {{ RET l'; ⌜l' = l⌝ ∗ blockTag l (DfracOwn 1) Immut }}.
 
   Lemma imp_externals_freeze {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ freeze,

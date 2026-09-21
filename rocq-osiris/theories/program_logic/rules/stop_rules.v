@@ -88,8 +88,8 @@ Section imp_stop.
   Lemma imp_stop_alloc_block t ls (k : _ → micro A X) :
     ⌜list_z.length ls ≤ max_array_length⌝ -∗
     ▷ (∀ (l : loc),
-         isBlock l (DfracOwn 1) t -∗
-         isBlockLocs l ls -∗
+         blockTag l (DfracOwn 1) t -∗
+         blockLocs l ls -∗
          EWP (continue k l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (Stop CAllocBlock (t, ls) k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -157,10 +157,10 @@ Section imp_stop.
     iApply ("Hwp" with "Hl").
   Qed.
 
-  (* [CLoadBlock] via ghost map: use the persistent [isBlockLocs] to justify the step.
+  (* [CLoadBlock] via ghost map: use the persistent [blockLocs] to justify the step.
      This avoids requiring physical block ownership for read-only array operations. *)
   Lemma imp_stop_load_block_ghost (l : loc) ls (k: _ → micro A X) :
-    ▷ isBlockLocs l ls -∗
+    ▷ blockLocs l ls -∗
     ▷ (∀ t,
         EWP (continue k (t, ls)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (Stop CLoadBlock l k) @ E <|Ψ|>  ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -170,7 +170,7 @@ Section imp_stop.
     construct_wp_nonret.
     iIntros "!> !>".
     (* Use the ghost map and coherence to determine the physical heap contents. *)
-    iDestruct (osiris_state_valid_array with "Hsi Hfrag") as "(%t & %Hσl)".
+    iDestruct (osiris_state_valid_block with "Hsi Hfrag") as "(%t & %Hσl)".
     (* Thus the reduction step must succeed. *)
     destruct_subjective_step.
     rewrite /step_load_block_2 Hσl.
@@ -205,9 +205,9 @@ Section imp_stop.
   (* ------------------------------------------------------------------------ *)
   (* [CSetBlockTag]. *)
   Lemma imp_stop_set_tag l t t' (k : _ → micro A X) :
-    ▷ (isBlock l (DfracOwn 1) t) ⊢
+    ▷ (blockTag l (DfracOwn 1) t) ⊢
     ▷ (
-        (isBlock l (DfracOwn 1) t') -∗
+        (blockTag l (DfracOwn 1) t') -∗
         EWP (continue k ()) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CSetBlockTag (l, t') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -305,17 +305,17 @@ Section imp_stop.
      underlying block locations, provided at least one of the two blocks is
      mutable. [PhysEqDec] is not applicable here, because deciding physical
      equality of blocks requires consulting the store. Instead, we require
-     (fractions of) the [isBlock] predicates of both blocks, with the block
+     (fractions of) the [blockTag] predicates of both blocks, with the block
      of [seen] mutable; these resolve the comparison. *)
   Lemma imp_stop_cas_inline l (c cs : data) (r rs : record) (v' : val)
       dq1 dq2 t (k : _ → micro A X) :
     ▷ l ↦ VInline c r -∗
-    ▷ isBlock r dq1 t -∗
-    ▷ isBlock rs dq2 Mut -∗
+    ▷ blockTag r dq1 t -∗
+    ▷ blockTag rs dq2 Mut -∗
     ▷ (
         l ↦ (if locations.eqb r rs then v' else VInline c r) -∗
-        isBlock r dq1 t -∗
-        isBlock rs dq2 Mut -∗
+        blockTag r dq1 t -∗
+        blockTag rs dq2 Mut -∗
         EWP (continue k #(locations.eqb r rs)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CCAS (l, VInline cs rs, v') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -789,7 +789,7 @@ Section imp_combinators.
   (* [CAllocBlock]. *)
   Lemma imp_alloc_block2 {Φ : loc → iProp Σ} t ls :
     ⌜list_z.length ls ≤ max_array_length⌝ -∗
-    ▷ (∀ (l : loc), isBlock l (DfracOwn 1) t -∗ isBlockLocs l ls -∗ Φ l) -∗
+    ▷ (∀ (l : loc), blockTag l (DfracOwn 1) t -∗ blockLocs l ls -∗ Φ l) -∗
     impure E (alloc_block t ls) Ψ ζ Φ.
   Proof.
     iIntros "%Hbound H".
@@ -800,7 +800,7 @@ Section imp_combinators.
   Qed.
   Lemma imp_alloc_block t ls :
     ⌜list_z.length ls ≤ max_array_length⌝ -∗
-    impure E (alloc_block t ls) Ψ ζ (λ (l : loc), isBlock l (DfracOwn 1) t ∗ isBlockLocs l ls).
+    impure E (alloc_block t ls) Ψ ζ (λ (l : loc), blockTag l (DfracOwn 1) t ∗ blockLocs l ls).
   Proof.
     iIntros "%Hbound".
     iApply (imp_alloc_block2 with "[%//]").
@@ -895,8 +895,8 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CSetBlockTag]. *)
   Lemma imp_set_tag' {Φ : unit → iProp Σ} l t t' :
-    ▷ isBlock l (DfracOwn 1) t ⊢
-    ▷ (isBlock l (DfracOwn 1) t' -∗ Φ ()) -∗
+    ▷ blockTag l (DfracOwn 1) t ⊢
+    ▷ (blockTag l (DfracOwn 1) t' -∗ Φ ()) -∗
     EWP (set_tag l t') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl HΦ".
@@ -906,8 +906,8 @@ Section imp_combinators.
     iApply ("HΦ" with "Hl").
   Qed.
   Lemma imp_set_tag l t t' :
-    ▷ isBlock l (DfracOwn 1) t ⊢
-    EWP (set_tag l t') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), isBlock l (DfracOwn 1) t' }}.
+    ▷ blockTag l (DfracOwn 1) t ⊢
+    EWP (set_tag l t') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), blockTag l (DfracOwn 1) t' }}.
   Proof.
     iIntros "Hl".
     iApply (imp_set_tag' with "Hl").
@@ -932,11 +932,11 @@ Section imp_combinators.
   Lemma imp_cas_inline {Φ : bool → iProp Σ} l (c cs : data) (r rs : record)
       (v' : val) dq1 dq2 t :
     ▷ l ↦ VInline c r -∗
-    ▷ isBlock r dq1 t -∗
-    ▷ isBlock rs dq2 Mut -∗
+    ▷ blockTag r dq1 t -∗
+    ▷ blockTag rs dq2 Mut -∗
     ▷ (l ↦ (if locations.eqb r rs then v' else VInline c r) -∗
-       isBlock r dq1 t -∗
-       isBlock rs dq2 Mut -∗
+       blockTag r dq1 t -∗
+       blockTag rs dq2 Mut -∗
        Φ (locations.eqb r rs)) -∗
     EWP (cas l (VInline cs rs) v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -1051,10 +1051,10 @@ Section polymorphic_combinators.
   Context {E : coPset} {Ψ : iEff Σ}.
   Context {X : Type} {Bx : Type} `{HobsB : Observe Bx X} {ζ : Bx → iProp Σ}.
 
-  (* Ghost-based load_block: use [isBlockLocs] (persistent ghost entry) to load the block.
+  (* Ghost-based load_block: use [blockLocs] (persistent ghost entry) to load the block.
      Returns the tag [t] without requiring physical block ownership. *)
   Lemma imp_load_block_ghost' P (l : loc) ls :
-    ▷ isBlockLocs l ls -∗
+    ▷ blockLocs l ls -∗
     ▷ P -∗
     EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩
       {{ ((_, ls') : mut_tag * list loc), ⌜ls'=ls⌝ ∗ P }}.
@@ -1067,7 +1067,7 @@ Section polymorphic_combinators.
   Qed.
 
   Lemma imp_load_block_ghost (l : loc) ls :
-    ▷ isBlockLocs l ls -∗
+    ▷ blockLocs l ls -∗
     EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩
       {{ ((t', ls') : mut_tag * list loc), ⌜ls' = ls⌝ }}.
   Proof.

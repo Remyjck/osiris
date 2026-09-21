@@ -30,18 +30,18 @@ Section record_resources.
      contents will never change again can be shared persistently, at
      [DfracDiscarded].
 
-     The mutability tag is held *persistently*, at [isBlockP], rather than
+     The mutability tag is held *persistently*, at [blockTag r DfracDiscarded t], rather than
      at [dq], which governs the fields only. Tying the two together would
      make [ownBlock] unusable for any block compared physically or CASed
      on, since [compare_and_set_spec] needs a tag witness that outlives the
      atomic step it was read at, and
-     [isBlock r DfracDiscarded t ∗ isBlock r (DfracOwn 1) t] is
-     [isBlock r (DfracBoth 1) t], which is invalid. Clients that need to
-     *change* a tag must hold the exclusive [isBlock] themselves;
+     [blockTag r DfracDiscarded t ∗ blockTag r (DfracOwn 1) t] is
+     [blockTag r (DfracBoth 1) t], which is invalid. Clients that need to
+     *change* a tag must hold the exclusive [blockTag] themselves;
      [imp_ERecord] hands it back for that reason. *)
 
   Definition ownBlock {τ : types} (r : record) dq (t : mut_tag) (xs : τ) : iProp Σ :=
-    ∃ ls, isBlockLocs r ls ∗ isBlock r DfracDiscarded t ∗
+    ∃ ls, blockLocs r ls ∗ blockTag r DfracDiscarded t ∗
       [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦{dq} v.
 
 End record_resources.
@@ -65,10 +65,10 @@ Section record_resources_frac.
     f_equiv. by rewrite -gmap_view.gmap_view_frag_op agree_idemp.
   Qed.
 
-  Global Instance isBlock_dfractional (b : locations.loc) t :
-    DFractional (λ dq, isBlock b dq t).
+  Global Instance blockTag_dfractional (b : locations.loc) t :
+    DFractional (λ dq, blockTag b dq t).
   Proof.
-    intros dq1 dq2. unfold isBlock. iSplit.
+    intros dq1 dq2. unfold blockTag. iSplit.
     - iIntros "(%ls & Hb)".
       rewrite pointsto_dsplit.
       iDestruct "Hb" as "[Hb1 Hb2]".
@@ -80,10 +80,10 @@ Section record_resources_frac.
 
   (* [record] is typeclass-opaque, so the previous instance does not apply
      to [record]-typed arguments; restate it. *)
-  Global Instance isBlock_dfractional_rec (r : record) t :
-    DFractional (λ dq, isBlock r dq t) := isBlock_dfractional r t.
+  Global Instance blockTag_dfractional_rec (r : record) t :
+    DFractional (λ dq, blockTag r dq t) := blockTag_dfractional r t.
 
-  Global Instance isBlock_pers (r : record) t : Persistent (isBlock r DfracDiscarded t).
+  Global Instance blockTag_pers (r : record) t : Persistent (blockTag r DfracDiscarded t).
   Proof. unfold record in r. unfold tc_opaque in r. apply _. Qed.
 
   Global Instance ownBlock_dfractional {τ : types} (r : record) t (xs : τ) :
@@ -99,7 +99,7 @@ Section record_resources_frac.
       iDestruct "Hxs'" as "[Hxs1 Hxs2]".
       iSplitL "Hxs1"; iExists ls; iFrame "#∗".
     - iIntros "([%ls1 (#Hblock1 & #Htag1 & Hxs1)] & [%ls2 (#Hblock2 & _ & Hxs2)])".
-      iPoseProof (isBlockLocs_valid with "Hblock1 Hblock2") as "<-".
+      iPoseProof (blockLocs_valid with "Hblock1 Hblock2") as "<-".
       iExists ls2. iFrame "Hblock1 Htag1".
       iAssert ([∗ listZ] l;v ∈ ls2; to_vals xs, l ↦{dq1} v ∗ l ↦{dq2} v)%I
         with "[Hxs1 Hxs2]" as "Hxs".
@@ -111,13 +111,13 @@ Section record_resources_frac.
   (* [AsDFractional] is what lets the proofmode split these at an
      abstract [dfrac] (see [into_sep_dfractional]). *)
 
-  Global Instance isBlock_as_dfractional (b : locations.loc) dq t :
-    AsDFractional (isBlock b dq t) (λ dq, isBlock b dq t) dq.
+  Global Instance blockTag_as_dfractional (b : locations.loc) dq t :
+    AsDFractional (blockTag b dq t) (λ dq, blockTag b dq t) dq.
   Proof. constructor; done || apply _. Qed.
 
-  Global Instance isBlock_as_dfractional_rec (r : record) dq t :
-    AsDFractional (isBlock r dq t) (λ dq, isBlock r dq t) dq :=
-    isBlock_as_dfractional r dq t.
+  Global Instance blockTag_as_dfractional_rec (r : record) dq t :
+    AsDFractional (blockTag r dq t) (λ dq, blockTag r dq t) dq :=
+    blockTag_as_dfractional r dq t.
 
   Global Instance ownBlock_as_dfractional {τ : types} (r : record) dq t (xs : τ) :
     AsDFractional (ownBlock r dq t xs) (λ dq, ownBlock r dq t xs) dq.
@@ -128,12 +128,12 @@ Section record_resources_frac.
      [dfrac] ones. [Φ] has to be supplied explicitly; see the comment on
      [dfractional_fractional]. *)
 
-  Global Instance isBlock_fractional (b : locations.loc) t :
-    Fractional (λ q, isBlock b (DfracOwn q) t).
-  Proof. apply (dfractional_fractional (λ dq, isBlock b dq t)). Qed.
+  Global Instance blockTag_fractional (b : locations.loc) t :
+    Fractional (λ q, blockTag b (DfracOwn q) t).
+  Proof. apply (dfractional_fractional (λ dq, blockTag b dq t)). Qed.
 
-  Global Instance isBlock_as_fractional (b : locations.loc) q t :
-    AsFractional (isBlock b (DfracOwn q) t) (λ q, isBlock b (DfracOwn q) t) q.
+  Global Instance blockTag_as_fractional (b : locations.loc) q t :
+    AsFractional (blockTag b (DfracOwn q) t) (λ q, blockTag b (DfracOwn q) t) q.
   Proof. constructor; done || apply _. Qed.
 
   Global Instance ownBlock_fractional {τ : types} (r : record) t (xs : τ) :
@@ -206,13 +206,13 @@ Section records_reasoning.
        enforces that by making [DfracOwn 1] unreachable afterwards. There
        is no freeze rule for records ([EFreeze] is [array]-typed), so
        nothing is lost. *)
-    iMod (isBlock_persist with "Hmut") as "#Htag".
+    iMod (blockTag_persist with "Hmut") as "#Htag".
     iApply imp_ret. encode.
     rewrite bi_texist_equiv. iFrame "∗#".
   Qed.
 
   Lemma imp_ERecordAccess2 {τ : types} {ζ} f {Φ : (τ !!! f) → iProp Σ} r ls e :
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     impure E (eval η e) Ψ ζ (λ (r' : record), ⌜r' = r⌝) -∗
     (∃ dq t (xs : τ),
       ▷ (⌜valid_field f τ⌝ ∗ ownBlock r dq t xs) ∗
@@ -233,8 +233,8 @@ Section records_reasoning.
     iClear "Hblock".
 
     iDestruct "Hown" as "(%ls' & #Hblock & Htag & Hxs)".
-    iPoseProof (isBlockLocs_valid with "Hblock' Hblock") as "->".
-    iPoseProof (isBlockLocs_length with "Hblock") as "%Hlen".
+    iPoseProof (blockLocs_valid with "Hblock' Hblock") as "->".
+    iPoseProof (blockLocs_length with "Hblock") as "%Hlen".
     iPoseProof (big_sepLZ2_length with "Hxs") as "%Hlen_xs".
     assert (valid f ls) as Hvalid.
     { destruct Hvalid_field. split; first lia.
@@ -275,14 +275,14 @@ Section records_reasoning.
 
   (* [EAtomicLoc e f] returns the location of the field [f] of the record
      [e] as a first-class value. Only the persistent ghost knowledge
-     [isBlockLocs] is required: no ownership of the fields is needed. This
+     [blockLocs] is required: no ownership of the fields is needed. This
      is essential in concurrent settings, where this ownership is typically
      governed by an invariant. The atomic rules (load, store, CAS, FAA)
      then apply to the returned location. *)
 
   Lemma imp_EAtomicLoc {ζ} {Φ : loc → iProp Σ} f r ls e :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     impure E (eval η e) Ψ ζ (λ (r' : record), ⌜r' = r⌝) -∗
     ▷ Φ (ls !!! f) -∗
     impure E (eval η (EAtomicLoc e f)) Ψ ζ Φ.
@@ -300,7 +300,7 @@ Section records_reasoning.
 
   Lemma imp_ERecordAccess_pers {ζ} `{Encode A} f {Φ : A → iProp Σ} r ls dq (v : A) e :
     valid f ls →
-    ▷ isBlockLocs r ls -∗
+    ▷ blockLocs r ls -∗
     impure E (eval η e) Ψ ζ (λ (r' : record), ⌜r' = r⌝) -∗
     ▷ (ls !!! f) ↦{dq} #v -∗
     ▷ ((ls !!! f) ↦{dq} #v -∗ Φ v) -∗
@@ -336,7 +336,7 @@ Section records_reasoning.
         "(%j & %xs & Hown & HΦ)". iNext.
     iDestruct "Hown" as "(%Hvalid_field & Hown)".
     iDestruct "Hown" as "(%ls & #Hblock & Htag & Hxs)".
-    iPoseProof (isBlockLocs_length with "Hblock") as "%Hlen_ls".
+    iPoseProof (blockLocs_length with "Hblock") as "%Hlen_ls".
     iPoseProof (big_sepLZ2_length with "Hxs") as "%Hlen_xs".
 
     iApply imp_bind. { iApply (imp_load_block_ghost with "Hblock"). }

@@ -242,7 +242,7 @@ Section iter_proof.
     iIntros "!>" (f a A HencA HinhA dq xs I) "(Hown & #Hf & HI)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(% & #Harr & Htag & Hslice & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Harr") as "%Hmaxlength".
+    iPoseProof (blockLocs_length with "Harr") as "%Hmaxlength".
     length_nonneg xs.
     iApply (imp_wand with "[Hslice HI]").
     - imp_for 0 to (length xs - 1) $!
@@ -335,7 +335,7 @@ Section map_spec.
     iIntros "!>" (f a A HencA HinhA B HencB HinhB dq xs Φ) "(Hown & #Hf)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(%ls & #Harr & Htag & Hslice & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Harr") as "%Hmaxlength".
+    iPoseProof (blockLocs_length with "Harr") as "%Hmaxlength".
 
     (* let l = length a in ... *)
     iApply (imp_ELet_var (B:=Z) with "[]").
@@ -483,7 +483,7 @@ Section map_inplace_spec.
     iIntros "!>" (f a A HencA HinhA xs Φ) "(Hown & #Hf)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(%ls & #Ha & Htag & Hslice_init & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Ha") as "%Hboundxs".
+    iPoseProof (blockLocs_length with "Ha") as "%Hboundxs".
     length_nonneg xs.
 
     iApply (imp_wand with "[Hslice_init]").
@@ -576,7 +576,7 @@ Section mapi_inplace_spec.
     iIntros "!>" (f a A HencA HinhA xs Φ) "(Hown & #Hf)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(%ls & #Ha & Htag & Hslice_init & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Ha") as "%Hboundxs".
+    iPoseProof (blockLocs_length with "Ha") as "%Hboundxs".
     length_nonneg xs.
 
     iApply (imp_wand with "[Hslice_init]").
@@ -703,7 +703,7 @@ Section iteri_spec.
     iIntros "!>" (f a A HencA HinhA dq xs I) "(Hown & #Hf & HI)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(%ls & #Ha & Htag & Hslice_init & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Ha") as "%Hboundxs".
+    iPoseProof (blockLocs_length with "Ha") as "%Hboundxs".
     length_nonneg xs.
 
     iApply (imp_wand with "[Hslice_init HI]").
@@ -910,7 +910,7 @@ Section fold_left_spec.
     iIntros (r) "Hr".
 
     iDestruct "Hown" as "(%ls & #Ha & Htag & Hslice_init & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Ha") as "%Hboundxs".
+    iPoseProof (blockLocs_length with "Ha") as "%Hboundxs".
     length_nonneg xs.
     (* for i = 0 to length a - 1 do r := f !r (unsafe_get a i) done; !r *)
     iApply (imp_ESeq with "[Hslice_init HI Hr]").

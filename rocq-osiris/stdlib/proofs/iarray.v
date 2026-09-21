@@ -11,16 +11,16 @@ Section iarray_resources.
   Context `{!osirisGS Σ}.
 
   Definition owniArray `{Encode A} (a : iarray) (xs : list A) : iProp Σ :=
-    ∃ ls, isBlockLocs a ls ∗ [∗ listZ] l;x ∈ ls; xs, l ↦□ #x.
+    ∃ ls, blockLocs a ls ∗ [∗ listZ] l;x ∈ ls; xs, l ↦□ #x.
 
-  Global Instance isBlockLocs_pers' (a : iarray) ls : Persistent (isBlockLocs a ls).
+  Global Instance blockLocs_pers' (a : iarray) ls : Persistent (blockLocs a ls).
   Proof. apply _. Qed.
 
   Global Instance iArray_pers `{Encode A} a (xs : list A) : Persistent (owniArray a xs).
   Proof. apply _. Qed.
 
-  Lemma ownArray_isBlockLocs `{Encode A} (a : iarray) (xs : list A) :
-    owniArray a xs -∗ ∃ ls, isBlockLocs a ls.
+  Lemma ownArray_blockLocs `{Encode A} (a : iarray) (xs : list A) :
+    owniArray a xs -∗ ∃ ls, blockLocs a ls.
   Proof. iIntros "(%ls & $ & _)". Qed.
 
 End iarray_resources.
@@ -34,7 +34,7 @@ Section freeze_iarray.
   Definition freeze_array_spec freeze : iProp Σ :=
     {{ ∀ `(Encode A) (xs : list A); a ↦∗ xs }}
     freeze a : array
-    {{ RET (a' : iarray); a' ↦□∗ xs ∗ isBlock a' (DfracOwn 1) Immut }}.
+    {{ RET (a' : iarray); a' ↦□∗ xs ∗ blockTag a' (DfracOwn 1) Immut }}.
 
   Lemma imp_freeze_array freeze :
     freeze_spec freeze -∗
@@ -43,11 +43,11 @@ Section freeze_iarray.
     iIntros "#Hspec !>".
     iApply (iSpec_mono with "Hspec").
     iIntros (b m) "Hm %A %HencA %xs Hown".
-    (* Unfold ownArray: extracts isBlockLocs, isBlock (DfracOwn 1 Mut), isSlice, length-eq *)
+    (* Unfold ownArray: extracts blockLocs, blockTag (DfracOwn 1 Mut), isSlice, length-eq *)
     iDestruct "Hown" as "(%ls & #Harr & Hblock & Hslice & %Hlenls)".
     (* Extract the slice contents for persistence later *)
     iDestruct "Hslice" as "(%ls' & #Harr' & %Hle & Hown)".
-    iPoseProof (isBlockLocs_valid with "Harr Harr'") as "->".
+    iPoseProof (blockLocs_valid with "Harr Harr'") as "->".
     (* Now apply freeze to the physical block *)
     iSpecialize ("Hm" with "Hblock").
     iPoseProof (big_sepLZ2_mono with "Hown") as "Hown".
@@ -81,7 +81,7 @@ Section init_proof.
        and such that [Φ i] holds for the [i]'th element of xs. *)
     init n f : Z val
     {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦□∗ xs ∗
-                isBlock a (DfracOwn 1) Immut ∗ I xs }}.
+                blockTag a (DfracOwn 1) Immut ∗ I xs }}.
 
   Definition init := (EAnonFun __init).
 

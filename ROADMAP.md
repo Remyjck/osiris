@@ -38,8 +38,17 @@ Osiris reasons about arbitrary OCaml programs with Iris.
 
 - `ewp.v`: definition of our weakest precondition
 - `fun_spec.v`: `iSpec` abstraction for reasoning about n-ary function calls
-- `protocols.v`: Iris effect protocols (adapted from Hazel by Vilhena & Pottier)
 - `osiris_utils.v`: utility definitions for Osiris proofs (re-exported via proofmode)
+- `lib/`: the custom ghost state Osiris is built on:
+  - `ghost_state.v`: Osiris's ghost state (`osirisGS`, `osirisΣ`), heap and thread
+    resources (`valid_thread`), and the state interpretation
+  - `block_resources.v`: block resources (`blockLocs`, `blockTag`)
+  - `block_map.v`: block ghost map, an authoritative map of agreements from each
+    block to its element locations
+  - `thread_post.v`: thread postconditions, an authoritative map of agreements
+    from thread ids to their postconditions
+  - `protocols.v`: Iris effect protocols (adapted from Hazel by Vilhena & Pottier)
+  - `escrows.v`: escrow allocation lemmas, and `big_sepL` helpers
 - `rules/`: EWP reasoning rules:
   - `basic_rules.v`: core EWP definition and pure-step rules
   - `micro_rules.v`: rules for micro monad constructs (ret, throw, crash, bind, try, Par)

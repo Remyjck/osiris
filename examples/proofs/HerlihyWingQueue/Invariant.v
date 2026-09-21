@@ -100,7 +100,7 @@ Qed.
    persistent, so a thread can name a slot's cell without opening the queue's
    invariant -- which is what lets [%atomic.loc s.v] be evaluated before the
    atomic step that reads or writes it. *)
-Definition slot_cell (s : slot) (l : loc) : iProp Σ := isBlockLocs s [l].
+Definition slot_cell (s : slot) (l : loc) : iProp Σ := blockLocs s [l].
 
 Definition slot_at (s : slot) : iProp Σ := ∃ l, slot_cell s l.
 
@@ -116,7 +116,7 @@ Lemma slot_cell_agree s l l' :
   slot_cell s l -∗ slot_cell s l' -∗ ⌜l' = l⌝.
 Proof.
   iIntros "H1 H2".
-  by iDestruct (isBlockLocs_valid with "H1 H2") as %[= ->].
+  by iDestruct (blockLocs_valid with "H1 H2") as %[= ->].
 Qed.
 
 Lemma slot_pointsto_open s l o :
@@ -255,7 +255,7 @@ Definition is_queue γ (cap : Z) (q : queue) : iProp Σ :=
   ∃ (ql pl bl : loc) (a : array) (ss : list slot) (p : loc),
     ⌜list_z.length ss = cap⌝ ∗
     ⌜0 < cap ≤ max_array_length⌝ ∗
-    isBlockLocs q [ql; pl; bl] ∗
+    blockLocs q [ql; pl; bl] ∗
     ql ↦□ #a ∗
     pl ↦□ #p ∗
     a ↦∗[0]□ ss ∗
