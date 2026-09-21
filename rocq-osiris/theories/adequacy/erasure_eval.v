@@ -312,8 +312,10 @@ Proof.
     try (exact (EM_Ret id erase_val _)).
   (* A constant constructor against something that is not one: both sides
      take the error branch whatever the argument list looks like. A
-     prophecy against a location: only the annotated side crashes. *)
-  all: solve [ repeat case_match; apply EM_CrashL ].
+     prophecy: only the annotated side crashes. It must be caught before
+     [case_match], which would otherwise destruct the string of the
+     erased [VUnit]'s comparison forever. *)
+  all: solve [ apply EM_CrashL | repeat case_match; apply EM_CrashL ].
 Qed.
 
 (* [eq_val] traverses tuples and data with a local [fix]; [eq_vals] mirrors
@@ -353,12 +355,14 @@ Lemma erase_eq_val v1 :
   ∀ v2, erase_micro id erase_val
           (eq_val v1 v2) (eq_val (erase_val v1) (erase_val v2)).
 Proof.
+  (* [EM_CrashL]: a prophecy does not compare, but its erasure [VUnit]
+     does. *)
   induction v1;
-    intros; try (destruct v2; simpl; first [ apply EM_Crash
+    intros; try (destruct v2; simpl; first [ apply EM_CrashL
                                            | exact (EM_Ret id erase_val _) ]).
-  - destruct v2; simpl; try apply EM_Crash. fold eq_vals. fold erase_vals.
+  - destruct v2; simpl; try apply EM_CrashL. fold eq_vals. fold erase_vals.
     apply erase_eq_vals. apply H.
-  - destruct v2; simpl; try apply EM_Crash. fold eq_vals. fold erase_vals.
+  - destruct v2; simpl; try apply EM_CrashL. fold eq_vals. fold erase_vals.
     case_match; try by constructor.
     apply erase_eq_vals. apply H.
 Qed.
@@ -436,16 +440,14 @@ Qed.
 
 (** ** Prophecies. *)
 
-(* Allocating a prophecy and allocating a unit reference take the same step,
-   so the two computations [eval] builds for them line up exactly. *)
+(* Allocating a prophecy is a step that erasure drops: whichever identifier
+   it picks, the prophecy erases to unit. *)
 
 Lemma erase_new_proph :
-  erase_microvx ('p ← new_proph ; ret (VProph p))
-                ('l ← alloc VUnit ; ret (VLoc l)).
+  erase_microvx ('p ← new_proph ; ret (VProph p)) (ret VUnit).
 Proof.
-  apply EM_NewProph. intros [ p | ex ]; simpl.
-  - exact (EM_Ret erase_val erase_val (VProph p)).
-  - exact (EM_Throw erase_val erase_val ex).
+  apply EM_NewProph. intros p.
+  exact (EM_Ret erase_val erase_val (VProph p)).
 Qed.
 
 Lemma erase_resolve_return w p v :
@@ -862,9 +864,9 @@ Proof.
     destruct v; simpl_eval_pat; try apply EM_Crash.
     fold erase_vals.
     apply erase_evals_pats; assumption.
-  - (* PData *)
+  - (* PData: a prophecy is not data, but its erasure [VUnit] is. *)
     intros η δ v;
-    destruct v; simpl_eval_pat; try apply EM_Crash; try ee_ret;
+    destruct v; simpl_eval_pat; try apply EM_CrashL; try ee_ret;
     case_match; [ | ee_ret ]. fold erase_vals.
     apply erase_evals_pats; assumption.
   - (* PXData *)
@@ -882,9 +884,9 @@ Proof.
     eapply erase_bind; [ apply erase_load_block | ]; intros [ t ls ]; ee_pair;
     eapply erase_bind; [ apply erase_loadfs | ]; intros vs; ee_pair.
     apply erase_eval_fpats; assumption.
-  - (* PInline *)
+  - (* PInline: as for [PData], a prophecy crashes where [VUnit] throws. *)
     intros η δ v;
-    destruct v; simpl_eval_pat; try apply EM_Crash; try ee_ret;
+    destruct v; simpl_eval_pat; try apply EM_CrashL; try ee_ret;
     case_match; [ apply IHp | ee_ret ].
   - (* PArray *)
     intros η δ v;

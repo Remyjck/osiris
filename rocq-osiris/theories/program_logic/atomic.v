@@ -361,7 +361,7 @@ End lemmas.
    fired: the prophecy's head was the pair of the value the call returned
    and the tag [v], and the rest of the prediction is [pvs']. *)
 
-Definition resolved `{!osirisGS Σ} (p : locations.loc) (v w : val)
+Definition resolved `{!osirisGS Σ} (p : proph_id) (v w : val)
     (pvs : list (val * val)) : iProp Σ :=
   ∃ pvs', ⌜pvs = (w, v) :: pvs'⌝ ∗ proph p pvs'.
 
@@ -383,7 +383,7 @@ Section proph_lemmas.
      step later could be separated from the commit by another thread. *)
 
   Lemma atomic_ewp_resolve {Y} (c : code Y val exn) (y : Y)
-      (p : locations.loc) (v : val) (pvs : list (val * val)) E α β POST f :
+      (p : proph_id) (v : val) (pvs : list (val * val)) E α β POST f :
     call_is_atomic c y →
     proph p pvs -∗
     atomic_ewp (stop c y) E α β POST f -∗
@@ -422,7 +422,7 @@ Section proph_lemmas.
   Qed.
 
   Lemma atomic_ewp_resolve_return (m : micro val exn)
-      (p : locations.loc) (v : val) (pvs : list (val * val)) E α β POST f :
+      (p : proph_id) (v : val) (pvs : list (val * val)) E α β POST f :
     proph p pvs -∗
     atomic_ewp m E α β POST f -∗
     atomic_ewp (bind m (λ w, resolve CReturn w p v)) E α β

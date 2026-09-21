@@ -194,6 +194,17 @@ Section ewp_rules.
         iModIntro.
         iApply ("IH" with "Hwp"). }
       destruct Hstep as [ Hstep | Hstep ].
+      { (* Case: [m1] is [NewProph _] *)
+        destruct Hstep as (x & k & ->).
+        simpl try2. construct_wp_nonret.
+        destruct_subjective_step. subst.
+        eassert (subjective_step (_, Stop CNewProph x k, dom π) _ _)
+          by (eapply NewProphS; eassumption).
+        spec_step.
+        ewp_mask_elim. iMod "Hwp" as "(Hwp & $)".
+        iModIntro.
+        iApply ("IH" with "Hwp"). }
+      destruct Hstep as [ Hstep | Hstep ].
       { destruct Hstep as (Y & c & y & k & ->).
         iSplitR; [ iPureIntro; by apply reducible_try2 | ].
         simpl try2. cbn match.
@@ -328,7 +339,7 @@ Section ewp_rules.
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         destruct x.
         rewrite (ewp_unfold (Stop CFork (v, v0) _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         construct_wp_nonret. destruct_subjective_step.
         epose proof (ForkS _ _ _ _ _ _ H0).
@@ -339,16 +350,27 @@ Section ewp_rules.
       - (* Step then [JoinS]. *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop CJoin x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H1".
         destruct (π !! x); last done.
         iIntros "!> !> %o Ho". iSpecialize ("H1" with "Ho").
         ewp_mask_elim. iMod "H1" as "(H1 & $)".
         iApply ("IH" with "H1 H2 Hjoin").
 
+      - (* Step then [NewProphS]. *)
+        ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
+        rewrite (ewp_unfold (Stop CNewProph x _)) /ewp_pre /=.
+        clear κs. rename σ into σ_par.
+        ewp_unfold_head. intro_state. spec_state. iModIntro.
+        construct_wp_nonret. destruct_subjective_step. subst.
+        epose proof (NewProphS _ _ _ _ _ ltac:(eassumption)) as Hs.
+        iSpecialize ("H1" $! _ _ _ Hs).
+        ewp_mask_elim. iMod "H1" as "(H1 & $)".
+        iApply ("IH" with "H1 H2 Hjoin").
+
       - ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".
@@ -380,7 +402,7 @@ Section ewp_rules.
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         destruct x.
         rewrite (ewp_unfold (Stop CFork (v, v0) _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         construct_wp_nonret. destruct_subjective_step.
         epose proof (ForkS _ _ _ _ _ _ H0).
@@ -391,17 +413,28 @@ Section ewp_rules.
       - (* [StepParJoinRight] *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop CJoin x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H2".
         destruct (π !! x); last done.
         iIntros "!> !> %o Ho". iSpecialize ("H2" with "Ho").
         ewp_mask_elim. iMod "H2" as "(H2 & $)".
         iApply ("IH" with "H1 H2 Hjoin").
 
+      - (* [StepParNewProphRight] *)
+        ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
+        rewrite (ewp_unfold (Stop CNewProph x _)) /ewp_pre /=.
+        clear κs. rename σ into σ_par.
+        ewp_unfold_head. intro_state. spec_state. iModIntro.
+        construct_wp_nonret. destruct_subjective_step. subst.
+        epose proof (NewProphS _ _ _ _ _ ltac:(eassumption)) as Hs.
+        iSpecialize ("H2" $! _ _ _ Hs).
+        ewp_mask_elim. iMod "H2" as "(H2 & $)".
+        iApply ("IH" with "H1 H2 Hjoin").
+
       - (* [StepParResolveRight]: the mirror image of the left case. *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".

@@ -301,7 +301,8 @@ Section satisfiability_weakest_pre.
 
   (* Relating a "real" threadpool step (from the definition of the semantics),
      to a "local" thread step (from the definition of our weakest pre). *)
-  Lemma threadpool_subjective_step (σ1 σ2 : store) (π1 π2 : thpool) κ :
+  Lemma threadpool_subjective_step (σ1 σ2 : subjective_step.store)
+      (π1 π2 : thpool) κ :
     (* If the threadpool can take an instrumented step *)
     proph_step (σ1, π1) κ (σ2, π2) →
     (* Then either that step was a join, which emits nothing *)
@@ -326,32 +327,38 @@ Section satisfiability_weakest_pre.
       end.
   Proof.
     intros Htpstep.
-    inversion_clear Htpstep as [ ? ? Hpure | ]; [ inversion_clear Hpure | ].
-    - (* BaseTP case: π !! ι = Some m, step (σ, m) (σ', m') *)
-      right; rename H into Hlookup, H0 into Hstep; subst.
-      eapply BaseS in Hstep as Htstep.
-      exists ι, m, m', None.
-      split; [exact Hlookup | split; [ apply lookup_insert_eq | split; [exact Htstep | reflexivity]]].
-    - (* ForkTP case: π !! ι = Some (Stop CFork ...), π !! ι' = None *)
-      right; rename H into Hlookup, H0 into Hfresh; subst.
-      exists ι, (Stop CFork (v1, v2) k), (continue k (VThread ι')), (Some (ι', call v1 v2)).
-      split; [exact Hlookup | ].
-      split; [rewrite lookup_insert_ne; [apply lookup_insert_eq | ] | ].
-      { intros Heq_ι. subst ι'. rewrite Hfresh in Hlookup. discriminate Hlookup. }
-      split.
-      + apply ForkS. apply (not_elem_of_dom π1). exact Hfresh.
-      + split; [| reflexivity].
-        rewrite lookup_insert_ne; [exact Hfresh | ].
-        intros Heq_ι'. subst ι'. rewrite Hfresh in Hlookup. discriminate Hlookup.
-    - (* JoinTP case: π !! ι = Some (Stop CJoin ...), attempt_join ... *)
-      left; rename H into Hlookup, H0 into Hattempt; subst.
-      exists ι, ι', k, m.
-      split; [exact Hlookup | split; [exact Hattempt | done]].
+    inversion Htpstep as [ σ π h' π' Hpure | | ]; subst.
+    - inversion Hpure as
+        [ ι π m ? m' ? Hlookup Hstep
+        | ι π ι' v1 v2 k ? Hlookup Hfresh
+        | ι π ι' k m ? Hlookup Hattempt ]; subst.
+      + (* BaseTS case: π !! ι = Some m, step on the heap *)
+        right. eapply BaseS in Hstep as Htstep.
+        exists ι, m, m', None.
+        split; [exact Hlookup | split; [ apply lookup_insert_eq | split; [exact Htstep | reflexivity]]].
+      + (* ForkTS case: π !! ι = Some (Stop CFork ...), π !! ι' = None *)
+        right. rewrite ?store_eta ?store_upd_heap_id.
+        exists ι, (Stop CFork (v1, v2) k), (continue k (VThread ι')), (Some (ι', call v1 v2)).
+        split; [exact Hlookup | ].
+        split; [rewrite lookup_insert_ne; [apply lookup_insert_eq | ] | ].
+        { intros Heq_ι. subst ι'. rewrite Hfresh in Hlookup. discriminate Hlookup. }
+        split.
+        * apply ForkS. apply not_elem_of_dom. exact Hfresh.
+        * split; [| reflexivity].
+          rewrite lookup_insert_ne; [exact Hfresh | ].
+          intros Heq_ι'. subst ι'. rewrite Hfresh in Hlookup. discriminate Hlookup.
+      + (* JoinTS case: π !! ι = Some (Stop CJoin ...), attempt_join ... *)
+        left. exists ι, ι', k, m.
+        split; [exact Hlookup | split; [exact Hattempt | ]].
+        by rewrite ?store_eta ?store_upd_heap_id.
+    (* [NewProphTS] is [NewProphS] one level up. *)
+    - right. eexists ι, _, _, None.
+      split; [ eassumption | split; [ apply lookup_insert_eq | ] ].
+      split; [ by apply NewProphS | reflexivity ].
     (* [ResolveTS] is [ResolveS] one level up: same outcome, so the same
        [resolve_obs] label and the same [try2] target. *)
-    - right; rename H into Hlookup, H0 into Hstep; subst.
-      eexists ι, _, (try2 b k), None.
-      split; [exact Hlookup | split; [apply lookup_insert_eq | ]].
+    - right. eexists ι, _, (try2 b k), None.
+      split; [ eassumption | split; [apply lookup_insert_eq | ]].
       split; [by eapply ResolveS | reflexivity].
   Qed.
 
@@ -635,10 +642,8 @@ Proof.
     iModIntro. iFrame. }
 Qed.
 
-(* The prophecy map starts empty: no identifier has been allocated yet, so
-   no resolution in [κs] can concern one, and [proph_map_init] is happy
-   with any trace. Freshness for the store then keeps the two in step, as
-   [osiris_proph_interp] records. *)
+(* The prophecy map starts empty, over the identifiers the store has
+   already allocated: [proph_map_init] is happy with any trace. *)
 
 Lemma osiris_initial_allocation `{!osirisGpreS Σ} (ι : thread) σ κs (_ : invGS_gen HasNoLc Σ) (F : iProp Σ) (P: outcome2 val exn → Prop) :
   SAT Alloc F [view ⊤; supply 0] True →
@@ -649,13 +654,13 @@ Proof.
   intros Hsat.
   eapply SAT_frame_resource with (R := view _) in Hsat; last apply _.
   eapply SAT_frame_resource with (R := supply _) in Hsat; last apply _.
-  eapply (SAT_gen_heap_init σ) in Hsat as [Hgen Hsat].
+  eapply (SAT_gen_heap_init σ.(st_heap)) in Hsat as [Hgen Hsat].
   (* The thread postconditions and the block map are authoritative maps of
      agreements, allocated with the generic resource allocation. *)
   assert (Hva : ✓ (● (∅ : thread_postUR Σ))).
   { apply auth_auth_valid. exact (ucmra_unit_valid (A := thread_postUR Σ)). }
   eapply (SAT_alloc_res _ _ _ _ Hva) in Hsat as [γpost Hsat].
-  eapply (SAT_proph_map_init κs ∅) in Hsat as [Hproph Hsat].
+  eapply (SAT_proph_map_init κs σ.(used_proph_id)) in Hsat as [Hproph Hsat].
   assert (Hvb : ✓ (● (∅ : block_mapUR))).
   { apply auth_auth_valid. exact (ucmra_unit_valid (A := block_mapUR)). }
   eapply (SAT_alloc_res _ _ _ _ Hvb) in Hsat as [γ Hsat].
@@ -668,8 +673,7 @@ Proof.
   iSplitL "Harri".
   { iExists ∅. rewrite block_map_auth_empty. iFrame "Harri". iPureIntro.
     intros a ls Hlookup. rewrite lookup_empty in Hlookup. discriminate. }
-  iSplitL "Hproph".
-  { iExists ∅. iFrame "Hproph". iPureIntro. set_solver. }
+  iSplitL "Hproph"; first iExact "Hproph".
   rewrite /osiris_thread_interp thread_post_auth_empty. iFrame "Hpost".
 Qed.
 

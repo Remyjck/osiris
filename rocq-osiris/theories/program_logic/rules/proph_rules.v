@@ -38,8 +38,8 @@ Section proph.
   (** ** Allocation. *)
 
   Lemma ewp_new_proph `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _) u
-    (k : outcome2 loc exn → micro V X) :
-    ▷ (∀ (p : loc) (pvs : list (val * val)),
+    (k : outcome2 proph_id exn → micro V X) :
+    ▷ (∀ (p : proph_id) (pvs : list (val * val)),
          proph p pvs -∗
          EWP (continue k p) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }})
     ⊢ EWP (Stop CNewProph u k) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -50,19 +50,12 @@ Section proph.
     ewp_mask_intro "Hmod".
     construct_wp_nonret.
     destruct_subjective_step.
-    (* [StepNewProph] picked a location [p] fresh for the store. *)
-    iDestruct "Hpi" as (ps Hps) "Hpm".
-    iMod (proph_map_new_proph p ps with "Hpm") as "[Hpm Hp]".
-    { (* [p] is fresh for the store, hence for [ps]. *)
-      intros Hin. apply Hps in Hin. apply not_elem_of_dom in H0. done. }
-    iMod (osiris_state_alloc σ p (Val VUnit) H0 with "Hsi")
-      as "(Hsi & _ & _ & _)".
+    (* [NewProphS] picked an identifier [p] fresh for [used_proph_id],
+       which it adds to the set; the heap is unchanged. *)
+    iMod (proph_map_new_proph p with "Hpi") as "[Hpi Hp]"; first done.
     iIntros "!> !>".
     iSpecialize ("H" with "Hp").
-    ewp_mask_elim. iFrame "H Hsi Hti".
-    (* The allocated identifier joins the set, and the store grew to match. *)
-    iExists ({[p]} ∪ ps). iFrame "Hpm". iPureIntro.
-    rewrite dom_insert. set_solver.
+    ewp_mask_elim. by iFrame "H Hsi Hpi Hti".
   Qed.
 
   (* ------------------------------------------------------------------------ *)
@@ -79,13 +72,13 @@ Section proph.
      compare-and-set, fetch-and-add. *)
 
   Definition call_is_atomic {Y} (c : code Y val exn) (x : Y) : Prop :=
-    (match c with CPerf | CResolve _ => False | _ => True end
+    (match c with CPerf | CNewProph | CResolve _ => False | _ => True end
        ∧ ¬ is_concurrent_code c) ∧
     (∀ σ σ' m', step (σ, stop c x) (σ', m') →
       (∃ w, m' = Ret w) ∨ (∃ e, m' = Throw e) ∨ m' = Crash).
 
   Lemma ewp_resolve `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _) {Y}
-    (c : code Y val exn) x (p : loc) (v : val)
+    (c : code Y val exn) x (p : proph_id) (v : val)
     (pvs : list (val * val)) (k : outcome2 val exn → micro V X) :
     call_is_atomic c x →
     proph p pvs -∗
@@ -103,7 +96,7 @@ Section proph.
     iIntros (σ κ κs π) "Hsi".
     (* Progress comes from the code alone, so it is available before we
        know anything about the trace. *)
-    assert (can_step (σ, stop c x)) as Hcs by (by apply can_step_stop).
+    assert (can_step (σ.(st_heap), stop c x)) as Hcs by (by apply can_step_stop).
     (* The label decides which of the three [Resolve] rules can have
        fired: only the successful one emits, so an empty label means the
        call threw or crashed. *)
@@ -120,14 +113,14 @@ Section proph.
       { exfalso. eapply (no_step_Resolve _ c _ k); eassumption. }
       destruct_is_result [w | e]; simpl in *; simplify_eq.
       + (* the call threw *)
-        iMod ("Hwp" $! σ' (throw e) None with "[%]") as "Hwp";
+        iMod ("Hwp" $! _ (throw e) None with "[%]") as "Hwp";
           first by apply BaseS.
         iModIntro. iNext. iMod "Hwp" as "[Hwp $]".
         iApply fupd_ewp.
         iEval (rewrite (ewp_unfold (throw e)) /ewp_pre /=) in "Hwp".
         iMod "Hwp" as "(%b & -> & Hwp)". iModIntro. iExact "Hwp".
       + (* the call crashed *)
-        iMod ("Hwp" $! σ' Crash None with "[%]") as "Hwp";
+        iMod ("Hwp" $! _ Crash None with "[%]") as "Hwp";
           first by apply BaseS.
         iModIntro. iNext. iMod "Hwp" as "[Hwp $]".
         (* Both sides are [ewp]s of [Crash]: the state the goal hands us
@@ -146,13 +139,12 @@ Section proph.
       remember (x, p, v) as y eqn:Hy.
       dependent destruction Hstep.
       destruct_is_result [w | e]; simpl in *; simplify_eq.
-      iMod ("Hwp" $! σ' (ret w') None with "[%]") as "Hwp";
+      iMod ("Hwp" $! _ (ret w') None with "[%]") as "Hwp";
         first by apply BaseS.
       iModIntro. iNext. iMod "Hwp" as "[Hwp ($ & Hpi & $)]".
-      iDestruct "Hpi" as (ps Hps) "Hpm".
-      iMod (proph_map_resolve_proph p' (w', v') κs ps pvs with "[$Hpm $Hp]")
+      iMod (proph_map_resolve_proph p' (w', v') κs _ pvs with "[$Hpi $Hp]")
         as (pvs') "(%Heq & Hpm & Hp)".
-      iSplitR "Hpm"; last (iExists ps; by iFrame "Hpm").
+      iSplitR "Hpm"; last by iFrame "Hpm".
       iApply fupd_ewp.
       iEval (rewrite (ewp_unfold (ret w')) /ewp_pre /=) in "Hwp".
       iMod "Hwp". iModIntro.
@@ -217,7 +209,7 @@ Section proph.
      computed. *)
 
   Lemma ewp_resolve_return `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _)
-    (w : val) (p : loc)
+    (w : val) (p : proph_id)
     (v : val) (pvs : list (val * val)) (k : outcome2 val exn → micro V X) :
     proph p pvs -∗
     (∀ pvs', ⌜pvs = (w, v) :: pvs'⌝ -∗ proph p pvs' -∗

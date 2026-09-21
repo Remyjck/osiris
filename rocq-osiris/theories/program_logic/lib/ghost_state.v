@@ -34,7 +34,7 @@ Section ghost_instances.
       #[global] osiris_threadPostG :: threadPostG Σ;
       osiris_tokenG :: tokenG Σ;
       #[global] osiris_block_mapG :: blockMapG Σ;
-      #[global] osiris_prophGpreS :: proph_mapGpreS locations.loc (val * val) Σ;
+      #[global] osiris_prophGpreS :: proph_mapGpreS proph_id (val * val) Σ;
     }.
 
   (* The [osirisGS] typeclass is what we use in our proofs.
@@ -59,7 +59,7 @@ Section ghost_instances.
       osiris_block_name : gname;
       (* This gives us the prophecy map, relating [proph] assertions to
          the observations the execution has yet to produce. *)
-      osiris_prophGS :: proph_mapGS locations.loc (val * val) Σ;
+      osiris_prophGS :: proph_mapGS proph_id (val * val) Σ;
     }.
 
 End ghost_instances.
@@ -71,7 +71,7 @@ Definition osirisΣ : gFunctors :=
      threadPostΣ;
      tokenΣ;
      blockMapΣ;
-     proph_mapΣ locations.loc (val * val)
+     proph_mapΣ proph_id (val * val)
     ].
 
 (* Show that inclusion of [osirisΣ] in [Σ] is enough to instantiate [osirisGpreS Σ]. *)
@@ -110,13 +110,6 @@ Global Instance osiris_block_heapGS `{osirisGS Σ} : gen_heap.gen_heapGS locatio
 Proof. apply (osiris_genGS Σ). Defined.
 
 (* The block resources [blockTag] and [blockLocs] are in [block_resources.v]. *)
-
-(* Prophecies. *)
-
-(* We declare that [proph_id] can be used as keys for [proph]. *)
-Global Instance osiris_proph_id_mapGS `{osirisGS Σ} :
-  proph_mapGS proph_id (val * val) Σ.
-Proof. unfold proph_id; simpl. apply (osiris_prophGS Σ). Defined.
 
 (* -------------------------------------------------------------------------- *)
 (* Definition of the state interpretation. *)
@@ -169,33 +162,29 @@ Section state_interp.
      every block registered in σ' is a [Block] in σ with the same locations. *)
   Definition block_coherent (σ' : gmap locations.loc (list loc)) (σ : store) : Prop :=
     ∀ (a : loc) (ls : list loc),
-      σ' !! (a : loc) = Some ls → ∃ t : mut_tag, σ !! a = Some (Block t ls).
+      σ' !! (a : loc) = Some ls →
+      ∃ t : mut_tag, σ.(st_heap) !! a = Some (Block t ls).
 
   Definition block_interp (σ : store) : iProp Σ :=
     ∃ σ', block_map_auth (osiris_block_name Σ) σ' ∗ ⌜block_coherent σ' σ⌝.
 
   Definition osiris_state_interp (σ : store) : iProp Σ :=
-    @gen_heap_interp locations.loc _ _ mem_block Σ _ σ ∗ block_interp σ.
+    @gen_heap_interp locations.loc _ _ mem_block Σ _ σ.(st_heap) ∗ block_interp σ.
 
   (* The prophecy interpretation. [κs] is the list of observations the
      execution has yet to produce, and [proph_map_interp κs ps] ties the
-     [proph p vs] assertions to it. *)
-
-  (* [ps] is the set of prophecy identifiers allocated so far. It is
-     pinned to the store's domain: allocating a prophecy needs a fresh
-     identifier for [ps], while the operational rule [StepNewProph] offers
-     a fresh one for the store. Tying the two lets the freshness conditions
-     meet. *)
+     [proph p vs] assertions to it, for the set [ps] of prophecy
+     identifiers allocated so far. *)
 
   Definition osiris_proph_interp (σ : store) (κs : list observation) : iProp Σ :=
-    ∃ ps, ⌜ps ⊆ dom σ⌝ ∗ proph_map_interp κs ps.
+    proph_map_interp κs σ.(used_proph_id).
 
   Lemma osiris_proph_interp_mono σ σ' κs :
-    dom σ ⊆ dom σ' →
+    σ.(used_proph_id) ⊆ σ'.(used_proph_id) →
     osiris_proph_interp σ κs -∗ osiris_proph_interp σ' κs.
   Proof.
-    iIntros (Hsub) "(%ps & %Hps & H)".
-    iExists ps. iFrame. iPureIntro. set_solver.
+    iIntros (Hsub) "(%R & [%HR %Hdom] & H)".
+    iExists R. iFrame. iPureIntro. split; [ done | set_solver ].
   Qed.
 
   Definition state_interp : (store * list observation * post_map Σ) -> iProp Σ :=
@@ -206,7 +195,7 @@ Section state_interp.
   (** [osiris_state_interp] operations. *)
 
   Lemma osiris_state_valid σ l dq (v : mem_block) :
-    osiris_state_interp σ -∗ pointsto l dq v -∗ ⌜σ !! l = Some v⌝.
+    osiris_state_interp σ -∗ pointsto l dq v -∗ ⌜σ.(st_heap) !! l = Some v⌝.
   Proof.
     iIntros "(Hmem & _) Hl".
     iApply (gen_heap_valid with "Hmem Hl").
@@ -215,7 +204,7 @@ Section state_interp.
   Lemma osiris_state_valid_block σ (l : loc) ls :
     osiris_state_interp σ -∗
     block_map_elem (osiris_block_name Σ) l ls -∗
-    ∃ t, ⌜σ !! (l : locations.loc) = Some (Block t ls)⌝.
+    ∃ t, ⌜σ.(st_heap) !! (l : locations.loc) = Some (Block t ls)⌝.
   Proof.
     iIntros "(_ & %A & Hauth & %Hcoh) #Hfrag".
     iDestruct (block_map_lookup with "Hauth Hfrag") as "%Hlookup".
@@ -234,16 +223,19 @@ Section state_interp.
   Proof. destruct b; econstructor; congruence. Defined.
 
   Lemma osiris_state_alloc σ (l : locations.loc) (v : mem_block) :
-    σ !! l = None →
+    σ.(st_heap) !! l = None →
     osiris_state_interp σ ==∗
-    osiris_state_interp (<[l := v]>σ) ∗ pointsto l (DfracOwn 1) v ∗ meta_token l ⊤ ∗
+    osiris_state_interp (store_upd_heap <[l := v]> σ) ∗
+    pointsto l (DfracOwn 1) v ∗ meta_token l ⊤ ∗
     match block_view v with
     | view_block _ ls => block_map_elem (osiris_block_name Σ) l ls
     | view_nonblock _ _ => True
     end.
   Proof.
     iIntros (Hfresh) "(Hmem & (%σ' & Hauth & %Hcoh))".
-    iMod (gen_heap_alloc σ l v with "Hmem") as "(Hmem & Hl & Hmeta)"; first done.
+    iMod (gen_heap_alloc σ.(st_heap) l v with "Hmem") as "(Hmem & Hl & Hmeta)";
+      first done.
+    rewrite /osiris_state_interp /block_interp /block_coherent /=.
     destruct (block_view v).
     - (* Block: register the new block in the block ghost map. *)
       iAssert ⌜σ' !! (l : loc) = None⌝%I as "%HA_fresh".
@@ -254,16 +246,15 @@ Section state_interp.
       iMod (block_map_insert _ _ l ls with "Hauth") as "(Hauth & Hfrag)"; first done.
       iModIntro. iSplitL "Hmem Hauth"; last iFrame.
       iFrame "Hmem". iExists (<[(l : loc) := ls]>σ'). iFrame. iPureIntro.
-      intros a ls_a Hlookup.
+      intros a ls_a Hlookup. simpl.
       destruct (decide (a = l)) as [->|Hne].
-      + rewrite lookup_insert in Hlookup. simplify_map_eq.
-        exists t. rewrite lookup_insert. rewrite decide_True_pi. done.
+      + rewrite lookup_insert in Hlookup. simplify_map_eq. by exists t.
       + rewrite lookup_insert_ne in Hlookup; last done.
         destruct (Hcoh a ls_a Hlookup) as (t_a & Hσa).
         exists t_a. rewrite lookup_insert_ne; done.
     - (* Not a Block: array coherence is trivially preserved. *)
       iModIntro. iFrame. iPureIntro.
-      intros a ls_a Hlookup.
+      intros a ls_a Hlookup. simpl.
       destruct (Hcoh a ls_a Hlookup) as (t_a & Hσa).
       destruct (decide (a = l)) as [->|Hne].
       + congruence.
@@ -273,14 +264,16 @@ Section state_interp.
   Lemma osiris_state_update (v' v : mem_block) σ l :
     (∀ t ls, v ≠ Block t ls) →
     osiris_state_interp σ -∗ pointsto l (DfracOwn 1) v ==∗
-    osiris_state_interp (<[l := v']>σ) ∗ pointsto l (DfracOwn 1) v'.
+    osiris_state_interp (store_upd_heap <[l := v']> σ) ∗
+    pointsto l (DfracOwn 1) v'.
   Proof.
     iIntros (Hnotblock) "(Hmem & Harreg) Hl".
     iDestruct (gen_heap_valid with "Hmem Hl") as "%Hσl".
     iMod (gen_heap_update with "Hmem Hl") as "(Hmem & Hl)".
+    rewrite /osiris_state_interp /block_interp /block_coherent /=.
     iModIntro. iFrame.
     iDestruct "Harreg" as "(%σ' & $ & %Hcoh)". iPureIntro.
-    intros a ls_a Hlookup.
+    intros a ls_a Hlookup. simpl.
     destruct (Hcoh a ls_a Hlookup) as (t_a & Hσa).
     destruct (decide (a = l)) as [->|Hne].
     - rewrite Hσl in Hσa. injection Hσa as Hσa.
@@ -290,14 +283,16 @@ Section state_interp.
 
   Lemma osiris_state_set_tag σ l t t' ls :
     osiris_state_interp σ -∗ pointsto l (DfracOwn 1) (Block t ls) ==∗
-    osiris_state_interp (<[l := Block t' ls]>σ) ∗ pointsto l (DfracOwn 1) (Block t' ls).
+    osiris_state_interp (store_upd_heap <[l := Block t' ls]> σ) ∗
+    pointsto l (DfracOwn 1) (Block t' ls).
   Proof.
     iIntros "(Hmem & Harreg) Hl".
     iDestruct (gen_heap_valid with "Hmem Hl") as "%Hσl".
     iMod (gen_heap_update with "Hmem Hl") as "(Hmem & Hl)".
+    rewrite /osiris_state_interp /block_interp /block_coherent /=.
     iModIntro. iFrame.
     iDestruct "Harreg" as "(%A & Hauth & %Hcoh)". iExists A. iFrame. iPureIntro.
-    intros a ls_a Hlookup.
+    intros a ls_a Hlookup. simpl.
     destruct (Hcoh a ls_a Hlookup) as (t_a & Hσa).
     destruct (decide (a = l)) as [->|Hne].
     - rewrite Hσl in Hσa. injection Hσa as <-.

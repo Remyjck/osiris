@@ -42,7 +42,7 @@ Module M := EvalF Strat. Import M.
 is no trivially confluent step. It can eliminate a large part of the
 nondeterminism introduced by [Par] constructs *)
 
-Fixpoint confluent_step {A E} (σ : store) (m : micro A E) : option (config A E) :=
+Fixpoint confluent_step {A E} (σ : heap) (m : micro A E) : option (config A E) :=
   match m with
   (* Final micros do not step *)
   | Ret _ | Throw _ | Crash => None
@@ -54,11 +54,11 @@ Fixpoint confluent_step {A E} (σ : store) (m : micro A E) : option (config A E)
   | Stop CAlloc v k => Some (let l := fresh (dom σ) in (<[l:=Val v]>σ, continue k l))
   | Stop CAllocBlock (t, ls) k => Some (let l := fresh (A:=loc) (dom σ) in
                                    (insert l (Block t ls) σ, continue k l))
-  (* [CReturn w] returns [w] and does nothing else; [CNewProph] reserves a
-     fresh cell. *)
+  (* [CReturn w] returns [w] and does nothing else. [CNewProph] has no step
+     in the semantics: a prophecy has no runtime meaning, so the interpreter
+     hands out an arbitrary identifier. *)
   | Stop CReturn w k => Some (σ, continue k w)
-  | Stop CNewProph _ k => Some (let p := fresh (dom σ) in
-                                   (<[p := Val VUnit]> σ, continue k p))
+  | Stop CNewProph _ k => Some (σ, continue k (Loc 0))
   (* A resolution takes the step of the call it wraps and drops the ghost pair
      [(p, v)], so it is confluent exactly when that call is. *)
   | Stop (CResolve CReturn) (w, _, _) k => Some (σ, continue k w)
@@ -106,7 +106,7 @@ deterministic steps), or [Final] if the argument was in fact stuck. *)
   e.g. [None] to make the image of [Par m1 m2 _] depend only of the images of
   [m1] and [m2] instead of depending of [m1] and [m2] themselves. *)
 
-Fixpoint stepto {A E} (σ : store) (m : micro A E) {struct m} : step_result A E :=
+Fixpoint stepto {A E} (σ : heap) (m : micro A E) {struct m} : step_result A E :=
   match m with
   (* Already final *)
   | Ret x => Final (FRet x)
@@ -153,8 +153,7 @@ Fixpoint stepto {A E} (σ : store) (m : micro A E) {struct m} : step_result A E 
 
   (* [CReturn] and [CNewProph] are confluent; see [confluent_step]. *)
   | Stop CReturn w k => Step [(σ, continue k w)]
-  | Stop CNewProph _ k => let p := fresh (dom σ) in
-                          Step [(<[p := Val VUnit]> σ, continue k p)]
+  | Stop CNewProph _ k => Step [(σ, continue k (Loc 0))]
 
   (* A resolution performs the call it wraps in a single step, dropping the
      ghost pair [(p, v)]: the resolution leaves no trace in the store, so each
@@ -281,7 +280,7 @@ Definition clo_io_perform (name : string) : val :=
     AnonFun "x" (EPerform (EXData ["E"] [EString name; EPath ["x"]])).
 
 (* Store with I/O effect allocated *)
-Definition io_store : store := {[ Loc io_loc := Val VUnit ]}.
+Definition io_store : heap := {[ Loc io_loc := Val VUnit ]}.
 
 (* Environment with some I/O primitives *)
 Definition io_env : env :=
@@ -582,7 +581,7 @@ Definition string_of_block (b : mem_block) : string :=
   | Shot => "Shot"
   end.
 
-Definition string_of_store (σ : store) : string :=
+Definition string_of_store (σ : heap) : string :=
   "store(" ++
       String.concat "; "
         (map

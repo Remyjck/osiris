@@ -261,10 +261,10 @@ Section ewp_pure.
       construct_wp_nonret.
       (* and no step can change [σ] or escape [pure] *)
       ewp_cleanup_mod. ewp_mask_elim.
-      specialize (H σ).
+      specialize (H σ.(st_heap)).
       apply invert_can_step_subjective_step in Hstep; last assumption.
-      destruct Hstep as (Hstep & -> & ->).
-      destruct (pure_wp_preservation Hm Hstep) as (Hm' & <-).
+      destruct Hstep as ((h' & -> & Hstep) & -> & ->).
+      destruct (pure_wp_preservation Hm Hstep) as (Hm' & ->).
       iFrame.
       by iApply "IH".
     - by apply invert_pure_wp_stop in Hm.

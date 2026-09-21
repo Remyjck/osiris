@@ -2,6 +2,7 @@ From stdpp Require Import list gmap.
 From osiris.utils Require Import base.
 From osiris.lang Require Import syntax outcome.
 From osiris.semantics Require Import semantics strategy.
+From osiris.program_logic Require Import subjective_step.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -10,7 +11,7 @@ From osiris.semantics Require Import semantics strategy.
 (* This file defines the erasure of prophecies from a program (of type
    [expr]).
    Only two constructs in this work mention prophecies:
-   - [ENewProph] erases to [ref ()].
+   - [ENewProph] erases to [()].
    - [EResolve e π a] erases to [e]. *)
 
 (* Local [fix]es, as in lang/ind.v: [list expr] is not part of [expr]'s
@@ -51,7 +52,7 @@ Fixpoint erase_expr (e : expr) : expr :=
       end in
   match e with
   | ENewProph =>
-      ERef EUnit
+      EUnit
   | EResolve e π a =>
       erase_expr e
 
@@ -420,9 +421,8 @@ Proof. reflexivity. Qed.
 
 (* We need to deal with the case where a closure has captured a prophecy.
 
-   We erase [ENewProph] as an allocation to unit, at the location the
-   prophecy reserved, so a prophecy [VProph p] erases to the location
-   [VLoc p]. This is unlike HeapLang's [LitProphecy p], which must become
+   We erase [ENewProph] to unit, so a prophecy [VProph p] erases to
+   [VUnit]. This is unlike HeapLang's [LitProphecy p], which must become
    [LitPoison] and is then stuck wherever the erased program uses it. *)
 
 Fixpoint erase_val (v : val) : val :=
@@ -448,7 +448,7 @@ Fixpoint erase_val (v : val) : val :=
   | VData c vs => VData c (erase_vals vs)
   | VXData l vs => VXData l (erase_vals vs)
   | VLoc l => VLoc l
-  | VProph p => VLoc p
+  | VProph p => VUnit
   | VRecord l => VRecord l
   | VArray l => VArray l
   | VInline c l => VInline c l
@@ -590,7 +590,8 @@ Definition code_no_throw {X Y} (c : code X Y exn) (x : X) : Prop :=
 
    Three constructors carry the content:
 
-   - [EM_NewProph]: [Proph.create ()] becomes [ref ()].
+   - [EM_NewProph]: [Proph.create ()] becomes [()]. Erasure drops the
+     allocation, whatever identifier it picks.
    - [EM_Resolve]: an annotated call becomes the call itself, at the same
      step; [p] and [v] are dropped.
    - [EM_ResolveReturn] / [EM_Return]: [eval] compiles a resolution on a
@@ -632,9 +633,9 @@ Inductive erase_micro : ∀ (A E : Type), (A → A) → (E → E) → micro A E 
               (k' (erase_out2 (erase_code_res c) erase_val o))) →
       erase_micro _ _ fA fE (Stop c x k) (Stop c (erase_code_arg c x) k')
 
-  | EM_NewProph {A E} (fA : A → A) (fE : E → E) x k k' :
-      (∀ o, erase_micro _ _ fA fE (k o) (k' (erase_out2 id erase_val o))) →
-      erase_micro _ _ fA fE (Stop CNewProph x k) (Stop CAlloc VUnit k')
+  | EM_NewProph {A E} (fA : A → A) (fE : E → E) x k m' :
+      (∀ p, erase_micro _ _ fA fE (continue k p) m') →
+      erase_micro _ _ fA fE (Stop CNewProph x k) m'
 
   | EM_Resolve {A E X} (fA : A → A) (fE : E → E) (c : code X val exn) x p v k k' :
       no_proph_code c →
@@ -810,8 +811,16 @@ Definition erase_mem_block (b b' : mem_block) : Prop :=
   | _, _ => False
   end.
 
-Definition erase_store : store → store → Prop :=
+Definition erase_heap :
+    gmap locations.loc mem_block → gmap locations.loc mem_block → Prop :=
   map_relation (λ _, erase_mem_block) (λ _ _, False) (λ _ _, False).
+
+(* The annotated program runs against the program logic's store, the erased
+   one against a plain heap: only the heaps are related, since no program
+   reads the prophecy identifiers it has allocated. *)
+
+Definition erase_store (σ : store) (σe : heap) : Prop :=
+  erase_heap σ.(st_heap) σe.
 
 Definition erase_thpool : thpool → thpool → Prop :=
   map_relation (λ _, erase_microvx) (λ _ _, False) (λ _ _, False).
@@ -820,6 +829,6 @@ Definition erase_thpool : thpool → thpool → Prop :=
 
 Lemma erase_store_empty : erase_store ∅ ∅.
 Proof.
-  unfold erase_store, map_relation. intros l.
-  unfold store. rewrite lookup_empty. done.
+  unfold erase_store, erase_heap, map_relation. intros l.
+  simpl. rewrite lookup_empty. done.
 Qed.

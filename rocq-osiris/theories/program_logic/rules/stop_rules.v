@@ -72,7 +72,6 @@ Section imp_stop.
     iMod (osiris_state_alloc σ l (Val v) H with "Hsi") as "(Hsi & Hl & Hmeta & _)".
     iIntros "!> !>". iSpecialize ("H" with "[$Hl $Hmeta]").
     ewp_mask_elim. iFrame.
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
   Lemma imp_stop_alloc v (k : _ → micro A X) :
     ▷ (∀ (l : loc), l ↦ v -∗
@@ -105,7 +104,6 @@ Section imp_stop.
     { iFrame "Hl". }
     { iFrame "Hfrag". iPureIntro. done. }
     ewp_mask_elim. iFrame.
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
 
   (* ------------------------------------------------------------------------ *)
@@ -198,9 +196,7 @@ Section imp_stop.
     { intros; discriminate. }
     rewrite /step_exchange_1 /step_exchange_2 H0.
     ewp_mask_elim. iFrame.
-    iSplitR "Hpi".
-    - iApply ("Hwp" with "Hl").
-    - iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
+    iApply ("Hwp" with "Hl").
   Qed.
   (* ------------------------------------------------------------------------ *)
   (* [CSetBlockTag]. *)
@@ -224,7 +220,6 @@ Section imp_stop.
     rewrite /step_set_tag_1 /step_set_tag_2 H0.
     ewp_mask_elim. iFrame.
     iDestruct ("Hwp" with "[$]") as "$".
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
   (* ------------------------------------------------------------------------ *)
   (* [CCAS]. *)
@@ -232,10 +227,6 @@ Section imp_stop.
     phys_eq_dec :
       ∀ (a b : A), is_Ret (phys_eq_val #a #b).
   Global Instance phys_eq_dec_loc : PhysEqDec loc.
-  Proof.
-    intros i j. simpl. eexists; eauto.
-  Qed.
-  Global Instance phys_eq_dec_proph_id : PhysEqDec proph_id.
   Proof.
     intros i j. simpl. eexists; eauto.
   Qed.
@@ -269,9 +260,6 @@ Section imp_stop.
     (* VLoc case *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj).
       cbn in Hproj. injection Hproj as <-. reflexivity. }
-    (* VProph case *)
-    { destruct (#b); try (cbn in Hproj; discriminate Hproj).
-      cbn in Hproj. injection Hproj as <-. reflexivity. }
     (* VRecord case: par creates Par constructor, which is never ret *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj). }
     (* VInline case: par creates Par constructor, which is never ret *)
@@ -299,11 +287,10 @@ Section imp_stop.
     destruct (phys_eq_val_ v seen) eqn:Hpeq.
     - iMod (osiris_state_update (Val #v') with "Hsi Hl") as "[Hsi Hl]".
       { intros; discriminate. }
-      rewrite /step_cas_1 /step_cas_2 Hvalid (phys_eq_val__store v seen σ) Hpeq /=.
+      rewrite /step_cas_1 /step_cas_2 Hvalid (phys_eq_val__store v seen σ.(st_heap)) Hpeq /=.
       ewp_mask_elim. iFrame.
       iDestruct ("Hwp" with "Hl") as "$".
-      iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
-    - rewrite /step_cas_1 /step_cas_2 Hvalid (phys_eq_val__store v seen σ) Hpeq /=.
+    - rewrite /step_cas_1 /step_cas_2 Hvalid (phys_eq_val__store v seen σ.(st_heap)) Hpeq /=.
       ewp_mask_elim. iFrame.
       iApply ("Hwp" with "Hl").
   Qed.
@@ -337,7 +324,7 @@ Section imp_stop.
     iDestruct "Hrs" as (ls2) "Hrs".
     iDestruct (osiris_state_valid with "Hsi Hrs") as "%Hrs".
     destruct_subjective_step.
-    assert (Hpeq : phys_eq_val_store (VInline c r) (VInline cs rs) σ
+    assert (Hpeq : phys_eq_val_store (VInline c r) (VInline cs rs) σ.(st_heap)
                      = Some (locations.eqb r rs)).
     { rewrite /phys_eq_val_store Hr Hrs. by destruct t. }
     rewrite /step_cas_1 /step_cas_2 Hvalid Hpeq.
@@ -345,9 +332,7 @@ Section imp_stop.
     - iMod (osiris_state_update (Val v') with "Hsi Hl") as "[Hsi Hl]".
       { intros; discriminate. }
       ewp_mask_elim. iFrame.
-      iSplitR "Hpi".
-      + iApply ("Hwp" with "Hl [Hr] [Hrs]"); iExists _; iFrame.
-      + iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
+      iApply ("Hwp" with "Hl [Hr] [Hrs]"); iExists _; iFrame.
     - ewp_mask_elim. iFrame.
       iApply ("Hwp" with "Hl [Hr] [Hrs]"); iExists _; iFrame.
   Qed.
@@ -373,7 +358,6 @@ Section imp_stop.
     rewrite /step_faa_1 /step_faa_2 Hvalid /=.
     ewp_mask_elim. iFrame.
     iDestruct ("Hwp" with "Hl") as "$".
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
   (* ------------------------------------------------------------------------ *)
   (* [CPerform]. *)
@@ -408,8 +392,6 @@ Section imp_stop.
     iSpecialize ("Hwp" with "Hl").
     ewp_mask_elim.
     rewrite /step_resume_1 /step_resume_2 H0. iFrame.
-    iApply (osiris_proph_interp_mono with "Hpi").
-    apply dom_insert_subseteq.
   Qed.
 
   Lemma imp_stop_resume_crash l o (k: _ → micro A X) :
@@ -450,7 +432,6 @@ Section imp_stop.
     iMod (osiris_state_alloc σ l' (Kont _) H with "Hsi") as "(Hsi & Hl' & _)".
     iSpecialize ("Hwp" with "Hl'").
     ewp_mask_elim. iFrame.
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
   Lemma imp_stop_wrap_shallow l η bs (k: _ -> micro A X) :
     (∀ l',
@@ -470,7 +451,6 @@ Section imp_stop.
     ewp_mask_elim.
     unfold step_wrap_2.
     iFrame.
-    iApply (osiris_proph_interp_mono with "Hpi"). set_solver.
   Qed.
 
 End imp_stop.

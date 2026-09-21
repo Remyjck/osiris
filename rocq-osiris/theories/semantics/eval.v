@@ -732,8 +732,6 @@ Definition phys_eq_val v1 v2 : micro bool exn :=
   match v1, v2 with
   | VLoc l1, VLoc l2 =>
       ret (locations.eqb l1 l2)
-  | VProph p1, VProph p2 =>
-      ret (locations.eqb p1 p2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
   | VInline _ l1, VInline _ l2 =>

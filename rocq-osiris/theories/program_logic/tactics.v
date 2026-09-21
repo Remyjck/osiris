@@ -181,7 +181,7 @@ Module ewp_rules_tactics.
     lazymatch goal with
     | |- context
           [environments.Esnoc _ ?Hwp
-             (bi_forall (fun σ1 : step.store =>
+             (bi_forall (fun σ1 : subjective_step.store =>
               bi_forall (fun κ1 : list observation =>
               bi_forall (fun κs1 : list observation =>
               bi_forall (fun π1 : post_map _ => _)))))] =>
@@ -250,7 +250,7 @@ Module ewp_rules_tactics.
     lazymatch goal with
     | |- context
           [environments.Esnoc _ ?Hwp
-             (bi_forall (fun σ1 : step.store =>
+             (bi_forall (fun σ1 : subjective_step.store =>
               bi_forall (fun κs1 : list observation =>
               bi_forall (fun π1 : post_map _ => _))))] =>
         lazymatch goal with
