@@ -87,6 +87,7 @@ Global Instance notval_unit : NotVal () := {}.
 Global Instance notval_env : NotVal env := {}.
 Global Instance notval_int : NotVal int := {}.
 Global Instance notval_loc : NotVal loc := {}.
+Global Instance notval_proph_id : NotVal proph_id := {}.
 Global Instance notval_cont : NotVal cont := {}.
 Global Instance notval_array : NotVal array := {}.
 Global Instance notval_record : NotVal record := {}.
@@ -542,6 +543,17 @@ Lemma solve_encode_loc l :
 Proof. solve_encode. Qed.
 
 Global Hint Resolve solve_encode_loc : encode.
+
+(* Prophecy identifiers. *)
+
+Global Instance Encode_proph_id : Encode proph_id :=
+  { encode' := λ p, VProph p }.
+
+Lemma solve_encode_proph_id (p : proph_id) :
+  VProph p = #p.
+Proof. solve_encode. Qed.
+
+Global Hint Resolve solve_encode_proph_id : encode.
 
 (* -------------------------------------------------------------------------- *)
 

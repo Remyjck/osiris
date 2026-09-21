@@ -54,14 +54,14 @@ Local Abbreviation map := Corelib.Lists.ListDef.map.
    [imp_record] can be used at their allocation sites. *)
 Record slot_fields : Type := mkSlotFields { slot_v : option val }.
 Record queue_fields : Type :=
-  mkQueueFields { queue_items : array; queue_proph : loc; queue_back : Z }.
+  mkQueueFields { queue_items : array; queue_proph : proph_id; queue_back : Z }.
 
 Instance slot_fields_repr : RecordRepr slot_fields τ[option val] Mut :=
   { repr_to_types r := r.(slot_v);
     types_to_repr := λ o, {| slot_v := o |};
     repr_id := λ o, eq_refl }.
 
-Instance queue_fields_repr : RecordRepr queue_fields τ[array; loc; Z] Mut :=
+Instance queue_fields_repr : RecordRepr queue_fields τ[array; proph_id; Z] Mut :=
   { repr_to_types r := (r.(queue_items), (r.(queue_proph), r.(queue_back)));
     types_to_repr := λ a p b,
       {| queue_items := a; queue_proph := p; queue_back := b |};
@@ -149,14 +149,13 @@ Proof.
 
   (* [let proph = Proph.create () in ...]: the queue's prophecy. *)
   iIntros (a) "(%ss & %Hlen & Harr & Hslots)".
-  iApply (imp_ELet_var (λ p : loc, ∃ pvs, proph p pvs)%I with "[]").
+  iApply (imp_ELet_var (λ p : proph_id, ∃ pvs, proph p pvs)%I with "[]").
   { iApply imp_ENewProph. iIntros "!>" (p pvs) "Hp". by iExists pvs. }
   iIntros (p) "[%pvs Hproph]".
 
   (* [{ items; proph; back = 0 }]. *)
   iApply imp_fupd.
-  iApply (imp_wand with "[]"); [ imp_record | ].
-  iIntros (q) "H /=".
+  iApply (imp_wand with "[]"); [ imp_record | ].  iIntros (q) "H /=".
   iDestruct "H" as (a' p' b') "(Hq & -> & -> & ->)".
 
   (* Split the fresh record: [items] and [proph] are never written again, so
@@ -1305,7 +1304,7 @@ Proof.
   { apply list_lookup_lookup_total_valid. list_z.length; lia. }
 
   (* [let p = q.proph in ...] *)
-  iApply (imp_ELet_var (λ p' : loc, ⌜p' = p⌝)%I with "[]").
+  iApply (imp_ELet_var (λ p' : proph_id, ⌜p' = p⌝)%I with "[]").
   { iApply (imp_ERecordAccess_pers proph_field q [ql; pl; bl] DfracDiscarded p
               with "Hqlocs [] [] []").
     { by vm_compute. }

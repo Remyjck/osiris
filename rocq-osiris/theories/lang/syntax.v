@@ -68,9 +68,15 @@ Definition array :=
 Definition record :=
   tc_opaque loc.
 
+(* Prophecy identifiers. A prophecy reserves a heap cell, so that its
+   identifier is fresh, but it is never read or written. *)
+
+Definition proph_id :=
+  tc_opaque loc.
+
 (* Without this, the typeclass engine unfolds both [cont] and [block] to the
    same [tc_opaque loc] body, making Encode/Observe instances ambiguous. *)
-Global Typeclasses Opaque cont array record.
+Global Typeclasses Opaque cont array record proph_id.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -489,6 +495,8 @@ Inductive val : Type :=
   | VXData (l: loc) (v : list val)
   (* A location. *)
   | VLoc (l : loc)
+  (* A prophecy identifier. *)
+  | VProph (p : proph_id)
   (* Both records and array are represented as pointers to a block. *)
   | VRecord (l : loc)
   | VArray (l : loc)

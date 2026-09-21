@@ -488,6 +488,7 @@ Fixpoint string_of_val (v : val) : string :=
   | VData data vs => "VData(" ++ data ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
   | VXData loc vs => "VXData(" ++ string_of_Z loc.(address) ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
   | VLoc l   => "VLoc("   ++ string_of_Z l.(address) ++ ")"
+  | VProph p => "VProph(" ++ string_of_Z p.(address) ++ ")"
   | VCont l  => "VCont("  ++ string_of_Z l.(address) ++ ")"
   | VThread thread => "VLoc(" ++ string_of_Z thread.(tid) ++ ")"
   | VRecord l => "VRecord(" ++ string_of_Z l.(address) ++ ")"

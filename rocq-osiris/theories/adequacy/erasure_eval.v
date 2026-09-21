@@ -29,11 +29,12 @@ Definition erase_envs : envs → envs := prod_map erase_env erase_env.
 (** ** Value coercions. *)
 
 (* Every [val_as_X] inspects the head constructor of a value and either
-   returns a component of it or crashes. *)
+   returns a component of it or crashes. A prophecy crashes where its
+   erasure, a location, may not. *)
 
 Local Ltac erase_val_as v :=
   destruct v; simpl; repeat case_match;
-    first [ apply EM_Crash | apply EM_Ret ].
+    first [ apply EM_Crash | apply EM_Ret | apply EM_CrashL ].
 
 Lemma erase_val_as_loc {E} (fE : E → E) v :
   erase_micro id fE (val_as_loc v) (val_as_loc (erase_val v)).
@@ -310,8 +311,9 @@ Proof.
          first [ apply EM_Crash | exact (EM_Ret id erase_val _) ]);
     try (exact (EM_Ret id erase_val _)).
   (* A constant constructor against something that is not one: both sides
-     take the error branch whatever the argument list looks like. *)
-  all: solve [ repeat case_match; apply EM_Crash ].
+     take the error branch whatever the argument list looks like. A
+     prophecy against a location: only the annotated side crashes. *)
+  all: solve [ repeat case_match; apply EM_CrashL ].
 Qed.
 
 (* [eq_val] traverses tuples and data with a local [fix]; [eq_vals] mirrors
@@ -438,10 +440,11 @@ Qed.
    so the two computations [eval] builds for them line up exactly. *)
 
 Lemma erase_new_proph :
-  erase_microvx ('p ← new_proph ; ret (VLoc p)) ('l ← alloc VUnit ; ret (VLoc l)).
+  erase_microvx ('p ← new_proph ; ret (VProph p))
+                ('l ← alloc VUnit ; ret (VLoc l)).
 Proof.
   apply EM_NewProph. intros [ p | ex ]; simpl.
-  - exact (EM_Ret erase_val erase_val (VLoc p)).
+  - exact (EM_Ret erase_val erase_val (VProph p)).
   - exact (EM_Throw erase_val erase_val ex).
 Qed.
 
@@ -1430,7 +1433,7 @@ Proof.
     simpl_eval; apply erase_new_proph.
   - (* EResolve *)
     simpl_eval.
-    destruct (lookup_path η π) as [ [ ] | ]; try unfold as_loc; simpl;
+    destruct (lookup_path η π) as [ [ ] | ]; try unfold as_proph; simpl;
     try apply EM_CrashL.
     destruct (eval_proph_arg η a) as [ w | ]; simpl; try apply EM_CrashL.
     rewrite bind_ret. simpl. rewrite !bind_ret.

@@ -360,19 +360,22 @@ Proof.
     by repeat case_match.
 Qed.
 
-Lemma erase_phys_eq_val_store σ σe v1 v2 :
+(* Only one way: a prophecy and a location do not compare, but their
+   erasures, two locations, do. *)
+
+Lemma erase_phys_eq_val_store σ σe v1 v2 b :
   erase_store σ σe →
-  phys_eq_val_store (erase_val v1) (erase_val v2) σe
-  = phys_eq_val_store v1 v2 σ.
+  phys_eq_val_store v1 v2 σ = Some b →
+  phys_eq_val_store (erase_val v1) (erase_val v2) σe = Some b.
 Proof.
-  intros Hσ. destruct v1, v2;
+  intros Hσ Hb. destruct v1, v2;
     repeat (match goal with
             | |- context [ VData ?c ?l ] => is_var l; destruct l
             end);
-    simpl; try reflexivity.
+    simpl in *; try done.
   (* What is left is the block comparison, which reads the two blocks' tags
      out of the store. *)
-  all: by apply erase_phys_eq_blocks.
+  all: by rewrite (erase_phys_eq_blocks σ σe).
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -442,29 +445,25 @@ Proof.
     first [ apply EM_Crash | exact (EM_Ret id erase_val _) ].
 Qed.
 
-(* Compare-and-set first compares, and both programs compare the same two
-   values at related stores. *)
+(* Compare-and-set first compares. Where the annotated program can compare,
+   the erased one compares alike. Where it cannot (a prophecy against a
+   location), it crashes, and the erased program may go on to write: the
+   stores are then no longer related, which the crash makes moot. *)
 
-Lemma erase_step_cas_1 σ σe l seen v :
+Lemma erase_step_cas σ σe l seen v :
   erase_store σ σe →
-  erase_store (step_cas_1 σ l seen v)
-              (step_cas_1 σe l (erase_val seen) (erase_val v)).
+  step_cas_2 σ l seen v inject2 = Crash
+  ∨ (erase_store (step_cas_1 σ l seen v)
+                 (step_cas_1 σe l (erase_val seen) (erase_val v))
+     ∧ erase_microvx (step_cas_2 σ l seen v inject2)
+                     (step_cas_2 σe l (erase_val seen) (erase_val v) inject2)).
 Proof.
-  intros Hσ. unfold step_cas_1. erase_op l;
-    try (rewrite (erase_phys_eq_val_store σ σe) //;
-         destruct (phys_eq_val_store _ seen σ) as [ [ | ] | ]);
-    first [ by apply erase_store_insert | done ].
-Qed.
-
-Lemma erase_step_cas_2 σ σe l seen v :
-  erase_store σ σe →
-  erase_microvx (step_cas_2 σ l seen v inject2)
-                (step_cas_2 σe l (erase_val seen) (erase_val v) inject2).
-Proof.
-  intros Hσ. unfold step_cas_2. erase_op l;
-    try (rewrite (erase_phys_eq_val_store σ σe) //;
-         destruct (phys_eq_val_store _ seen σ) as [ [ | ] | ]);
-    first [ apply EM_Crash | exact (EM_Ret erase_val erase_val _) ].
+  intros Hσ. unfold step_cas_1, step_cas_2. erase_op l;
+    try (right; split; [ done | apply EM_Crash ]).
+  destruct (phys_eq_val_store _ seen σ) as [ b | ] eqn:Hb; [ | by left ].
+  rewrite (erase_phys_eq_val_store σ σe _ _ b Hσ Hb). right.
+  destruct b; (split; [ by apply erase_store_insert || done | ]);
+    exact (EM_Ret erase_val erase_val _).
 Qed.
 
 (* Fetch-and-add insists on an integer, which erasure leaves alone. *)
@@ -544,8 +543,9 @@ Lemma erase_step_call {X Y} (c : code X Y exn) x σ σe σe' (be : micro Y exn) 
   erase_store σ σe →
   step (σe, stop c (erase_code_arg c x)) (σe', be) →
   ∃ σ' b,
-    step (σ, stop c x) (σ', b) ∧ erase_store σ' σe' ∧
-    erase_micro (erase_code_res c) erase_val b be.
+    step (σ, stop c x) (σ', b) ∧
+    (b = Crash ∨
+     erase_store σ' σe' ∧ erase_micro (erase_code_res c) erase_val b be).
 Proof.
   intros Hc Hσ Hstep.
   dependent destruction c; try done; simpl in *.
@@ -554,7 +554,9 @@ Proof.
   (* The annotated program takes the same step, at the same location and
      with the same Boolean where there is a choice. *)
   all: eexists; eexists; split;
-       [ solve [ econstructor; eauto using erase_store_none ] | split ].
+       [ solve [ econstructor; eauto using erase_store_none ] | ].
+  (* Only compare-and-set can crash where its erasure does not. *)
+  all: first [ by apply erase_step_cas | right; split ].
   (* What is left is one store relation and one computation relation per
      code, which is what the lemmas above are for. *)
   (* [CEval] and [CLoop] hand over a computation of their own. *)
@@ -580,8 +582,6 @@ Proof.
   - by apply erase_step_exchange_2.
   - by apply erase_step_set_tag_1.
   - by apply erase_step_set_tag_2.
-  - by apply erase_step_cas_1.
-  - by apply erase_step_cas_2.
   - by apply erase_step_faa_1.
   - by apply erase_step_faa_2.
   - by apply erase_step_resume_1.
@@ -1143,7 +1143,11 @@ Proof.
     rename H into Hc.
     destruct (step_stop_split _ _ _ _ _ _ Hstep) as (be & Hbe & ->).
     destruct (erase_step_call c x σ σe σe' be Hc Hσ Hbe)
-      as (σ' & b & Hb & Hσ' & Hrel).
+      as (σ' & b & Hb & [ -> | (Hσ' & Hrel) ]).
+    { (* The annotated call crashed: it is stuck after one step. *)
+      left. eapply reaches_stuck_after;
+        [ apply tsteps_one, TBase; by apply step_stop_join
+        | by apply reaches_stuck_now; left ]. }
     right. exists 1, [], σ', (try2 b k). split; [ | split; [ done | ] ].
     + apply tsteps_one, TBase. by apply step_stop_join.
     + by eapply erase_try2.
@@ -1159,7 +1163,11 @@ Proof.
     rename H into Hc, H0 into Hnt, H1 into Hk.
     destruct (step_stop_split _ _ _ _ _ _ Hstep) as (be & Hbe & ->).
     destruct (erase_step_call c x σ σe σe' be Hc Hσ Hbe)
-      as (σ' & b & Hb & Hσ' & Hrel).
+      as (σ' & b & Hb & [ -> | (Hσ' & Hrel) ]).
+    { (* The annotated call crashed: so does the resolution. *)
+      left. eapply reaches_stuck_after;
+        [ apply tsteps_one; exact (TResolve σ σ' c x p v Crash k Hb I)
+        | by apply reaches_stuck_now; left ]. }
     destruct b as [ w | ex | | | | ].
     + (* the stop returned, so the resolution happens *)
       right. exists 1, [(p, (w, v))], σ', (continue k w). split;

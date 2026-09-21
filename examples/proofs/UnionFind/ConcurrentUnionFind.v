@@ -1594,7 +1594,7 @@ Proof.
   iApply imp_please; iNext.
 
   (* [let p = Proph.create () in ...] *)
-  imp_let $! (λ q : loc, ∃ pvs, proph q pvs)%I.
+  imp_let $! (λ q : proph_id, ∃ pvs, proph q pvs)%I.
   { iApply imp_ENewProph. iIntros "!>" (q pvs) "$". }
   iIntros (p) "[%pvs Hp]".
 

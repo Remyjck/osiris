@@ -1321,8 +1321,8 @@ Section imp_rules_expr.
 
   (** * ENewProph : expr *)
 
-  Lemma imp_ENewProph {Φ : loc → iProp Σ} {ζ} η :
-    ▷ (∀ (p : loc) (pvs : list (val * val)), proph p pvs -∗ Φ p) -∗
+  Lemma imp_ENewProph {Φ : proph_id → iProp Σ} {ζ} η :
+    ▷ (∀ (p : proph_id) (pvs : list (val * val)), proph p pvs -∗ Φ p) -∗
     EWP eval η ENewProph @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H". simpl_eval.
@@ -1344,7 +1344,7 @@ Section imp_rules_expr.
      returns. See [CReturn] in code.v. *)
 
   Lemma imp_EResolve {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
-      η e (ep : path) (ev : proph_arg) (p : loc) (v : val) pvs (Φe : A → iProp Σ) :
+      η e (ep : path) (ev : proph_arg) (p : proph_id) (v : val) pvs (Φe : A → iProp Σ) :
     match e with
     | ELoad _ | EExchange _ _ | ECAS _ _ _ | EFAA _ _ => False
     | _ => True
@@ -1376,7 +1376,7 @@ Section imp_rules_expr.
      prophecy's head. *)
 
   Lemma imp_EResolve_ELoad {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
-      η e1 (ep : path) (ev : proph_arg) (l : loc) (p : loc) (v : val) q (a : A) pvs :
+      η e1 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) q (a : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
     ▷ l ↦{q} #a -∗
@@ -1400,7 +1400,7 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_EResolve_EFAA {Φ : Z → iProp Σ} {ζ}
-      η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : loc) (v : val) (i j : Z) pvs :
+      η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) (i j : Z) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
     ▷ l ↦ #j -∗
@@ -1426,7 +1426,7 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_EResolve_EExchange {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
-      η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : loc) (v : val) (a b : A) pvs :
+      η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) (a b : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
     ▷ l ↦ #a -∗
@@ -1451,7 +1451,7 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_EResolve_ECAS {A} `{PhysEqDec A} {Φ : bool → iProp Σ} {ζ}
-      η e1 e2 e3 (ep : path) (ev : proph_arg) (l : loc) (p : loc) (v : val)
+      η e1 e2 e3 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val)
       (seen a v1 : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →

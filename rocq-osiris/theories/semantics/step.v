@@ -43,6 +43,15 @@ Proof. solve_decision. Defined.
 Global Instance cont_countable : Countable cont.
 Proof. unfold cont; simpl. apply locations.loc_countable. Defined.
 
+(* These are literally the instances on [loc], so that [proph p vs] at
+   [proph_id] and at [loc] are convertible. *)
+
+Global Instance proph_id_eq_decision : EqDecision proph_id :=
+  locations.loc_eq_decision.
+
+Global Instance proph_id_countable : Countable proph_id :=
+  locations.loc_countable.
+
 Definition cont_store : Type :=
   tc_opaque (gmap cont mem_block).
 
@@ -250,6 +259,8 @@ Definition phys_eq_val_store v1 v2 σ : option bool :=
   match v1, v2 with
   | VLoc l1, VLoc l2 =>
       Some (locations.eqb l1 l2)
+  | VProph p1, VProph p2 =>
+      Some (locations.eqb p1 p2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
   | VInline _ l1, VInline _ l2 =>

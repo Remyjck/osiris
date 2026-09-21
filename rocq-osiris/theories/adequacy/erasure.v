@@ -420,10 +420,9 @@ Proof. reflexivity. Qed.
 
 (* We need to deal with the case where a closure has captured a prophecy.
 
-   Because prophecies are encoded as locations ([VLoc p]) and we erase
-   [ENewProph] as an allocation to unit, we can simply leave prophecy
-   values as they are.
-   This is unlike HeapLang's [LitProphecy p], which must become
+   We erase [ENewProph] as an allocation to unit, at the location the
+   prophecy reserved, so a prophecy [VProph p] erases to the location
+   [VLoc p]. This is unlike HeapLang's [LitProphecy p], which must become
    [LitPoison] and is then stuck wherever the erased program uses it. *)
 
 Fixpoint erase_val (v : val) : val :=
@@ -449,6 +448,7 @@ Fixpoint erase_val (v : val) : val :=
   | VData c vs => VData c (erase_vals vs)
   | VXData l vs => VXData l (erase_vals vs)
   | VLoc l => VLoc l
+  | VProph p => VLoc p
   | VRecord l => VRecord l
   | VArray l => VArray l
   | VInline c l => VInline c l

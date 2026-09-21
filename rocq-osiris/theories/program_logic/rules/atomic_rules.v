@@ -232,7 +232,7 @@ Section imp_atomic_rules.
 
   Lemma imp_EResolve_ECAS_atomic `{PhysEqDec A} (E2 E1 : coPset) η e1 e2 e3
       (ep : path) (ev : proph_arg)
-      (p : loc) (v : val) (pvs : list (val * val))
+      (p : proph_id) (v : val) (pvs : list (val * val))
       (Φ1 : loc → _) (Φ2 Φ3 : A → _) (Φ : bool → _) :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
@@ -251,6 +251,8 @@ Section imp_atomic_rules.
     impure E1 (eval η (EResolve (ECAS e1 e2 e3) ep ev)) Ψ ζ Φ.
   Proof.
     iIntros (Hp Hv) "He1 He2 He3 Hproph Hcas".
+    (* The system calls take the prophecy as a [loc]. *)
+    change loc in p.
     simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par (A1:=loc * A) with "[He1 He2] He3").
@@ -273,7 +275,7 @@ Section imp_atomic_rules.
 
   Lemma imp_EResolve_EExchange_atomic `{Encode A} (E2 E1 : coPset) η e1 e2
       (ep : path) (ev : proph_arg)
-      (p : loc) (v : val) (Φ1 : loc → _) (Φ2 : A → _) (Φ : A → _) :
+      (p : proph_id) (v : val) (Φ1 : loc → _) (Φ2 : A → _) (Φ : A → _) :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
     impure E1 (eval η e1) Ψ ζ Φ1 -∗
@@ -287,6 +289,7 @@ Section imp_atomic_rules.
     impure E1 (eval η (EResolve (EExchange e1 e2) ep ev)) Ψ ζ Φ.
   Proof.
     iIntros (Hp Hv) "He1 He2 Hex".
+    change loc in p.
     simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par with "[He1] He2").

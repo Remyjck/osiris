@@ -136,7 +136,7 @@ Proof. iIntros "#Hc Hl". iExists l. by iFrame "Hc Hl". Qed.
 (* [pvs] is the sequence of slots the queue will still hand out, decoded from
    the raw resolution trace [rs] by [take_slots]. Because the decoding
    truncates, this holds for whatever [rs] the prophecy turns out to carry. *)
-Definition hwq_proph (p : loc) (cap : Z) (deqs : gset Z) (pvs : list Z)
+Definition hwq_proph (p : proph_id) (cap : Z) (deqs : gset Z) (pvs : list Z)
     : iProp Σ :=
   ∃ rs, proph p rs ∗ ⌜pvs = take_slots cap deqs rs⌝.
 
@@ -221,7 +221,8 @@ Definition hwq_pure (cap back : Z) (pvs pref : list Z) (rest : list val)
     pref ++ [i2] `prefix_of` pvs
   end.
 
-Definition hwq_inv_inner γ (cap : Z) (ss : list slot) (bl p : loc) : iProp Σ :=
+Definition hwq_inv_inner γ (cap : Z) (ss : list slot) (bl : loc) (p : proph_id)
+    : iProp Σ :=
   (∃ (back  : Z)                (** physical value of [q.back] *)
      (pvs   : list Z)           (** the predicted future *)
      (pref  : list Z)           (** commit prefix of the prediction *)
@@ -252,7 +253,7 @@ Definition hwq_inv_inner γ (cap : Z) (ss : list slot) (bl p : loc) : iProp Σ :
    ⌜hwq_pure cap back pvs pref rest cont slots deqs⌝)%I.
 
 Definition is_queue γ (cap : Z) (q : queue) : iProp Σ :=
-  ∃ (ql pl bl : loc) (a : array) (ss : list slot) (p : loc),
+  ∃ (ql pl bl : loc) (a : array) (ss : list slot) (p : proph_id),
     ⌜list_z.length ss = cap⌝ ∗
     ⌜0 < cap ≤ max_array_length⌝ ∗
     blockLocs q [ql; pl; bl] ∗

@@ -147,6 +147,23 @@ Definition as_loc {E} (m : micro val E) : micro loc E :=
 
 (* ------------------------------------------------------------------------ *)
 
+(* [val_as_proph v] checks that the value [v] is a prophecy identifier and
+   returns its meta-level value. *)
+
+Definition val_as_proph {E} (v : val) : micro proph_id E :=
+  match v with
+  | VProph p =>
+      ret p
+  | _ =>
+      type_mismatch "prophecy expected"
+  end.
+
+Definition as_proph {E} (m : micro val E) : micro proph_id E :=
+  v ← m ;
+  val_as_proph v.
+
+(* ------------------------------------------------------------------------ *)
+
 (* [val_as_array v] checks that the value [v] is a language-level pointer
    to an array block and returns its meta-level value. *)
 
@@ -344,11 +361,11 @@ End LookupEnv.
 
 (* ------------------------------------------------------------------------ *)
 
-Lemma bind_proph_args {B E} {η} {π : path} {a : proph_arg} {p : loc} {v : val}
-    {k : loc → val → micro B E} :
-  lookup_path η π = Some (VLoc p) →
+Lemma bind_proph_args {B E} {η} {π : path} {a : proph_arg} {p : proph_id}
+    {v : val} {k : proph_id → val → micro B E} :
+  lookup_path η π = Some (VProph p) →
   eval_proph_arg η a = Some v →
-  (p' ← as_loc (of_option (lookup_path η π)) ;
+  (p' ← as_proph (of_option (lookup_path η π)) ;
    v' ← of_option (eval_proph_arg η a) ;
    k p' v') = k p v.
 Proof.
@@ -715,6 +732,8 @@ Definition phys_eq_val v1 v2 : micro bool exn :=
   match v1, v2 with
   | VLoc l1, VLoc l2 =>
       ret (locations.eqb l1 l2)
+  | VProph p1, VProph p2 =>
+      ret (locations.eqb p1 p2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
   | VInline _ l1, VInline _ l2 =>
@@ -1541,13 +1560,13 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       faa l i
   | ENewProph =>
       p ← new_proph ;
-      ret (VLoc p)
+      ret (VProph p)
   | EResolve e π a =>
       (* The prophecy [π] and the annotation [a] are looked up in the
          environment. The resolved expression [e]'s own arguments are
          then evaluated, and the resolution is attached to the system
          call performing [e]'s effect (if there is one). *)
-      p ← as_loc (of_option (lookup_path η π)) ;
+      p ← as_proph (of_option (lookup_path η π)) ;
       v ← of_option (eval_proph_arg η a) ;
       match e with
       | ELoad e1 =>

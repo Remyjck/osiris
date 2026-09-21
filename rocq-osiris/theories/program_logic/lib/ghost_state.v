@@ -111,6 +111,13 @@ Proof. apply (osiris_genGS Σ). Defined.
 
 (* The block resources [blockTag] and [blockLocs] are in [block_resources.v]. *)
 
+(* Prophecies. *)
+
+(* We declare that [proph_id] can be used as keys for [proph]. *)
+Global Instance osiris_proph_id_mapGS `{osirisGS Σ} :
+  proph_mapGS proph_id (val * val) Σ.
+Proof. unfold proph_id; simpl. apply (osiris_prophGS Σ). Defined.
+
 (* -------------------------------------------------------------------------- *)
 (* Definition of the state interpretation. *)
 

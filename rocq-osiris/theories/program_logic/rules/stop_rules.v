@@ -235,6 +235,10 @@ Section imp_stop.
   Proof.
     intros i j. simpl. eexists; eauto.
   Qed.
+  Global Instance phys_eq_dec_proph_id : PhysEqDec proph_id.
+  Proof.
+    intros i j. simpl. eexists; eauto.
+  Qed.
   Global Instance phys_eq_dec_bool : PhysEqDec bool.
   Proof.
     intros [|] [|]; simpl; eexists; eauto.
@@ -263,6 +267,9 @@ Section imp_stop.
       destruct v; try (cbn in Hproj; discriminate Hproj).
       cbn in Hproj. injection Hproj as <-. reflexivity. }
     (* VLoc case *)
+    { destruct (#b); try (cbn in Hproj; discriminate Hproj).
+      cbn in Hproj. injection Hproj as <-. reflexivity. }
+    (* VProph case *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj).
       cbn in Hproj. injection Hproj as <-. reflexivity. }
     (* VRecord case: par creates Par constructor, which is never ret *)

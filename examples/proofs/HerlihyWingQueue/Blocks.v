@@ -76,15 +76,15 @@ Lemma take_data_deqs cap deqs pvs j :
   j ∈ deqs → j ∉ take_slots cap deqs pvs.
 Proof.
   revert deqs. induction pvs as [|[w t] pvs IH]; intros deqs Hj; first set_solver.
-  destruct w as [??|???|?|?|?|?|d args|??|?|?|?|??|?|?|?|???|?]; try set_solver.
-  destruct t as [??|???|?|n|?|?|??|??|?|?|?|??|?|?|?|???|?]; try set_solver.
+  destruct w; try set_solver.
+  destruct t; try set_solver.
   simpl. case_decide as Hn; last set_solver.
-  destruct args as [|y [|? ?]]; simpl.
+  destruct v as [|y [|? ?]]; simpl.
   - case_match; [ by apply IH | set_solver ].
   - case_match; last set_solver.
     case_decide as Hin; first set_solver.
     rewrite fmap_cons elem_of_cons. intros [->|Hcon]; first done.
-    eapply (IH ({[signed n]} ∪ deqs)); [ set_solver | exact Hcon ].
+    eapply (IH ({[signed i]} ∪ deqs)); [ set_solver | exact Hcon ].
   - set_solver.
 Qed.
 
@@ -92,10 +92,10 @@ Lemma take_data_bound cap deqs pvs j :
   j ∈ take_slots cap deqs pvs → 0 ≤ j < cap.
 Proof.
   revert deqs. induction pvs as [|[w t] pvs IH]; intros deqs Hj; first set_solver.
-  destruct w as [??|???|?|?|?|?|d args|??|?|?|?|??|?|?|?|???|?]; try set_solver.
-  destruct t as [??|???|?|n|?|?|??|??|?|?|?|??|?|?|?|???|?]; try set_solver.
+  destruct w; try set_solver.
+  destruct t; try set_solver.
   simpl in Hj. case_decide as Hn; last set_solver.
-  destruct args as [|y [|? ?]]; simpl in Hj.
+  destruct v as [|y [|? ?]]; simpl in Hj.
   - case_match; [ by eapply IH | set_solver ].
   - case_match; last set_solver.
     case_decide as Hin; first set_solver.
@@ -109,15 +109,15 @@ Lemma take_data_NoDup cap deqs pvs :
 Proof.
   revert deqs. induction pvs as [|[w t] pvs IH]; intros deqs;
     first apply NoDup_elements.
-  destruct w as [??|???|?|?|?|?|d args|??|?|?|?|??|?|?|?|???|?]; try apply NoDup_elements.
-  destruct t as [??|???|?|n|?|?|??|??|?|?|?|??|?|?|?|???|?]; try apply NoDup_elements.
+  destruct w; try apply NoDup_elements.
+  destruct t; try apply NoDup_elements.
   simpl. case_decide as Hn; last apply NoDup_elements.
-  destruct args as [|y [|? ?]]; simpl; try apply NoDup_elements.
+  destruct v as [|y [|? ?]]; simpl; try apply NoDup_elements.
   - case_match; [ apply IH | apply NoDup_elements ].
   - case_match; last apply NoDup_elements.
     case_decide as Hin; first apply NoDup_elements.
-    specialize (IH ({[signed n]} ∪ deqs)) as H1.
-    assert (signed n ∉ take_slots cap ({[signed n]} ∪ deqs) pvs) as H2.
+    specialize (IH ({[signed i]} ∪ deqs)) as H1.
+    assert (signed i ∉ take_slots cap ({[signed i]} ∪ deqs) pvs) as H2.
     { apply take_data_deqs. set_solver. }
     apply NoDup_app in H1 as (H1_1 & H1_2 & H1_3).
     rewrite fmap_cons -app_comm_cons. apply NoDup_cons. split.
