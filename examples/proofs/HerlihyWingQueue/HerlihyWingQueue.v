@@ -276,8 +276,8 @@ Proof.
   { iApply (imp_faa_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ _
               (λ l : loc, ⌜l = bl⌝)%I (λ j : Z, ⌜j = 1⌝)%I
               with "[] [] [Hpermit AU]").
-    { iApply (imp_EAtomicLoc back_field q [ql; pl; bl] with "Hqlocs [] []").
-      { list_z.length; lia. }
+    { iApply (imp_EAtomicLoc back_field q _ with "[] [] []").
+      { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). list_z.length; lia. }
       { imp_path. }
       { iNext. iPureIntro. by vm_compute. } }
     { imp_step. }
@@ -719,9 +719,9 @@ Proof.
   { iApply (imp_wand with "[]").
     { iApply (imp_EArrayGet' a i 0 DfracDiscarded ss with "[%] Hsl [] []").
       - lia.
-      - iApply (imp_ERecordAccess_pers items_field q [ql; pl; bl] DfracDiscarded a
-                  with "Hqlocs [] [] []").
-        { by vm_compute. }
+      - iApply (imp_ERecordAccess_pers items_field q _ DfracDiscarded a
+                  with "[] [] [] []").
+        { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). by vm_compute. }
         { imp_path. }
         { iExact "Hql". }
         { iIntros "!> _". done. }
@@ -741,8 +741,8 @@ Proof.
   { iApply (imp_exchange_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ _
               (λ l' : loc, ⌜l' = l⌝)%I (λ o : option val, ⌜o = Some x⌝)%I
               with "[] [] [Hst]").
-    { iApply (imp_EAtomicLoc v_field (ss !!! i) [l] with "Hcell [] []").
-      { list_z.length; lia. }
+    { iApply (imp_EAtomicLoc v_field (ss !!! i) _ with "[] [] []").
+      { iModIntro. iApply (blockLocs_field_at with "Hcell"). list_z.length; lia. }
       { imp_path. }
       { iNext. iPureIntro. by vm_compute. } }
     { imp_step. simpl. iIntros (y) "->". done. }
@@ -766,10 +766,10 @@ Proof.
       by (apply Hslots_dom; rewrite Hsi; by eexists).
     iModIntro. iIntros (l' o) "-> ->".
     iExists (array_get slots deqs i).
-    iAssert (▷ (l ↦ #(array_get slots deqs i) ∗
+    iAssert (▷ (l ↦ₗ #(array_get slots deqs i) ∗
                 ∀ f : Z → option val,
                   ⌜∀ k, k ≠ i → f k = array_get slots deqs k⌝ -∗
-                  l ↦ #(f i) -∗
+                  l ↦ₗ #(f i) -∗
                   [∗ listZ] k ↦ s ∈ ss, slot_pointsto s (f k)))%I
       with "[Hslots]" as "[Hpt Hback]".
     { iNext.
@@ -1263,8 +1263,8 @@ Proof.
     iApply (imp_ELet_var
               (λ n' : Z, ⌜0 ≤ n' ≤ cap⌝ ∗ scan_cont γ n' 0)%I with "[]").
     { iApply (imp_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
-      { iApply (imp_EAtomicLoc back_field q [ql; pl; bl] with "Hqlocs [] []").
-        { list_z.length; lia. }
+      { iApply (imp_EAtomicLoc back_field q _ with "[] [] []").
+        { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). list_z.length; lia. }
         { imp_path. }
         { iNext. iPureIntro. by vm_compute. } }
       iIntros (l) "->".
@@ -1291,9 +1291,9 @@ Proof.
   { iApply (imp_wand with "[]").
     { iApply (imp_EArrayGet' a i 0 DfracDiscarded ss with "[%] Hsl [] []").
       - lia.
-      - iApply (imp_ERecordAccess_pers items_field q [ql; pl; bl] DfracDiscarded a
-                  with "Hqlocs [] [] []").
-        { by vm_compute. }
+      - iApply (imp_ERecordAccess_pers items_field q _ DfracDiscarded a
+                  with "[] [] [] []").
+        { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). by vm_compute. }
         { imp_path. }
         { iExact "Hql". }
         { iIntros "!> _". done. }
@@ -1305,9 +1305,9 @@ Proof.
 
   (* [let p = q.proph in ...] *)
   iApply (imp_ELet_var (λ p' : proph_id, ⌜p' = p⌝)%I with "[]").
-  { iApply (imp_ERecordAccess_pers proph_field q [ql; pl; bl] DfracDiscarded p
-              with "Hqlocs [] [] []").
-    { by vm_compute. }
+  { iApply (imp_ERecordAccess_pers proph_field q _ DfracDiscarded p
+              with "[] [] [] []").
+    { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). by vm_compute. }
     { imp_path. }
     { iExact "Hpl". }
     { iIntros "!> _". done. } }
@@ -1336,8 +1336,8 @@ Proof.
        their evaluation. *)
     { reflexivity. }
     { reflexivity. }
-    { iApply (imp_EAtomicLoc v_field (ss !!! i) [l] with "Hcell [] []").
-      { list_z.length; lia. }
+    { iApply (imp_EAtomicLoc v_field (ss !!! i) _ with "[] [] []").
+      { iModIntro. iApply (blockLocs_field_at with "Hcell"). list_z.length; lia. }
       { imp_path. }
       { iNext. iPureIntro. by vm_compute. } }
     { imp_step. }
@@ -1350,10 +1350,10 @@ Proof.
     iExists (array_get slots deqs i), rs.
     (* Reach into the array at index [i]; what comes back may be given back
        with the contents changed at that index only. *)
-    iAssert (▷ (l ↦ #(array_get slots deqs i) ∗
+    iAssert (▷ (l ↦ₗ #(array_get slots deqs i) ∗
                 ∀ f : Z → option val,
                   ⌜∀ k, k ≠ i → f k = array_get slots deqs k⌝ -∗
-                  l ↦ #(f i) -∗
+                  l ↦ₗ #(f i) -∗
                   [∗ listZ] k ↦ s ∈ ss, slot_pointsto s (f k)))%I
       with "[Hslots]" as "[Hpt Hback]".
     { iNext.
@@ -1568,8 +1568,8 @@ Proof.
   iApply (imp_ELet_var
             (λ n' : Z, ⌜0 ≤ n' ≤ cap⌝ ∗ scan_cont γ n' 0)%I with "[]").
   { iApply (imp_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
-    { iApply (imp_EAtomicLoc back_field q [ql; pl; bl] with "Hqlocs [] []").
-      { list_z.length; lia. }
+    { iApply (imp_EAtomicLoc back_field q _ with "[] [] []").
+      { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). list_z.length; lia. }
       { imp_path. }
       { iNext. iPureIntro. by vm_compute. } }
     iIntros (l) "->".

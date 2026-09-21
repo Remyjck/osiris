@@ -33,7 +33,7 @@ Section inline_record_reasoning.
     { simpl.
       replace (to_vals xs) with
       (@observe (list val) (list val) (@observe_list val Encode_val) (to_vals xs)).
-      iApply (@imp_allocn _ _ _ _ _ val Encode_val (λ ls, [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ v)%I (to_vals xs)).
+      iApply (@imp_allocn _ _ _ _ _ val Encode_val (λ ls, [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ₗ v)%I (to_vals xs)).
       iIntros "!>" (ls) "$".
       simpl. rewrite map_id. reflexivity. }
     iIntros (ls) "Hls".

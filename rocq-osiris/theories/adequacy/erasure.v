@@ -186,12 +186,8 @@ Fixpoint erase_expr (e : expr) : expr :=
       EAssert (erase_expr e)
   | ELetSitem s e =>
       ELetSitem (erase_sitem s) (erase_expr e)
-  | ERef e =>
-      ERef (erase_expr e)
   | ELoad e =>
       ELoad (erase_expr e)
-  | EStore e1 e2 =>
-      EStore (erase_expr e1) (erase_expr e2)
   | EExchange e1 e2 =>
       EExchange (erase_expr e1) (erase_expr e2)
   | ECAS e1 e2 e3 =>

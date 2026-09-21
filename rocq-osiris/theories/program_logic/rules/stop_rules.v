@@ -61,7 +61,7 @@ Section imp_stop.
   (* [CAlloc]. *)
   Lemma imp_stop_alloc' v (k : _ → micro A X) :
     ▷ (∀ (l : loc),
-          (l ↦ v ∗ meta_token l ⊤) -∗
+          (l ↦ₗ v ∗ meta_token l ⊤) -∗
           EWP (continue k l) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ⊢
     EWP (Stop CAlloc v k) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -74,7 +74,7 @@ Section imp_stop.
     ewp_mask_elim. iFrame.
   Qed.
   Lemma imp_stop_alloc v (k : _ → micro A X) :
-    ▷ (∀ (l : loc), l ↦ v -∗
+    ▷ (∀ (l : loc), l ↦ₗ v -∗
             EWP (continue k l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ⊢
     EWP (Stop CAlloc v k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -109,9 +109,9 @@ Section imp_stop.
   (* ------------------------------------------------------------------------ *)
   (* [CLoad]. *)
   Lemma imp_stop_load l v (dq : dfrac) (k: _ → micro A X) :
-    ▷ l ↦{dq} v ⊢
+    ▷ l ↦ₗ{dq} v ⊢
     ▷ (
-        l ↦{dq} v -∗
+        l ↦ₗ{dq} v -∗
         EWP (continue k v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CLoad l k) @ E <|Ψ|>  ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -178,9 +178,9 @@ Section imp_stop.
   (* ------------------------------------------------------------------------ *)
   (* [CExchange]. *)
   Lemma imp_stop_exchange l v v' (k : _ → micro A X) :
-    ▷ l ↦ v ⊢
+    ▷ l ↦ₗ v ⊢
     ▷ (
-        l ↦ v' -∗
+        l ↦ₗ v' -∗
         EWP (continue k v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CExchange (l, v') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -271,9 +271,9 @@ Section imp_stop.
   (* CAS success: the physical equality holds, so the store is updated from
      [seen] to [v'], and the continuation receives [VTrue]. *)
   Lemma imp_stop_cas `{PhysEqDec B} l (seen v v' : B) (k : _ → micro A X) :
-    ▷ l ↦ #v ⊢
+    ▷ l ↦ₗ #v ⊢
     ▷ (
-          l ↦ (if phys_eq_val_ v seen then #v' else #v) -∗
+          l ↦ₗ (if phys_eq_val_ v seen then #v' else #v) -∗
           EWP (continue k #(phys_eq_val_ v seen)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CCAS (l, #seen, #v') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -303,11 +303,11 @@ Section imp_stop.
      of [seen] mutable; these resolve the comparison. *)
   Lemma imp_stop_cas_inline l (c cs : data) (r rs : record) (v' : val)
       dq1 dq2 t (k : _ → micro A X) :
-    ▷ l ↦ VInline c r -∗
+    ▷ l ↦ₗ VInline c r -∗
     ▷ blockTag r dq1 t -∗
     ▷ blockTag rs dq2 Mut -∗
     ▷ (
-        l ↦ (if locations.eqb r rs then v' else VInline c r) -∗
+        l ↦ₗ (if locations.eqb r rs then v' else VInline c r) -∗
         blockTag r dq1 t -∗
         blockTag rs dq2 Mut -∗
         EWP (continue k #(locations.eqb r rs)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
@@ -340,9 +340,9 @@ Section imp_stop.
   (* ------------------------------------------------------------------------ *)
   (* [CFAA]. *)
   Lemma imp_stop_faa l (i j : int) (k : _ → micro A X) :
-    ▷ l ↦ #j ⊢
+    ▷ l ↦ₗ #j ⊢
     ▷ (
-        l ↦ #(int.add j i) -∗
+        l ↦ₗ #(int.add j i) -∗
         EWP (continue k #j) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
     EWP (Stop CFAA (l, i) k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -696,7 +696,7 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CAlloc]. *)
   Lemma imp_alloc2' {Φ : loc → iProp Σ} v :
-    ▷ (∀ (l : loc), l ↦ v ∗ meta_token l ⊤ -∗ Φ l) -∗
+    ▷ (∀ (l : loc), l ↦ₗ v ∗ meta_token l ⊤ -∗ Φ l) -∗
     EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H".
@@ -707,7 +707,7 @@ Section imp_combinators.
   Qed.
 
   Lemma imp_alloc2 {Φ : loc → iProp Σ} v :
-    ▷ (∀ (l : loc), l ↦ v -∗ Φ l) -∗
+    ▷ (∀ (l : loc), l ↦ₗ v -∗ Φ l) -∗
     EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H".
@@ -717,14 +717,14 @@ Section imp_combinators.
   Qed.
 
   Lemma imp_alloc' v :
-    ⊢ EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, l ↦ v ∗ meta_token l ⊤ }}.
+    ⊢ EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, l ↦ₗ v ∗ meta_token l ⊤ }}.
   Proof.
     iApply (imp_alloc2').
     iIntros "!> %l $".
   Qed.
 
   Lemma imp_alloc v :
-    ⊢ EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, l ↦ v }}.
+    ⊢ EWP (alloc v) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l, l ↦ₗ v }}.
   Proof.
     iApply imp_alloc2.
     iIntros "!> %l $".
@@ -735,7 +735,7 @@ Section imp_combinators.
   (* Memory allocation rule for [n] locations at once. *)
   Lemma imp_allocn' `{Encode A} {Φ : list loc → iProp Σ} (xs : list A) :
     (▷^(List.length xs) ∀ (ls : list loc),
-       ([∗ listZ] l;x ∈ ls;xs, l ↦ #x ∗ meta_token l ⊤) -∗
+       ([∗ listZ] l;x ∈ ls;xs, l ↦ₗ #x ∗ meta_token l ⊤) -∗
        Φ ls) ⊢
     EWP (allocn ♯xs) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -746,7 +746,7 @@ Section imp_combinators.
       by iApply (big_sepLZ2_nil).
     - simpl.
       iApply (imp_bind (A1:=loc) with "[H]").
-      { set_postcondition (λ l, (l ↦ #x ∗ meta_token l ⊤) ∗ (▷^_ _))%I.
+      { set_postcondition (λ l, (l ↦ₗ #x ∗ meta_token l ⊤) ∗ (▷^_ _))%I.
         iApply imp_alloc2'. iNext. iIntros (l) "$".
         iExact "H". }
       iIntros (l) "(Hl & H)".
@@ -764,7 +764,7 @@ Section imp_combinators.
   Qed.
   Lemma imp_allocn `{Encode A} {Φ : list loc → iProp Σ} (xs : list A) :
     ▷^(List.length xs) (∀ ls,
-       ([∗ listZ] l;x ∈ ls;xs, l ↦ #x) -∗ Φ ls) ⊢
+       ([∗ listZ] l;x ∈ ls;xs, l ↦ₗ #x) -∗ Φ ls) ⊢
     EWP (allocn ♯xs) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H".
@@ -796,8 +796,8 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CLoad]. *)
   Lemma imp_load' `{Encode A} {Φ : A → iProp Σ} l a dq :
-    ▷ l ↦{dq} #a ⊢
-    ▷ (l ↦{dq} #a -∗ Φ a) -∗
+    ▷ l ↦ₗ{dq} #a ⊢
+    ▷ (l ↦ₗ{dq} #a -∗ Φ a) -∗
     EWP (load l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl HΦ".
@@ -807,8 +807,8 @@ Section imp_combinators.
     iApply ("HΦ" with "Hl").
   Qed.
   Lemma imp_load `{Encode A} l (a : A) dq :
-    ▷ l ↦{dq} #a ⊢
-    EWP (load l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a', ⌜a' = a⌝ ∗ l ↦{dq} #a }}.
+    ▷ l ↦ₗ{dq} #a ⊢
+    EWP (load l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a', ⌜a' = a⌝ ∗ l ↦ₗ{dq} #a }}.
   Proof.
     iIntros "Hl".
     iApply (imp_load' with "Hl").
@@ -839,8 +839,8 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CExchange]. *)
   Lemma imp_exchange' `{Encode A} {Φ : A → iProp Σ} l a v' :
-    ▷ l ↦ #a ⊢
-    ▷ (l ↦ v' -∗ Φ a) -∗
+    ▷ l ↦ₗ #a ⊢
+    ▷ (l ↦ₗ v' -∗ Φ a) -∗
     EWP (exchange l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl HΦ".
@@ -850,8 +850,8 @@ Section imp_combinators.
     iApply ("HΦ" with "Hl").
   Qed.
   Lemma imp_exchange `{Encode A} {Φ : A → iProp Σ} l a v' :
-    ▷ l ↦ #a ⊢
-    EWP (exchange l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (a' : A), ⌜a' = a⌝ ∗ l ↦ v' }}.
+    ▷ l ↦ₗ #a ⊢
+    EWP (exchange l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (a' : A), ⌜a' = a⌝ ∗ l ↦ₗ v' }}.
   Proof.
     iIntros "Hl".
     iApply (imp_stop_exchange with "Hl").
@@ -861,8 +861,8 @@ Section imp_combinators.
   Qed.
 
   Lemma imp_store' {Φ : unit → iProp Σ} l v v' :
-    ▷ l ↦ v ⊢
-    ▷ (l ↦ v' -∗ Φ ()) -∗
+    ▷ l ↦ₗ v ⊢
+    ▷ (l ↦ₗ v' -∗ Φ ()) -∗
     EWP (code.store l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl HΦ". unfold code.store.
@@ -872,8 +872,8 @@ Section imp_combinators.
     iApply ("HΦ" with "Hl").
   Qed.
   Lemma imp_store l v v' :
-    ▷ l ↦ v ⊢
-    EWP (code.store l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), l ↦ v' }}.
+    ▷ l ↦ₗ v ⊢
+    EWP (code.store l v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), l ↦ₗ v' }}.
   Proof.
     iIntros "Hl".
     iApply (imp_store' with "Hl").
@@ -903,8 +903,8 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CCAS]. *)
   Lemma imp_cas `{PhysEqDec A} {Φ : bool → iProp Σ} l (seen v v' : A) :
-    ▷ l ↦ #v ⊢
-    ▷ (l ↦ (if phys_eq_val_ v seen then #v' else #v) -∗
+    ▷ l ↦ₗ #v ⊢
+    ▷ (l ↦ₗ (if phys_eq_val_ v seen then #v' else #v) -∗
        Φ (phys_eq_val_ v seen)) -∗
     EWP (cas l #seen #v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -918,10 +918,10 @@ Section imp_combinators.
   (* The [VInline] variant of [imp_cas]; see [imp_stop_cas_inline]. *)
   Lemma imp_cas_inline {Φ : bool → iProp Σ} l (c cs : data) (r rs : record)
       (v' : val) dq1 dq2 t :
-    ▷ l ↦ VInline c r -∗
+    ▷ l ↦ₗ VInline c r -∗
     ▷ blockTag r dq1 t -∗
     ▷ blockTag rs dq2 Mut -∗
-    ▷ (l ↦ (if locations.eqb r rs then v' else VInline c r) -∗
+    ▷ (l ↦ₗ (if locations.eqb r rs then v' else VInline c r) -∗
        blockTag r dq1 t -∗
        blockTag rs dq2 Mut -∗
        Φ (locations.eqb r rs)) -∗
@@ -937,8 +937,8 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CFAA]. *)
   Lemma imp_faa {Φ : Z → iProp Σ} l (i j : Z) :
-    ▷ l ↦ #j ⊢
-    ▷ (l ↦ #(j + i) -∗ Φ j) -∗
+    ▷ l ↦ₗ #j ⊢
+    ▷ (l ↦ₗ #(j + i) -∗ Φ j) -∗
     EWP (faa l ♯i) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl HΦ".

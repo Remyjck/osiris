@@ -25,9 +25,9 @@ Section atomic_proofs.
   {{ ∀ E2 Φ;
      ▷ (|={⊤, E2}=>
         ∃ (a : A) dq1 dq2 t,
-          ▷ l ↦ #a ∗ ▷ blockTag (inline_blk a) dq1 t ∗
+          ▷ l ↦ₗ #a ∗ ▷ blockTag (inline_blk a) dq1 t ∗
           ▷ blockTag (inline_blk seen) dq2 Mut ∗
-          ▷ (l ↦ #(if locations.eqb (inline_blk a) (inline_blk seen) then
+          ▷ (l ↦ₗ #(if locations.eqb (inline_blk a) (inline_blk seen) then
                       v'
                     else
                       a) -∗

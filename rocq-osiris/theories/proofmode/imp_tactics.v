@@ -80,30 +80,54 @@ Ltac2 get_pointsto (l : constr) : constr * constr :=
     lazy_match! env with
     | environments.Enil =>
         Control.zero (Tactic_failure
-                        (Some (fprintf "Could not find hypothesis [%t ↦ _]" l)))
+                        (Some (fprintf "Could not find hypothesis [%t ↦ₗ _]" l)))
     | environments.Esnoc ?env ?name ?prop =>
         match! prop with
-        | (?l' ↦ (#?a))%I =>
+        | (?l' ↦ₗ (#?a))%I =>
             if Constr.equal l l' then
               (name, Constr.type a)
             else
               go env
-        | (▷ ?l' ↦ (#?a))%I =>
+        | (▷ ?l' ↦ₗ (#?a))%I =>
             if Constr.equal l l' then
               (name, Constr.type a)
             else
               go env
         (* A bare (unencoded) stored value is just a [val]. *)
-        | (?l' ↦ ?v)%I =>
+        | (?l' ↦ₗ ?v)%I =>
             if Constr.equal l l' then
               (name, Constr.type v)
             else
               go env
-        | (▷ ?l' ↦ ?v)%I =>
+        | (▷ ?l' ↦ₗ ?v)%I =>
             if Constr.equal l l' then
               (name, Constr.type v)
             else
               go env
+        | _ => go env
+        end
+    end
+  in
+  go spat_hyps.
+
+(* The same, for a reference points-to [r ↦ _]. *)
+Ltac2 get_ref_pointsto (r : constr) : constr * constr :=
+  let (_, spat_hyps) := get_iris_hyps () in
+  let rec go env :=
+    lazy_match! env with
+    | environments.Enil =>
+        Control.zero (Tactic_failure
+                        (Some (fprintf "Could not find hypothesis [%t ↦ _]" r)))
+    | environments.Esnoc ?env ?name ?prop =>
+        match! prop with
+        | (?r' ↦ (#?a))%I =>
+            if Constr.equal r r' then (name, Constr.type a) else go env
+        | (▷ ?r' ↦ (#?a))%I =>
+            if Constr.equal r r' then (name, Constr.type a) else go env
+        | (?r' ↦ ?v)%I =>
+            if Constr.equal r r' then (name, Constr.type v) else go env
+        | (▷ ?r' ↦ ?v)%I =>
+            if Constr.equal r r' then (name, Constr.type v) else go env
         | _ => go env
         end
     end
@@ -255,17 +279,28 @@ Ltac2 rec imp_step0 (reading : constr option) :=
   lazy_match! e with
   | EPath _ => imp_path
   | ELoad _ => imp_load0 None reading
-  | ERef _ => imp_alloc0 None reading
-  | EStore _ _ => Control.plus
-                    (fun _ => iApply (imp_EStore with "[$]");
-                              Control.dispatch [(fun _ => imp_step0 reading); complete_steps])
-                    (fun _ =>
-                       mk_evar @imp_store_A 'Type;
-                       let store_a := Control.hyp @imp_store_A in
-                       mk_evar @imp_store_HA open_constr:(Encode $store_a);
-                       let specialized_store := open_constr:(imp_EStore' (A:=$store_a)) in
-                       iApply ($specialized_store with "[$]");
-                       try (imp_step0 reading))
+  (* References are one-field mutable records. *)
+  | ERecord Mut [_] => imp_alloc0 None reading
+  | ERecordAccess _ 0%Z =>
+      Control.plus
+        (fun _ => iApply (imp_deref with "[$]"); try (imp_step0 reading))
+        (fun _ => imp_field_access0 reading)
+  | ERecordSet _ 0%Z _ =>
+      Control.plus
+        (fun _ => iApply (imp_assign with "[$]");
+                  Control.dispatch [(fun _ => imp_step0 reading); complete_steps])
+        (fun _ =>
+           Control.plus
+             (fun _ =>
+                mk_evar @imp_store_A 'Type;
+                let store_a := Control.hyp @imp_store_A in
+                mk_evar @imp_store_HA open_constr:(Encode $store_a);
+                let specialized_store := open_constr:(imp_assign' (A:=$store_a)) in
+                iApply ($specialized_store with "[$]");
+                try (imp_step0 reading))
+             (fun _ => imp_field_set0 reading))
+  | ERecordAccess _ _ => imp_field_access0 reading
+  | ERecordSet _ _ _ => imp_field_set0 reading
   | EData _ _ => imp_data0 None reading
   | ETuple _ =>
       (* Without a selection pattern we cannot, in general, split the
@@ -379,13 +414,13 @@ with imp_load0 (l : constr option) (reading : constr option) :=
 with imp_alloc0 (x : constr option) (reading : constr option) :=
   match x with
   | Some x =>
-      let spec_ref := open_constr:(imp_ERef $x) in
+      let spec_ref := open_constr:(imp_ref $x) in
       iApply $spec_ref; try (imp_step0 reading)
   | None =>
       Control.plus
-        (fun _ => iApply imp_ERef;
+        (fun _ => iApply imp_ref;
                   complete (fun _ => imp_step0 None))
-        (fun _ => iApply imp_ERef2; try (imp_step0 reading))
+        (fun _ => iApply imp_ref2; try (imp_step0 reading))
   end
 
 with imp_arith_tac (selpat : constr option) (reading : constr option) :=
@@ -561,7 +596,20 @@ with imp_record_access0 (r : constr option) :=
     end
   in
   iApply ($specialized_load with "[$]");
-  Control.dispatch [ (fun _ => split; simpl; ltac1:(lia)); (fun _ => imp_step0 None) ].
+  Control.dispatch [ (fun _ => split; simpl; ltac1:(lia)); (fun _ => imp_step0 None) ]
+
+(* Reading or writing a single field: use a field points-to [r ↦[f] _]
+   from the context when there is one; a read otherwise falls back to the
+   ownership of the whole record. *)
+with imp_field_access0 (reading : constr option) :=
+  Control.plus
+    (fun _ => iApply (imp_ERecordAccess_field with "[$]"); try (imp_step0 reading))
+    (fun _ => imp_record_access0 None)
+
+with imp_field_set0 (reading : constr option) :=
+  iApply (imp_ERecordSet_field with "[$]");
+  Control.dispatch
+    [(fun _ => imp_step0 reading); (fun _ => complete (fun () => imp_step0 reading))].
 
 Tactic Notation "imp_load" constr(l) :=
   let tac := ltac2:(l |- imp_load0 (Ltac1.to_constr l) None) in
@@ -605,15 +653,16 @@ Tactic Notation "imp_ref" constr(x) :=
   tac x.
 Tactic Notation "imp_ref" := ltac2:(imp_alloc0 None None).
 
+(* [imp_store r x] steps an assignment [e1 := e2] to the reference [r]. *)
 Ltac2 imp_store_tac (l : constr) (x : constr option) :=
-  let (hl, a) := get_pointsto l in
+  let (hl, a) := get_ref_pointsto l in
   match x with
   | Some x =>
-      let specialized_store := open_constr:(imp_EStore $l $x) in
+      let specialized_store := open_constr:(imp_assign $l $x) in
       iApply ($specialized_store with $hl) >
        [try (imp_step0 None) | try (imp_step0 None) ]
   | None =>
-      let specialized_store := open_constr:(imp_EStore' (A:=$a) _ $l) in
+      let specialized_store := open_constr:(imp_assign' (A:=$a) _ $l) in
       iApply ($specialized_store with $hl) >
         [try (imp_step0 None) | try (imp_step0 None) |
           iIntros "!>"; cbn beta;
@@ -627,7 +676,7 @@ Ltac2 imp_store_tac (l : constr) (x : constr option) :=
   end.
 
 Ltac2 imp_store2_tac (l : constr) :=
-  let specialized_store2 := open_constr:(imp_EStore2 $l) in
+  let specialized_store2 := open_constr:(imp_assign2 $l) in
   iApply $specialized_store2; try (imp_step0 None).
 
 Ltac2 Notation "imp_store" l(constr) x(constr) := imp_store_tac l (Some x).
@@ -643,41 +692,41 @@ Tactic Notation "imp_store2" constr(l) :=
   let tac := ltac2:(l |- imp_store2_tac (Option.get (Ltac1.to_constr l))) in
   tac l.
 
-(* [imp_store' l $! Φ] steps a store [e1 <- e2] whose location [e1]
-   evaluates to [l]. It locates the hypothesis [l ↦ _], applies
-   [imp_EStore'] with final postcondition [Φ], and steps [e1] and [e2],
-   leaving the continuation goal [∀ a, Φ' a -∗ l ↦ #a -∗ Φ].
+(* [imp_store' r $! Φ] steps an assignment [e1 := e2] to the reference
+   [r]. It locates the hypothesis [r ↦ _], applies [imp_assign'] with
+   final postcondition [Φ], and steps [e1] and [e2], leaving the
+   continuation goal [∀ a, Φ' a -∗ r ↦ #a -∗ Φ].
 
    The [Encode] instance of the stored value cannot be inferred at
    application time (its type is still undetermined), so it is computed
    from the syntax of [e2]: an inline record [EInline c t es] is encoded
    by [encode_record c]; otherwise we default to the type of the value
-   currently stored at [l]. *)
+   currently stored in [r]. *)
 
 Ltac2 imp_store'_tac (l : constr) (phi : constr option) :=
-  let (hl, a) := get_pointsto l in
+  let (hl, a) := get_ref_pointsto l in
   let e := get_expr () in
   let e := (eval hnf in $e) in
   let e2 :=
     lazy_match! e with
-    | EStore _ ?e2 => e2
+    | ERecordSet _ 0%Z ?e2 => e2
     | _ =>
         Control.zero
           (Tactic_failure
-             (Some (fprintf "[imp_store'] expected %t to be a store expression" e)))
+             (Some (fprintf "[imp_store'] expected %t to be an assignment" e)))
     end
   in
   let lemma :=
     lazy_match! eval hnf in $e2 with
     | EInline ?c _ _ =>
         match phi with
-        | Some phi => open_constr:(imp_EStore' (H:=encode_record $c) (Φ:=$phi) _ $l)
-        | None => open_constr:(imp_EStore' (H:=encode_record $c) _ $l)
+        | Some phi => open_constr:(imp_assign' (H:=encode_record $c) (Φ:=$phi) _ $l)
+        | None => open_constr:(imp_assign' (H:=encode_record $c) _ $l)
         end
     | _ =>
         match phi with
-        | Some phi => open_constr:(imp_EStore' (A:=$a) (Φ:=$phi) _ $l)
-        | None => open_constr:(imp_EStore' (A:=$a) _ $l)
+        | Some phi => open_constr:(imp_assign' (A:=$a) (Φ:=$phi) _ $l)
+        | None => open_constr:(imp_assign' (A:=$a) _ $l)
         end
     end
   in
@@ -693,9 +742,9 @@ Tactic Notation "imp_store'" constr(l) "$!" constr(phi) :=
   let tac := ltac2:(l phi |- imp_store'_tac (Option.get (Ltac1.to_constr l)) (Ltac1.to_constr phi)) in
   tac l phi.
 
-(* [imp_ref'] steps an allocation [ref e]: it applies [imp_ERef2'],
+(* [imp_ref'] steps an allocation [ref e]: it applies [imp_ref2'],
    steps [e], and leaves the continuation goal
-   [∀ a l, Φ a -∗ l ↦ #a -∗ Φ' l]. As in [imp_store'], the [Encode]
+   [∀ a r, Φ a -∗ r ↦ #a -∗ Φ' r]. As in [imp_store'], the [Encode]
    instance of the allocated value is computed from the syntax of
    [e]. *)
 
@@ -704,7 +753,7 @@ Ltac2 imp_ref'_tac () :=
   let e := (eval hnf in $e) in
   let e1 :=
     lazy_match! e with
-    | ERef ?e1 => e1
+    | ERecord Mut [?e1] => e1
     | _ =>
         Control.zero
           (Tactic_failure
@@ -713,12 +762,12 @@ Ltac2 imp_ref'_tac () :=
   in
   let lemma :=
     lazy_match! eval hnf in $e1 with
-    | EInline ?c _ _ => open_constr:(imp_ERef2' (H:=encode_record $c))
-    | ERecord _ _ => open_constr:(imp_ERef2' (A:=record))
+    | EInline ?c _ _ => open_constr:(imp_ref2' (H:=encode_record $c))
+    | ERecord _ _ => open_constr:(imp_ref2' (A:=record))
     | _ =>
         Control.zero
           (Tactic_failure
-             (Some (fprintf "[imp_ref'] cannot determine the encoding of %t; use [imp_ref] or apply [imp_ERef2'] with explicit [A]/[H]" e1)))
+             (Some (fprintf "[imp_ref'] cannot determine the encoding of %t; use [imp_ref] or apply [imp_ref2'] with explicit [A]/[H]" e1)))
     end
   in
   iApply $lemma >

@@ -105,7 +105,7 @@ Definition slot_cell (s : slot) (l : loc) : iProp Σ := blockLocs s [l].
 Definition slot_at (s : slot) : iProp Σ := ∃ l, slot_cell s l.
 
 Definition slot_pointsto (s : slot) (o : option val) : iProp Σ :=
-  ∃ l, slot_cell s l ∗ l ↦ #o.
+  ∃ l, slot_cell s l ∗ l ↦ₗ #o.
 
 Global Instance slot_cell_pers s l : Persistent (slot_cell s l).
 Proof. apply _. Qed.
@@ -120,14 +120,14 @@ Proof.
 Qed.
 
 Lemma slot_pointsto_open s l o :
-  slot_cell s l -∗ slot_pointsto s o -∗ l ↦ #o.
+  slot_cell s l -∗ slot_pointsto s o -∗ l ↦ₗ #o.
 Proof.
   iIntros "#Hc (%l' & #Hc' & Hl)".
   by iDestruct (slot_cell_agree with "Hc Hc'") as %->.
 Qed.
 
 Lemma slot_pointsto_close s l o :
-  slot_cell s l -∗ l ↦ #o -∗ slot_pointsto s o.
+  slot_cell s l -∗ l ↦ₗ #o -∗ slot_pointsto s o.
 Proof. iIntros "#Hc Hl". iExists l. by iFrame "Hc Hl". Qed.
 
 (* ---------------------------------------------------------------------- *)
@@ -231,7 +231,7 @@ Definition hwq_inv_inner γ (cap : Z) (ss : list slot) (bl : loc) (p : proph_id)
      (slots : gmap Z slot_data) (** per-slot data for claimed indices *)
      (deqs  : gset Z),          (** dequeued indices *)
    (* Physical state. *)
-   bl ↦ #back ∗
+   bl ↦ₗ #back ∗
    ([∗ listZ] i ↦ s ∈ ss, slot_pointsto s (array_get slots deqs i)) ∗
    (* Ghost state. *)
    back_value γ.(hwq_bk) (Z.to_nat back) ∗
@@ -257,8 +257,8 @@ Definition is_queue γ (cap : Z) (q : queue) : iProp Σ :=
     ⌜list_z.length ss = cap⌝ ∗
     ⌜0 < cap ≤ max_array_length⌝ ∗
     blockLocs q [ql; pl; bl] ∗
-    ql ↦□ #a ∗
-    pl ↦□ #p ∗
+    ql ↦ₗ□ #a ∗
+    pl ↦ₗ□ #p ∗
     a ↦∗[0]□ ss ∗
     ([∗ listZ] s ∈ ss, slot_at s) ∗
     inv hwqN (hwq_inv_inner γ cap ss bl p).

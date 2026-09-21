@@ -204,7 +204,7 @@ Proof.
       iIntros (found) "Hfound".
     (* Finish evaluating the local module and enrich the scoping environment. *)
     iApply imp_sitems_nil.
-    instantiate (1 := (λ δ, ∃ l, ⌜δ = ("Found" ¬> #l)⌝ ∗ l ↦ #())%I).
+    instantiate (1 := (λ δ, ∃ l, ⌜δ = ("Found" ¬> #l)⌝ ∗ l ↦ₗ #())%I).
     by iFrame.
 
     iIntros (δ) "(%found & -> & Hfound)".

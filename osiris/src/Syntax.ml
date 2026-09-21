@@ -315,17 +315,16 @@ type expr =
 
   | ELetSitem of sitem * expr
 
-  (* Reference allocation: [ref e]. *)
-  | ERef of expr
-  (* Reference lookup: [!e]. *)
+  (* Atomic operations on a field location (see [EAtomicLoc]). References
+     are mutable records with one field, so [ref e], [!e] and [e1 := e2]
+     are [ERecord], [ERecordAccess] and [ERecordSet] at field [0]. *)
+  (* Load: [Atomic.Loc.get e]. *)
   | ELoad of expr
-  (* Reference assignment: [e1 := e2]. *)
-  | EStore of expr * expr
-  (* Exchange: [Atomic.exchange e1 e2]. *)
+  (* Exchange: [Atomic.Loc.exchange e1 e2]. *)
   | EExchange of expr * expr
-  (* Compare-and-set: [Atomic.compare_and_set e1 e2 e3]. *)
+  (* Compare-and-set: [Atomic.Loc.compare_and_set e1 e2 e3]. *)
   | ECAS of expr * expr * expr
-  (* Fetch-and-add: [Atomic.fetch_and_and e1 e2]. *)
+  (* Fetch-and-add: [Atomic.Loc.fetch_and_add e1 e2]. *)
   | EFAA of expr * expr
 
   (* Allocating a prophecy variable: [Proph.create ()]. *)

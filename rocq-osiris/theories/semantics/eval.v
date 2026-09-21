@@ -1537,16 +1537,9 @@ Fixpoint pre_eval η e {struct e} : microvx :=
   | ELetSitem s e =>
       '(η,_) ← eval_sitem (η,[]) s ;
       eval η e
-  | ERef e =>
-      v ← eval η e ;
-      l ← alloc v ;
-      ret (VLoc l)
   | ELoad e =>
       l ← as_loc (eval η e) ;
       load l
-  | EStore e1 e2 =>
-      '(l, v) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
-      store l v
   | EExchange e1 e2 =>
       '(l, v) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
       exchange l v
@@ -1570,6 +1563,15 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       | ELoad e1 =>
           l ← as_loc (eval η e1) ;
           resolve CLoad l p v
+      | ERecordAccess e1 f =>
+          (* A field read, e.g. [!r] or [r.f], is a single load once the
+             field's location is known: the resolution is attached to it. *)
+          r ← as_record (eval η e1) ;
+          '(_, ls) ← load_block r ;
+          match ls !! f with
+          | Some l => resolve CLoad l p v
+          | None => Crash
+          end
       | EExchange e1 e2 =>
           '(l, w) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
           resolve CExchange (l, w) p v

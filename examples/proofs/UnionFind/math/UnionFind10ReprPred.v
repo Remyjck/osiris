@@ -21,7 +21,7 @@ Definition vertex (γ : uf_names) (x : elem) (i : Z) : iProp Σ :=
     x ↪[γ.(uf_vert)]□ i ∗
     blockLocs x [li; lc] ∗
     blockTag x DfracDiscarded Mut ∗
-    li ↦□ #i.
+    li ↦ₗ□ #i.
 Global Instance vertex_persistent γ x i : Persistent (vertex γ x i).
 Proof. apply _. Qed.
 
@@ -35,7 +35,7 @@ Proof. apply _. Qed.
 
 Definition root_val (rc : record) (v : val) : iProp Σ :=
   ∃ lv : locations.loc,
-    blockLocs rc [lv] ∗ blockTag rc DfracDiscarded Mut ∗ lv ↦□ v.
+    blockLocs rc [lv] ∗ blockTag rc DfracDiscarded Mut ∗ lv ↦ₗ□ v.
 
 Global Instance root_val_persistent rc v : Persistent (root_val rc v).
 Proof. apply _. Qed.
@@ -70,7 +70,7 @@ Qed.
 Definition link_field (γ : uf_names) (rc : record) (lp : locations.loc)
     (h : elem) (i : Z) : iProp Σ :=
   ∃ (y : elem) jy,
-    blockTag rc DfracDiscarded Mut ∗ lp ↦ #y ∗
+    blockTag rc DfracDiscarded Mut ∗ lp ↦ₗ #y ∗
     vertex γ y jy ∗ ⌜(jy < i)%Z⌝ ∗ same_class γ h y.
 
 (* [linked γ x rc lp]: [x] holds the link record [rc], whose [parent] field
@@ -173,7 +173,7 @@ Definition vertex_own (γ : uf_names) (R : elem → elem) (V : elem → val)
     x i : iProp Σ :=
   ∃ (li lc : locations.loc) (c : content),
     blockLocs x [li; lc] ∗
-    lc ↦ #c ∗
+    lc ↦ₗ #c ∗
     cell_own γ R V x i c.
 
 End repr.
@@ -257,7 +257,7 @@ Qed.
 
 Lemma link_record_split rc (y : elem) :
   rc ⤇ {| link_parent := y |} -∗
-  ∃ lp, blockLocs rc [lp] ∗ blockTag rc DfracDiscarded Mut ∗ lp ↦ #y.
+  ∃ lp, blockLocs rc [lp] ∗ blockTag rc DfracDiscarded Mut ∗ lp ↦ₗ #y.
 Proof.
   iIntros "Hrec".
   rewrite /ownRecord /ownBlock /=.
@@ -270,7 +270,7 @@ Qed.
 Lemma link_field_intro γ rc lp (h y : elem) i j :
   (j < i)%Z →
   blockTag rc DfracDiscarded Mut -∗
-  lp ↦ #y -∗
+  lp ↦ₗ #y -∗
   vertex γ y j -∗
   same_class γ h y -∗
   link_field γ rc lp h i.
@@ -293,7 +293,7 @@ Qed.
    the vertex is not registered yet. *)
 
 Lemma vertex_own_fresh_ne γ R V x i li lc w :
-  blockLocs x [li; lc] -∗ lc ↦ w -∗ vertex_own γ R V x i -∗ False.
+  blockLocs x [li; lc] -∗ lc ↦ₗ w -∗ vertex_own γ R V x i -∗ False.
 Proof.
   iIntros "#Hlocs Hlc Hvo".
   iDestruct "Hvo" as (li' lc' c) "(#Hlocs' & Hlc' & _)".

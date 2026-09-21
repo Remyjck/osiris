@@ -42,7 +42,7 @@ Section record_resources.
 
   Definition ownBlock {τ : types} (r : record) dq (t : mut_tag) (xs : τ) : iProp Σ :=
     ∃ ls, blockLocs r ls ∗ blockTag r DfracDiscarded t ∗
-      [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦{dq} v.
+      [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ₗ{dq} v.
 
 End record_resources.
 
@@ -50,20 +50,7 @@ Section record_resources_frac.
 
   Context `{!osirisGS Σ}.
 
-  (* [gen_heap] exports the joining direction ([pointsto_combine]) but no
-     splitting law for a general [dfrac], only the [Qp]-indexed
-     [Fractional] instance. We derive it once here; this is the only
-     place that has to look through [gen_heap]'s sealing. *)
-
-  Local Lemma pointsto_dsplit {L V} `{Countable L} `{!gen_heapGS L V Σ}
-      (l : L) dq1 dq2 (v : V) :
-    pointsto l (dq1 ⋅ dq2) v ⊣⊢ pointsto l dq1 v ∗ pointsto l dq2 v.
-  Proof.
-    rewrite gen_heap.pointsto_unseal /gen_heap.pointsto_def
-            ghost_map.ghost_map_elem_unseal /ghost_map.ghost_map_elem_def
-            -own_op.
-    f_equiv. by rewrite -gmap_view.gmap_view_frag_op agree_idemp.
-  Qed.
+  (* [pointsto_dsplit] is in [lib/field_loc.v]. *)
 
   Global Instance blockTag_dfractional (b : locations.loc) t :
     DFractional (λ dq, blockTag b dq t).
@@ -91,7 +78,7 @@ Section record_resources_frac.
   Proof.
     intros dq1 dq2. unfold ownBlock. iSplit.
     - iIntros "(%ls & #Hblock & #Htag & Hxs)".
-      iAssert ([∗ listZ] l;v ∈ ls; (to_vals xs), l ↦{dq1} v ∗ l ↦{dq2} v)%I
+      iAssert ([∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ₗ{dq1} v ∗ l ↦ₗ{dq2} v)%I
         with "[Hxs]" as "Hxs'".
       { iApply (big_sepLZ2_mono with "Hxs").
         intros k l v _ _. rewrite pointsto_dsplit. iIntros "[Hl1 Hl2]". iFrame. }
@@ -101,7 +88,7 @@ Section record_resources_frac.
     - iIntros "([%ls1 (#Hblock1 & #Htag1 & Hxs1)] & [%ls2 (#Hblock2 & _ & Hxs2)])".
       iPoseProof (blockLocs_valid with "Hblock1 Hblock2") as "<-".
       iExists ls2. iFrame "Hblock1 Htag1".
-      iAssert ([∗ listZ] l;v ∈ ls2; to_vals xs, l ↦{dq1} v ∗ l ↦{dq2} v)%I
+      iAssert ([∗ listZ] l;v ∈ ls2; to_vals xs, l ↦ₗ{dq1} v ∗ l ↦ₗ{dq2} v)%I
         with "[Hxs1 Hxs2]" as "Hxs".
       { rewrite big_sepLZ2_sep. iFrame. }
       iApply (big_sepLZ2_mono with "Hxs").
@@ -190,7 +177,7 @@ Section records_reasoning.
     { simpl.
       replace (to_vals xs) with
       (@observe (list val) (list val) (@observe_list val Encode_val) (to_vals xs)).
-      iApply (@imp_allocn _ _ _ _ _ val Encode_val (λ ls, [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ v)%I (to_vals xs)).
+      iApply (@imp_allocn _ _ _ _ _ val Encode_val (λ ls, [∗ listZ] l;v ∈ ls; (to_vals xs), l ↦ₗ v)%I (to_vals xs)).
       iIntros "!>" (ls) "$".
       simpl. rewrite map_id. reflexivity. }
     iIntros (ls) "Hls".
@@ -273,47 +260,49 @@ Section records_reasoning.
     - iIntros "$ //".
   Qed.
 
-  (* [EAtomicLoc e f] returns the location of the field [f] of the record
-     [e] as a first-class value. Only the persistent ghost knowledge
-     [blockLocs] is required: no ownership of the fields is needed. This
-     is essential in concurrent settings, where this ownership is typically
-     governed by an invariant. The atomic rules (load, store, CAS, FAA)
-     then apply to the returned location. *)
+  (* [EAtomicLoc e f] returns the location [l] of the field [f] of the
+     record [e] as a first-class value. Only the persistent knowledge
+     [field_at r f l] is required: no ownership of the fields is needed.
+     This is essential in concurrent settings, where this ownership is
+     typically governed by an invariant. The atomic rules (load, store,
+     CAS, FAA) then apply to the returned location. *)
 
-  Lemma imp_EAtomicLoc {ζ} {Φ : loc → iProp Σ} f r ls e :
-    valid f ls →
-    ▷ blockLocs r ls -∗
+  Lemma imp_EAtomicLoc {ζ} {Φ : loc → iProp Σ} f r l e :
+    ▷ field_at r f l -∗
     impure E (eval η e) Ψ ζ (λ (r' : record), ⌜r' = r⌝) -∗
-    ▷ Φ (ls !!! f) -∗
+    ▷ Φ l -∗
     impure E (eval η (EAtomicLoc e f)) Ψ ζ Φ.
   Proof.
-    iIntros (Hvalid) "#Hblock He HΦ". simpl_eval.
+    rewrite {1}/field_at.
+    iIntros "(%ls & #Hblock & >%Hf) He HΦ". simpl_eval.
     iApply (imp_bind with "[He]").
     { iApply (imp_as_record with "He"). }
     iIntros (?) "->".
     iApply (imp_bind (A1:=(mut_tag * list loc)) with "[HΦ]").
     { iApply (imp_load_block_ghost' with "Hblock HΦ"). }
     iIntros ((? & ?)) "(-> & HΦ) /=".
-    rewrite (list_lookup_lookup_total_valid ls f Hvalid).
+    rewrite Hf.
     iApply (imp_ret with "HΦ"). encode.
   Qed.
 
-  Lemma imp_ERecordAccess_pers {ζ} `{Encode A} f {Φ : A → iProp Σ} r ls dq (v : A) e :
-    valid f ls →
-    ▷ blockLocs r ls -∗
+  (* Reading a field whose cell is held by the caller at some fraction. *)
+
+  Lemma imp_ERecordAccess_pers {ζ} `{Encode A} f {Φ : A → iProp Σ} r l dq (v : A) e :
+    ▷ field_at r f l -∗
     impure E (eval η e) Ψ ζ (λ (r' : record), ⌜r' = r⌝) -∗
-    ▷ (ls !!! f) ↦{dq} #v -∗
-    ▷ ((ls !!! f) ↦{dq} #v -∗ Φ v) -∗
+    ▷ l ↦ₗ{dq} #v -∗
+    ▷ (l ↦ₗ{dq} #v -∗ Φ v) -∗
     impure E (eval η (ERecordAccess e f)) Ψ ζ Φ.
   Proof.
-    iIntros (Hvalid) "#Hblock He Hl HΦ". simpl_eval.
+    rewrite {1}/field_at.
+    iIntros "(%ls & #Hblock & >%Hf) He Hl HΦ". simpl_eval.
     iApply (imp_bind with "[He]").
     { iApply (imp_as_record with "He"). }
     iIntros (?) "->".
     iApply (imp_bind (A1:=(mut_tag * list loc)) with "[]").
     { iApply (imp_load_block_ghost with "Hblock"). }
     iIntros ([? ?]) "-> /=".
-    rewrite (list_lookup_lookup_total_valid ls f Hvalid).
+    rewrite Hf.
     iApply (imp_load' with "Hl").
     iIntros "!> Hl".
     iApply ("HΦ" with "Hl").
@@ -379,6 +368,40 @@ Section records_reasoning.
     iFrame "∗%".
     iIntros "!> Hown".
     iFrame.
+  Qed.
+
+  (* The fields of a block, one at a time: [ownBlock] gives the points-to
+     of field [f], and takes it back, possibly with a new value. *)
+
+  Lemma ownBlock_field_acc {τ : types} (r : record) dq t (xs : τ) f :
+    valid_field f τ →
+    ownBlock r dq t xs -∗
+    r ↦[f]{dq} #(xs !!τ f) ∗
+    (∀ (y : τ !!! f), r ↦[f]{dq} #y -∗ ownBlock r dq t (<[f τ= y]> xs)).
+  Proof.
+    iIntros (Hvalid_field) "(%ls & #Hblock & #Htag & Hxs)".
+    iPoseProof (big_sepLZ2_length with "Hxs") as "%Hlen_xs".
+    assert (valid f ls) as Hvalid.
+    { destruct Hvalid_field. split; first lia.
+      rewrite Hlen_xs to_vals_length. assumption. }
+    iPoseProof (blockLocs_field_at with "Hblock") as "#Hf"; first exact Hvalid.
+    iPoseProof (big_sepLZ2_insert_acc _ ls (to_vals xs) f with "Hxs") as "(Hx & Hxs)".
+    { apply list_lookup_lookup_total_valid. assumption. }
+    { instantiate (1:= #(xs !!τ f)).
+      transitivity (@Some val ((to_vals xs) !!! f)).
+      - apply list_lookup_lookup_total_valid.
+        rewrite <- Hlen_xs. assumption.
+      - f_equal.
+        apply lookup_total_to_vals. }
+    iSplitL "Hx".
+    - iDestruct (field_pointsto_at _ _ _ dq #(xs !!τ f) with "Hf") as "[_ Hback]".
+      by iApply "Hback".
+    - iIntros (y) "Hy".
+      iDestruct (field_pointsto_at _ _ _ dq #y with "Hf") as "[Hto _]".
+      iSpecialize ("Hxs" with "(Hto Hy)").
+      iExists ls. iFrame "#".
+      update. rewrite insert_to_vals.
+      iApply "Hxs".
   Qed.
 
 End records_reasoning.

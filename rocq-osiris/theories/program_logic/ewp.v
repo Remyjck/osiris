@@ -8,7 +8,7 @@ From osiris Require Import base.
 From osiris.lang Require Import thread_ids syntax locations encode.
 From osiris.semantics Require Import semantics.
 Require Import subjective_step.
-Require Export ghost_state block_resources.
+Require Export ghost_state block_resources field_loc.
 Require Export protocols.
 
 Definition discrete_fun2 {A B} := λ (C : A -> B → ofe), ∀ (x : A) (y : B), C x y.

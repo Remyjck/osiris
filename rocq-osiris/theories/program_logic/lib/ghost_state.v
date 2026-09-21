@@ -84,11 +84,12 @@ Proof. solve_inG. Qed.
 (* -------------------------------------------------------------------------- *)
 (* Notations for ghost resouces. *)
 
-(* Ownership of the heap. *)
+(* Ownership of the heap, one location at a time. The plain [↦] is kept
+   for references (see [field_loc.v]). *)
 
-Notation "l ↦ dq v" :=
+Notation "l ↦ₗ dq v" :=
   (pointsto l dq (Val v))
-    (at level 20, dq custom dfrac at level 1, format "l  ↦ dq  v") : bi_scope.
+    (at level 20, dq custom dfrac at level 1, format "l  ↦ₗ dq  v") : bi_scope.
 
 (* Ownership of continuations. *)
 
@@ -125,7 +126,7 @@ Section state_interp.
   (* The heap interpretation [osiris_state_interp σ] has two components.
      The main component is a [gen_heap] authoritative resource over the
      physical store [σ], which gives exclusive ownership of individual memory
-     cells via [l ↦ v]. The auxiliary component is the block ghost map, which
+     cells via [l ↦ₗ v]. The auxiliary component is the block ghost map, which
      records, for each allocated block (array or record), its list of element
      locations. The [block_coherent] predicate ties the two: every entry in
      the ghost map points to a [Block] in [σ] with the same locations. *)

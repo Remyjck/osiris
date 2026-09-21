@@ -51,9 +51,9 @@ Lemma read_vertex {ζ : exn → iProp Σ} {Ψ η} γ z j e :
 Proof.
   iIntros "#Hinv #Hz He".
   iDestruct (vertex_locs with "Hz") as (lzi lzc) "#Hzlocs".
-  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ [lzi; lzc] z
-            with "Hzlocs He []").
-  { list_z.length; lia. }
+  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ z _
+            with "[] He []").
+  { iModIntro. iApply (blockLocs_field_at with "Hzlocs"). list_z.length; lia. }
   iNext.
   iApply (uf_vertex_content_acc with "Hinv Hz Hzlocs").
   iIntros "!>" (c) "$".
@@ -79,9 +79,9 @@ Lemma read_vertex_linked {ζ : exn → iProp Σ} {Ψ η} γ z j rc lp e :
 Proof.
   iIntros "#Hinv #Hz #Hlk He".
   iDestruct (vertex_locs with "Hz") as (lzi lzc) "#Hzlocs".
-  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ [lzi; lzc] z
-            with "Hzlocs He []").
-  { list_z.length; lia. }
+  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ z _
+            with "[] He []").
+  { iModIntro. iApply (blockLocs_field_at with "Hzlocs"). list_z.length; lia. }
   iNext.
   iApply (uf_vertex_content_acc_linked with "Hinv Hz Hzlocs Hlk").
   iIntros "!>" (c) "%Hc #Hinfo". by iFrame "Hinfo".
@@ -103,9 +103,37 @@ Lemma read_vertex_or_linked {ζ : exn → iProp Σ} {Ψ η} γ z j (P Q : iProp 
 Proof.
   iIntros "#Hinv #Hz HPQ He".
   iDestruct (vertex_locs with "Hz") as (lzi lzc) "#Hzlocs".
-  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ [lzi; lzc] z
-            with "Hzlocs He [HPQ]").
-  { list_z.length; lia. }
+  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ z _
+            with "[] He [HPQ]").
+  { iModIntro. iApply (blockLocs_field_at with "Hzlocs"). list_z.length; lia. }
+  iNext.
+  iApply (uf_vertex_content_acc_or_linked with "Hinv Hz Hzlocs HPQ").
+  iIntros "!>" (c) "#Hinfo HPQ". by iFrame "Hinfo HPQ".
+Qed.
+
+(* The same read, annotated with [@resolve p v]: the prophecy is resolved
+   at the load of the content field, and its head is the content read. *)
+
+Lemma read_vertex_or_linked_resolve {ζ : exn → iProp Σ} {Ψ η} γ z j (P Q : iProp Σ) e
+    ep ev (p : proph_id) v pvs (Φ : content → iProp Σ) :
+  lookup_path η ep = Some #p →
+  eval_proph_arg η ev = Some v →
+  is_uf γ -∗
+  vertex γ z j -∗
+  (P ∨ (∃ rc lp, linked γ z rc lp) ∗ Q) -∗
+  proph p pvs -∗
+  EWP (eval η e) @ ⊤ <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (z' : elem), ⌜z' = z⌝ }} -∗
+  (∀ (c : content) pvs', ⌜pvs = (♯c, v) :: pvs'⌝ -∗ proph p pvs' -∗
+     content_info γ z c ∗ (P ∨ ⌜content_root c = false⌝ ∗ Q) -∗ Φ c) -∗
+  EWP (eval η (EResolve (ERecordAccess e content_field) ep ev)) @ ⊤ <|Ψ|> ⟨⟨ ζ ⟩⟩
+    {{ Φ }}.
+Proof.
+  iIntros (Hp Hv) "#Hinv #Hz HPQ Hproph He Hcont".
+  iDestruct (vertex_locs with "Hz") as (lzi lzc) "#Hzlocs".
+  iApply (imp_EResolve_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ z _ _ _ _ _ _
+            (λ c : content, content_info γ z c ∗ (P ∨ ⌜content_root c = false⌝ ∗ Q))%I
+            with "[] Hproph He [HPQ] Hcont"); [ exact Hp | exact Hv | | ].
+  { iModIntro. iApply (blockLocs_field_at with "Hzlocs"). list_z.length; lia. }
   iNext.
   iApply (uf_vertex_content_acc_or_linked with "Hinv Hz Hzlocs HPQ").
   iIntros "!>" (c) "#Hinfo HPQ". by iFrame "Hinfo HPQ".
@@ -122,8 +150,8 @@ Lemma read_vertex_id {ζ : exn → iProp Σ} {Ψ η} γ z i e :
 Proof.
   iIntros "#Hz He".
   iDestruct "Hz" as (li lc) "(_ & #Hlocs & _ & #Hli)".
-  iApply (imp_ERecordAccess_pers id_field _ [li; lc] _ i with "Hlocs He [] []").
-  { by vm_compute. }
+  iApply (imp_ERecordAccess_pers id_field _ _ _ i with "[] He [] []").
+  { iModIntro. iApply (blockLocs_field_at with "Hlocs"). by vm_compute. }
   { iExact "Hli". }
   { iIntros "!> _". done. }
 Qed.
@@ -138,8 +166,8 @@ Lemma vertex_content_ptr {ζ : exn → iProp Σ} {Ψ η} γ z i e :
 Proof.
   iIntros "#Hz He".
   iDestruct "Hz" as (li lc) "(_ & #Hlocs & _ & _)".
-  iApply (imp_EAtomicLoc content_field z [li; lc] with "Hlocs He []").
-  { list_z.length; lia. }
+  iApply (imp_EAtomicLoc content_field z _ with "[] He []").
+  { iModIntro. iApply (blockLocs_field_at with "Hlocs"). list_z.length; lia. }
   iNext. iExists li. iExact "Hlocs".
 Qed.
 
@@ -183,9 +211,9 @@ Lemma read_vertex_lp {ζ : exn → iProp Σ} {Ψ η} (Q : content → iProp Σ) 
 Proof.
   iIntros "#Hinv #Hx HP Hhook He".
   iDestruct "Hx" as (lxi lxc) "(#Hxfrag & #Hxlocs & #HxP & #Hxli)".
-  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ [lxi; lxc] x
-            with "Hxlocs He [HP Hhook]").
-  { list_z.length; lia. }
+  iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ x _
+            with "[] He [HP Hhook]").
+  { iModIntro. iApply (blockLocs_field_at with "Hxlocs"). list_z.length; lia. }
   iNext.
   iApply (uf_find_content_acc with "Hinv Hxfrag Hxlocs").
   iNext. iIntros (c D R V) "_ %Hroot #Hinfo #Hval Hst".
@@ -422,7 +450,8 @@ Proof.
   iDestruct "Hc" as "[(_ & (%lp & #Hlk)) Hhook]".
   iDestruct (linked_locs with "Hlk") as "#Hlocs".
   iApply (ipat_PRecord_atomic (A:=elem) (⊤ ∖ ↑ufN) ⊤
-            with "Hlocs [Hhook]"); first done.
+            with "[] [Hhook]").
+  { iModIntro. iApply (blockLocs_field_at with "Hlocs"). done. }
   iNext.
   iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hhook]").
   iNext.
@@ -493,8 +522,8 @@ Proof.
     (λ y : elem, ∃ jy, ⌜(jy < i)%Z⌝ ∗ same_class γ x y ∗ vertex γ y jy)%I).
   { iDestruct "Hc" as "(_ & (%lp & #Hlk))".
     iDestruct (linked_locs with "Hlk") as "#Hlocs".
-    iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) with "Hlocs [] []").
-    { list_z.length; lia. }
+    iApply (imp_ERecordAccess_atomic (⊤ ∖ ↑ufN) with "[] [] []").
+    { iModIntro. iApply (blockLocs_field_at with "Hlocs"). list_z.length; lia. }
     { imp_path. }
     iNext.
     iApply (uf_link_parent_acc with "Hinv Hx Hlk []").
@@ -543,9 +572,9 @@ Proof.
     iApply (imp_ESeq (λ _ : unit, True)%I).
     { iDestruct "Hc" as "(_ & (%lp & #Hlk))".
       iDestruct (linked_locs with "Hlk") as "#Hlocs".
-      iApply (imp_ERecordSet_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ _ [lp] rc (λ w : elem, ⌜w = z⌝)%I
-                with "Hlocs [] [] []").
-      { list_z.length; lia. }
+      iApply (imp_ERecordSet_atomic (⊤ ∖ ↑ufN) ⊤ _ _ _ _ rc _ (λ w : elem, ⌜w = z⌝)%I
+                with "[] [] [] []").
+      { iModIntro. iApply (blockLocs_field_at with "Hlocs"). list_z.length; lia. }
       { imp_path. }
       { imp_path. }
       iNext.
@@ -613,7 +642,8 @@ Proof.
   next_branch.
   next_branch.
   iApply (ipat_PRecord_atomic (A:=elem) (⊤ ∖ ↑ufN) ⊤
-            with "Hlocs [Hhook]"); first done.
+            with "[] [Hhook]").
+  { iModIntro. iApply (blockLocs_field_at with "Hlocs"). done. }
   iNext.
   iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hhook]").
   iNext.
@@ -739,8 +769,8 @@ Proof.
     next_branch.
     iDestruct "Hc" as (v) "[#Hrv HΨ]".
     iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-    iApply (imp_ERecordAccess_pers 0%Z rc [lv] _ v with "Hrclocs [] [] [HΨ]").
-    { list_z.length; lia. }
+    iApply (imp_ERecordAccess_pers 0%Z rc _ _ v with "[] [] [] [HΨ]").
+    { iModIntro. iApply (blockLocs_field_at with "Hrclocs"). list_z.length; lia. }
     { imp_path. }
     { iExact "Hlv". }
     { iIntros "!> _". iExact "HΨ". } }
@@ -1037,8 +1067,8 @@ Proof.
     rewrite {3}(@encode_encode' content).
     next_branch.
     iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-    iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc [lv] _ v with "Hrclocs Hlv [Hhook]");
-      first done.
+    iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+      first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
     iNext. iIntros "_".
 
     (* [if cas [%atomic.loc x.content] cx (Root { value = f v})]. *)
@@ -1316,8 +1346,8 @@ Proof.
       (* Read the absorbed root's payload. Its field is immutable and the
          invariant has discarded its fraction, so this opens nothing. *)
       iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc [lv] _ v with "Hrclocs Hlv [Hhook]");
-        first done.
+      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+        first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
       iNext. iIntros "_".
 
       imp_if with "[Hhook]".
@@ -1390,8 +1420,8 @@ Proof.
       next_branch.
 
       iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc [lv] _ v with "Hrclocs Hlv [Hhook]");
-        first done.
+      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+        first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
       iNext. iIntros "_".
 
       imp_if with "[Hhook]".
@@ -1709,11 +1739,12 @@ Proof.
     $! (λ c : content, content_info γ a c ∗
                        (if content_root c then Φ false else eq_au γ x y Φ))%I
     with "[Hp Hkont]".
-  { (* [x.content [@resolve p ()]] *)
-    iApply (imp_EResolve with "Hp [Hkont] []"); first trivial.
+  { (* [x.content [@resolve p ()]]: the resolution happens at the load of
+       the content field. *)
+    iApply (read_vertex_or_linked_resolve with "Hinv Hav Hkont Hp [] []").
     (* [p] and [()] are read off the environment, in no step. *)
     { reflexivity. } { reflexivity. }
-    { iApply (read_vertex_or_linked with "Hinv Hav Hkont"). imp_path. }
+    { imp_path. }
     iIntros (c pvs') "%Heqp _ [$ Hres]".
     assert (content_root c = proph_root pvs) as ->
            by (rewrite Heqp; symmetry; apply proph_root_content).
@@ -1739,7 +1770,8 @@ Proof.
   iDestruct "Hc" as "[(_ & (%lp & #Hlk)) AU]".
   iDestruct (linked_locs with "Hlk") as "#Hlocs".
   iApply (ipat_PRecord_atomic (A:=elem) (⊤ ∖ ↑ufN)
-            with "Hlocs [AU]"); first done.
+            with "[] [AU]").
+  { iModIntro. iApply (blockLocs_field_at with "Hlocs"). done. }
   iNext.
   iApply (uf_link_parent_acc with "Hinv Hav Hlk [AU]").
   iNext.
@@ -1896,8 +1928,8 @@ Proof.
      It is [G] that [make] calls, and [G] shadows this [fresh]. *)
   iApply (imp_sitems_module (λ _ : env, True)%I).
   { iApply imp_module.
-    iApply (imp_sitems_let (λ _ : loc, True)%I).
-    { iApply (imp_ERef2' (λ _ : Z, True)%I).
+    iApply (imp_sitems_let (λ _ : record, True)%I).
+    { iApply (imp_ref2' (λ _ : Z, True)%I).
       { iApply imp_wand; [ iApply imp_EInt | auto ]. }
       iIntros "!>" (a l) "_ _". done. }
     iIntros (next) "_".

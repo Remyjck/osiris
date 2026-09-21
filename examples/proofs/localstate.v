@@ -107,8 +107,8 @@ Section verification.
 
   Lemma confront_addresses l1 l2 :
     ∀ v1 v2,
-      (l1 ↦ v1) -∗
-      (l2 ↦ v2) -∗
+      (l1 ↦ₗ v1) -∗
+      (l2 ↦ₗ v2) -∗
       ⌜address l1 ≠ address l2⌝.
   Proof.
     iIntros (v1 v2) "Hl1 Hl2".
@@ -147,10 +147,10 @@ Section verification.
     iMod (ghost_var_alloc (# init)) as (γ) "[Hstate Hpoints_to]"; iModIntro.
 
     (* Evaluate allocation of [init] *)
-    iApply (imp_ELet_var (λ l, l ↦ #init)%I).
+    iApply (imp_ELet_var (λ (l : record), l ↦ #init)%I).
 
     (* Evaluating the let-bound expression *)
-    { (* Allocate a new location with value [init] *)
+    { (* Allocate a new reference with value [init] *)
       imp_ref. }
 
     (* Continuing with the rest of the computation *)

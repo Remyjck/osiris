@@ -6,9 +6,9 @@ Require Import UnionFind01Data UnionFind02EmptyCreate UnionFind03Link UnionFind0
 
 From Stdlib Require Import FunctionalExtensionality.
 
-(* An object in the Union Find data structure is represented by an
-   heap_lang location. *)
-Abbreviation elem := loc.
+(* An object in the Union Find data structure is represented by a
+   reference, that is, a one-field mutable record. *)
+Abbreviation elem := record.
 
 Record link `{Encode A} : Type := { parent : elem }.
 Record root `{Encode A} : Type := { rank : Z; value : A }.
@@ -465,8 +465,8 @@ Proof.
   destruct (M !! x) as [c|] eqn:Heq; [|done].
   iExFalso.
   iDestruct (big_sepM_lookup with "HM") as "[Hx' _]"; [exact Heq|].
-  iCombine "Hx Hx'" gives %Hbad.
-  destruct Hbad as [Hbad _]. exfalso; eapply dfrac_full_exclusive; exact Hbad.
+  iDestruct (ref_pointsto_valid_2 with "Hx Hx'") as %[Hbad _].
+  exfalso; eapply dfrac_full_exclusive; exact Hbad.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -544,6 +544,18 @@ Proof.
   iIntros "Hv". iApply ("HM" with "Hv").
 Qed.
 
+(* Every vertex is a reference; physical equality needs to know it. *)
+
+Lemma pointsto_M_is_ref M x :
+  x ∈ dom M ->
+  pointsto_M M -∗ is_ref x ∗ pointsto_M M.
+Proof.
+  intros [[lr lc] Hx]%elem_of_dom. iIntros "HM".
+  iDestruct (pointsto_M_acc_same _ _ _ _ Hx with "HM") as "([Hx Hrec] & Hback)".
+  iDestruct (ref_pointsto_is_ref with "Hx") as "[#$ Hx]".
+  iApply "Hback". iFrame.
+Qed.
+
 (* A generic two-key variant of [big_sepM_insert_acc]: simultaneous access
    to two distinct entries, with a wand to put both back.
    Needed for expressions like [!x, !y] that read both sides "in parallel". *)
@@ -602,12 +614,12 @@ Qed.
 Lemma imp_vertex_load {η E Ψ ζ} x lr lc (e : expr) :
   vertex x lr lc -∗
   impure E (eval η e) Ψ ζ (λ l', ⌜l' = x⌝) -∗
-  impure E (eval η (ELoad e)) Ψ ζ
+  impure E (eval η (ERecordAccess e 0)) Ψ ζ
     (λ v : val, ⌜v = content_of lr lc⌝ ∗ vertex x lr lc).
 Proof.
   iIntros "[Hx Hrec] He".
   iApply (imp_wand with "[Hx He]").
-  { iApply (imp_ELoad (A:=val) with "Hx He"). }
+  { iApply (imp_deref (A:=val) with "Hx He"). }
   iIntros (c) "[-> Hx]". by iFrame.
 Qed.
 
@@ -841,7 +853,7 @@ Lemma find_spec_inductive η :
   (* [fun_spec.] disambiguates the program-logic (iProp-valued) predicate
      from its pure-logic (Prop-valued) namesake. *)
   fun_spec.predicate_over_function_body τ[elem] find_spec' η
-      (EAnonFun (AnonFun "x" (EMatch (ELoad (EPath ["x"])) __find_branches))).
+      (EAnonFun (AnonFun "x" (EMatch (ERecordAccess (EPath ["x"]) 0%Z) __find_branches))).
 Proof.
   iIntros "#IH".
   iIntros (e).
@@ -898,6 +910,11 @@ Proof.
       iApply ("Hm" with "[%//] [%//] [%//] [%//] HM"). }
     simpl.
     iIntros (z) "(%M2' & -> & %Hskel & HM' & %HMem')".
+    (* Comparing [R y] with [y] needs both to be references. *)
+    iDestruct (pointsto_M_is_ref _ y with "HM'") as "[#Hy HM']".
+    { rewrite (proj1 HMem'). exact HyD. }
+    iDestruct (pointsto_M_is_ref _ (R y) with "HM'") as "[#HRy HM']".
+    { rewrite (proj1 HMem'). destruct HInv. eapply sticky_R; eauto. }
 
     (* The recursion never touches [e] ([e] is not reachable from [y]), so [e]
        is still a [Link] to [y] in the returned [M2'], with the same record
@@ -913,7 +930,10 @@ Proof.
     imp_if.
     { set_postcondition (λ b, ⌜b = negb (locations.eqb (R y) y)⌝)%I.
       iApply imp_EBoolNeg.
-      iApply (imp_EOpPhysEq_loc with "[] []"); [imp_path|imp_path|].
+      iApply (imp_EOpPhysEq_ref _ _ _ (λ r, ⌜r = R y⌝)%I (λ r, ⌜r = y⌝)%I
+        with "[] []").
+      { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
+      { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
       iIntros "!>" (l1 l2) "-> -> //". }
 
     + (* [R y ≠ y]: perform [link.parent <- R y]. *)
@@ -1140,12 +1160,23 @@ Proof.
     iIntros "Hm". iApply ("Hm" with "[$HUF //]"). }
   iIntros (?) "(-> & HUF)".
 
+  (* Comparing [R x] with [R y] needs both to be references. *)
+  iAssert (is_ref (R x) ∗ is_ref (R y))%I as "#[HRx HRy]".
+  { iDestruct "HUF" as (F M HI HM) "HM".
+    assert (R x ∈ dom M ∧ R y ∈ dom M) as [HRxM HRyM].
+    { rewrite (proj1 HM). destruct HI. split; eapply sticky_R; eauto. }
+    iDestruct (pointsto_M_is_ref _ _ HRxM with "HM") as "[$ HM]".
+    iDestruct (pointsto_M_is_ref _ _ HRyM with "HM") as "[$ HM]". }
   imp_if.
   { set_postcondition (λ b, ⌜b = locations.eqb (R x) (R y)⌝)%I.
-    iApply imp_EOpPhysEq_loc; [imp_path|imp_path|].
+    iApply (imp_EOpPhysEq_ref _ _ _ (λ r, ⌜r = R x⌝)%I (λ r, ⌜r = R y⌝)%I
+      with "[] []").
+    { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
+    { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
     iIntros "!>" (??) "-> -> //". }
 
   { iIntros "%Heq".
+    iClear "HRx HRy".
     imp_path.
     iSplit; last (iPureIntro; tauto).
     iDestruct "HUF" as "(%F & %M & %HI & %HM & Hpts)".

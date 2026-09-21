@@ -68,8 +68,8 @@ Definition array :=
 Definition record :=
   tc_opaque loc.
 
-(* Prophecy identifiers. A prophecy reserves a heap cell, so that its
-   identifier is fresh, but it is never read or written. *)
+(* Prophecy identifiers. They live apart from the heap: the program logic
+   tracks which ones are in use. *)
 
 Definition proph_id :=
   tc_opaque loc.
@@ -342,17 +342,16 @@ Inductive expr :=
      [let open M in e]. *)
   | ELetSitem (struct : sitem) (e : expr)
 
-  (* Reference allocation: [ref e]. *)
-  | ERef (e : expr)
-  (* Reference lookup: [!e]. *)
+  (* Atomic operations on a field location (see [EAtomicLoc]). References
+     are mutable records with one field, so [ref e], [!e] and [e1 := e2]
+     are [ERecord], [ERecordAccess] and [ERecordSet] at field [0]. *)
+  (* Load: [Atomic.Loc.get e]. *)
   | ELoad (e : expr)
-  (* Reference assignment: [e1 := e2]. *)
-  | EStore (e1 e2: expr)
-  (* Exchange: [Atomic.exchange e1 e2]. *)
+  (* Exchange: [Atomic.Loc.exchange e1 e2]. *)
   | EExchange (e1 e2 : expr)
-  (* Compare-and-set: [Atomic.compare_and_set e1 e2 e3]. *)
+  (* Compare-and-set: [Atomic.Loc.compare_and_set e1 e2 e3]. *)
   | ECAS (e1 e2 e3 : expr)
-  (* Fetch-and-add: [Atomic.fetch_and_add e1 e2]. *)
+  (* Fetch-and-add: [Atomic.Loc.fetch_and_add e1 e2]. *)
   | EFAA (e1 e2 : expr)
 
   (* Allocating a prophecy variable: [Proph.create ()]. *)

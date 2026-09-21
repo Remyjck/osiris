@@ -406,7 +406,7 @@ Lemma uf_inv_split γ z j lzi lzc :
   ◇ ∃ (c : content) (D : gset elem) (R : elem → elem) (V : elem → val),
     ⌜z ∈ D⌝ ∗
     UF γ D R V ∗
-    ▷ (lzc ↦ #c) ∗
+    ▷ (lzc ↦ₗ #c) ∗
     ▷ cell_own γ R V z j c ∗
     ▷ uf_frame γ z j D R V.
 Proof.
@@ -433,7 +433,7 @@ Qed.
 Lemma uf_inv_reassemble γ z j lzi lzc c' D R V :
   UF γ D R V -∗
   blockLocs z [lzi; lzc] -∗
-  lzc ↦ #c' -∗
+  lzc ↦ₗ #c' -∗
   cell_own γ R V z j c' -∗
   uf_frame γ z j D R V -∗
   uf_inv γ.
@@ -460,9 +460,9 @@ Lemma uf_inv_acc γ z j lzi lzc :
   ◇ ∃ c D R V,
     ⌜z ∈ D⌝ ∗
     UF γ D R V ∗
-    ▷ (lzc ↦ #c) ∗
+    ▷ (lzc ↦ₗ #c) ∗
     ▷ cell_own γ R V z j c ∗
-    ▷ (UF γ D R V -∗ lzc ↦ #c -∗ cell_own γ R V z j c -∗ uf_inv γ).
+    ▷ (UF γ D R V -∗ lzc ↦ₗ #c -∗ cell_own γ R V z j c -∗ uf_inv γ).
 Proof.
   iIntros "#Hzfrag #Hzlocs Hinv".
   iPoseProof (uf_inv_split with "Hzfrag Hzlocs Hinv") as (c D R V)
@@ -485,7 +485,7 @@ Definition uf_close (γ : uf_names) (z : elem) (j : Z) (lzc : locations.loc)
     ⌜∀ w, w ∈ dom M → w ≠ z → (R' w = w ↔ R w = w)⌝ -∗
     ⌜∀ w, w ∈ dom M → w ≠ z → R w = w → V' w = V w⌝ -∗
     UF γ (dom M) R' V' -∗
-    lzc ↦ #c' -∗
+    lzc ↦ₗ #c' -∗
     cell_own γ R' V' z j c' -∗
     uf_inv γ.
 
@@ -547,7 +547,7 @@ Lemma uf_inv_acc_update γ z j lzi lzc (y : elem) (k : Z) :
     ⌜M !! z = Some j⌝ ∗ ⌜M !! y = Some k⌝ ∗
     ⌜uf_repr M R⌝ ∗ ⌜∀ x, V x = V (R x)⌝ ∗
     UF γ (dom M) R V ∗
-    ▷ (lzc ↦ #c) ∗
+    ▷ (lzc ↦ₗ #c) ∗
     ▷ cell_own γ R V z j c ∗
     ▷ (uf_close γ z j lzc M R V
        ∧ (∀ (rc : record) (lp : locations.loc),
@@ -589,7 +589,7 @@ Lemma uf_close_id γ z j lzc M R V c :
   uf_repr M R →
   (∀ x, V x = V (R x)) →
   uf_close γ z j lzc M R V -∗
-  UF γ (dom M) R V -∗ lzc ↦ #c -∗ cell_own γ R V z j c -∗ uf_inv γ.
+  UF γ (dom M) R V -∗ lzc ↦ₗ #c -∗ cell_own γ R V z j c -∗ uf_inv γ.
 Proof.
   iIntros (HR HV) "Hclose HUF Hlc Hcell".
   iApply ("Hclose" with "[%] [%] [%] [%] HUF Hlc Hcell"); [done | done | | ].
@@ -617,7 +617,7 @@ Lemma uf_close_link γ z j lzc M R V (y : elem) k rc lp :
   R z = z →
   uf_close γ z j lzc M R V -∗
   UF γ (dom M) R.[z -/R/> R y] V.[z -/R/> V y] -∗
-  lzc ↦ #(CtLink rc) -∗
+  lzc ↦ₗ #(CtLink rc) -∗
   linked γ z rc lp -∗
   link_field γ rc lp z j -∗
   uf_inv γ.
@@ -663,7 +663,7 @@ Lemma uf_close_set γ z j lzc M R V rc (v : val) :
   R z = z →
   uf_close γ z j lzc M R V -∗
   UF γ (dom M) R V.[z -/R/> v] -∗
-  lzc ↦ #(CtRoot rc) -∗
+  lzc ↦ₗ #(CtRoot rc) -∗
   z ↪[γ.(uf_link)] None -∗
   root_val rc v -∗
   uf_inv γ.
@@ -867,7 +867,7 @@ Lemma uf_vertex_content_acc γ z i lzi lzc (Φ : content → iProp Σ) :
   blockLocs z [lzi; lzc] -∗
   ▷ (∀ c : content, content_info γ z c -∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
-    ▷ (lzc ↦ #c) ∗ ▷ (lzc ↦ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
+    ▷ (lzc ↦ₗ #c) ∗ ▷ (lzc ↦ₗ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
 Proof.
   iIntros "#Hinv #Hz #Hzlocs HΦ".
   iDestruct (vertex_frag with "Hz") as "#Hzfrag".
@@ -892,7 +892,7 @@ Lemma uf_vertex_content_acc_linked γ z j lzi lzc rc lp (Φ : content → iProp 
   linked γ z rc lp -∗
   ▷ (∀ c : content, ⌜c = CtLink rc⌝ -∗ content_info γ z c -∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
-    ▷ (lzc ↦ #c) ∗ ▷ (lzc ↦ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
+    ▷ (lzc ↦ₗ #c) ∗ ▷ (lzc ↦ₗ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
 Proof.
   iIntros "#Hinv #Hz #Hzlocs #Hlk HΦ".
   iDestruct (vertex_frag with "Hz") as "#Hzfrag".
@@ -921,7 +921,7 @@ Lemma uf_vertex_content_acc_or_linked γ z j lzi lzc (P Q : iProp Σ)
   ▷ (∀ c : content, content_info γ z c -∗
        (P ∨ ⌜content_root c = false⌝ ∗ Q) -∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
-    ▷ (lzc ↦ #c) ∗ ▷ (lzc ↦ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
+    ▷ (lzc ↦ₗ #c) ∗ ▷ (lzc ↦ₗ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
 Proof.
   iIntros "#Hinv #Hz #Hzlocs HPQ HΦ".
   iDestruct (vertex_frag with "Hz") as "#Hzfrag".
@@ -965,7 +965,7 @@ Lemma uf_find_content_acc γ (z : elem) j lzi lzc
        content_val V z c -∗
        UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Φ c) -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ c : content,
-    ▷ (lzc ↦ #c) ∗ ▷ (lzc ↦ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
+    ▷ (lzc ↦ₗ #c) ∗ ▷ (lzc ↦ₗ #c -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ c).
 Proof.
   iIntros "#Hinv #Hzfrag #Hzlocs HΦ".
   iInv "Hinv" as "H" "Hclose".
@@ -1048,10 +1048,10 @@ Lemma uf_link_field_acc γ h ih rc lp :
   vertex γ h ih -∗
   linked γ h rc lp -∗
   |={⊤,⊤ ∖ ↑ufN}=> ∃ (y : elem) jy,
-    ▷ (lp ↦ #y) ∗
+    ▷ (lp ↦ₗ #y) ∗
     ▷ (vertex γ y jy ∗ same_class γ h y ∗ ⌜(jy < ih)%Z⌝) ∗
     (∀ (z : elem) k, ⌜(k < ih)%Z⌝ -∗ vertex γ z k -∗ same_class γ h z -∗
-       lp ↦ #z -∗ |={⊤ ∖ ↑ufN,⊤}=> True).
+       lp ↦ₗ #z -∗ |={⊤ ∖ ↑ufN,⊤}=> True).
 Proof.
   iIntros "#Hinv #Hh #Hlk".
   iDestruct (vertex_frag with "Hh") as "#Hhfrag".
@@ -1087,7 +1087,7 @@ Lemma uf_link_parent_acc γ h ih rc lp (Φ : elem → iProp Σ) :
   vertex γ h ih -∗
   linked γ h rc lp -∗
   ▷ (∀ (y : elem) j, ⌜(j < ih)%Z⌝ -∗ same_class γ h y -∗ vertex γ y j -∗ Φ y) -∗
-  |={⊤,⊤ ∖ ↑ufN}=> ∃ y : elem, ▷ lp ↦ #y ∗ ▷ (lp ↦ #y -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ y).
+  |={⊤,⊤ ∖ ↑ufN}=> ∃ y : elem, ▷ lp ↦ₗ #y ∗ ▷ (lp ↦ₗ #y -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ y).
 Proof.
   iIntros "#Hinv #Hh #Hlk HΦ".
   iMod (uf_link_field_acc with "Hinv Hh Hlk")
@@ -1112,7 +1112,7 @@ Lemma uf_link_parent_set γ h ih rc lp (z : elem) k (Φ : iProp Σ) :
   vertex γ z k -∗
   same_class γ h z -∗
   ▷ Φ -∗
-  |={⊤,⊤ ∖ ↑ufN}=> ∃ w, ▷ lp ↦ w ∗ ▷ (lp ↦ #z -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ).
+  |={⊤,⊤ ∖ ↑ufN}=> ∃ w, ▷ lp ↦ₗ w ∗ ▷ (lp ↦ₗ #z -∗ |={⊤ ∖ ↑ufN,⊤}=> Φ).
 Proof.
   iIntros (Hk) "#Hinv #Hh #Hlk #Hz #Hhz HΦ".
   iMod (uf_link_field_acc with "Hinv Hh Hlk")
@@ -1173,8 +1173,8 @@ Lemma uf_cas_link_fupd γ (a b : elem) ia ib lac
        (if res then Ψ else P ∗ rcn ⤇ {| link_parent := b |}) -∗ Φ res) -∗
   |={⊤,⊤ ∖ ↑ufN}=>
     ∃ (c : content) dq1 dq2 t,
-      ▷ lac ↦ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
-      ▷ (lac ↦ #(if locations.eqb (content_loc c) rce then CtLink rcn else c) -∗
+      ▷ lac ↦ₗ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
+      ▷ (lac ↦ₗ #(if locations.eqb (content_loc c) rce then CtLink rcn else c) -∗
          blockTag (content_loc c) dq1 t -∗ blockTag rce dq2 Mut -∗
          |={⊤ ∖ ↑ufN,⊤}=> Φ (locations.eqb (content_loc c) rce)).
 Proof.
@@ -1278,8 +1278,8 @@ Lemma uf_cas_set_fupd γ (x : elem) i lxc
        (if res then Ψ else P ∗ rcn ⤇ {| root_value := v |}) -∗ Φ res) -∗
   |={⊤,⊤ ∖ ↑ufN}=>
     ∃ c dq1 dq2 t,
-      ▷ lxc ↦ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
-      ▷ (lxc ↦ #(if locations.eqb (content_loc c) rce then CtRoot rcn else c) -∗
+      ▷ lxc ↦ₗ #c ∗ ▷ blockTag (content_loc c) dq1 t ∗ ▷ blockTag rce dq2 Mut ∗
+      ▷ (lxc ↦ₗ #(if locations.eqb (content_loc c) rce then CtRoot rcn else c) -∗
          blockTag (content_loc c) dq1 t -∗ blockTag rce dq2 Mut -∗
          |={⊤ ∖ ↑ufN,⊤}=> Φ (locations.eqb (content_loc c) rce)).
 Proof.

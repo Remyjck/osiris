@@ -905,7 +905,7 @@ Section fold_left_spec.
     iApply imp_please; iNext.
 
     (* let r = ref x in ... *)
-    iApply (imp_ELet_var (B:=loc)).
+    iApply (imp_ELet_var (B:=record)).
     { imp_ref x. }
     iIntros (r) "Hr".
 
@@ -933,7 +933,7 @@ Section fold_left_spec.
       set_postcondition
         (λ (_ : unit), ∃ x X, ⌜Xs ++ singleton X `prefix_of` xs⌝ ∗
                               r ↦ #x ∗ a ↦∗[0]{dq} xs ∗ I x (Xs ++ singleton X))%I.
-      - iApply (imp_EStore2 (A:=A) with "[] [Hr HI Hslice]").
+      - iApply (imp_assign2 (A:=A) with "[] [Hr HI Hslice]").
         imp_path.
         + (* f !r (unsafe_get a i) *)
           set_postcondition
@@ -960,7 +960,7 @@ Section fold_left_spec.
         iFrame. iPureIntro; length; lia. }
 
     iIntros "(Hslice & %acc' & %Xs & Hr & HI & %HlenXs & %Hprefix)".
-    iApply (imp_wand with "[Hr]"). { imp_load r. }
+    iApply (imp_wand with "[Hr]"). { imp_step. }
     iIntros (?) "(-> & Hr)".
     rewrite (complete_prefix Xs xs); [ | lia | assumption ].
     iFrame "HI".

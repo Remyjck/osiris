@@ -7,10 +7,11 @@ From osiris.examples Require Import og_spinlock.
 
     We follow the CMRA from Iris' [spin_lock] example, where we have:
 
-    – [lock_inv γ l R]: the physical lock bit together with the user
-      resource [R] and an exclusive token; the resource lives behind [▷].
-    – [is_lock γ l R ≔ inv N (lock_inv γ l R)]: a *persistent* handle
-      handed to every caller.
+    – [lock_inv γ r R]: the lock bit, an [Atomic.t] (a reference [r]),
+      together with the user resource [R] and an exclusive token; the
+      resource lives behind [▷].
+    – [is_lock γ r R ≔ is_ref r ∗ inv N (lock_inv γ r R)]: a *persistent*
+      handle handed to every caller.
     – [locked γ ≔ token γ]: the exclusive ghost token held by the holder.
  *)
 
@@ -26,11 +27,13 @@ Context `{!osirisGS Σ, !na_invG Σ}.
 
 (** Invariant content.  When the lock is free ([b = false]) it stores
     [token γ ∗ ▷R]; the [▷] absorbs the later introduced by [iInv]. *)
-Definition lock_inv (γ : gname) (l : loc) (R : iProp Σ) : iProp Σ :=
-  l ↦ #true ∨ (l ↦ #false ∗ token γ ∗ ▷R).
+Definition lock_inv (γ : gname) (r : record) (R : iProp Σ) : iProp Σ :=
+  r ↦ #true ∨ (r ↦ #false ∗ token γ ∗ ▷R).
 
-Definition is_lock (γ : gname) (l : loc) (R : iProp Σ) : iProp Σ :=
-  inv spinlock_N (lock_inv γ l R).
+(* [is_ref r] is kept outside the invariant: the CAS and the store find the
+   field of [r] in a step of their own, before the atomic one. *)
+Definition is_lock (γ : gname) (r : record) (R : iProp Σ) : iProp Σ :=
+  is_ref r ∗ inv spinlock_N (lock_inv γ r R).
 
 Definition locked (γ : gname) : iProp Σ := token γ.
 
@@ -38,23 +41,23 @@ Definition locked (γ : gname) : iProp Σ := token γ.
 (* Specifications *)
 
 
-(* [create ()] allocates [ref false] and exposes the lock.  The caller
-   may initialise it with any [▷R] to receive [is_lock γ l R]. *)
+(* [create ()] allocates [Atomic.make false] and exposes the lock.  The
+   caller may initialise it with any [▷R] to receive [is_lock γ r R]. *)
 Definition create_spec create : iProp Σ :=
   {{ True }}
   create u : unit
-  {{ RET (l : loc); ∀ (R : iProp Σ), ▷R ={⊤}=∗ ∃ γ, is_lock γ l R }}.
+  {{ RET (r : record); ∀ (R : iProp Σ), ▷R ={⊤}=∗ ∃ γ, is_lock γ r R }}.
 
 (* Acquiring the lock transfers ownership of [locked γ] and [▷R]. *)
 Definition acquire_spec acquire : iProp Σ :=
-  {{ ∀ γ (R : iProp Σ); is_lock γ l R }}
-  acquire l : loc
+  {{ ∀ γ (R : iProp Σ); is_lock γ r R }}
+  acquire r : record
   {{ RET (_ : unit); locked γ ∗ ▷R }}.
 
 (* Releasing requires the holder to give back [locked γ] and [▷R]. *)
 Definition release_spec release : iProp Σ :=
-  {{ ∀ γ (R : iProp Σ); is_lock γ l R ∗ locked γ ∗ ▷R }}
-  release l : loc
+  {{ ∀ γ (R : iProp Σ); is_lock γ r R ∗ locked γ ∗ ▷R }}
+  release r : record
   {{ RET (_ : unit); True }}.
 
 (* ------------------------------------------------------------------ *)
@@ -71,7 +74,7 @@ Proof.
   iApply imp_module.
 
   (* ------------------------------------------------------------------ *)
-  (* Subgoal: [let create () = ref false] *)
+  (* Subgoal: [let create () = Atomic.make false] *)
 
   iApply (imp_sitems_let create_spec).
   { unfold create_spec.
@@ -79,42 +82,44 @@ Proof.
     iIntros "!>" ([]) "_".
     iApply imp_please; iNext.
     imp_match.
-    (* After [ref false] we have [l ↦ #false]; use it to build the invariant. *)
+    (* After [Atomic.make false] we have [r ↦ #false]; use it to build the
+       invariant. *)
     iApply (imp_wand).
     { imp_ref false. }
-    iIntros (l) "Hl".
-    (* Goal: ∀ R, ▷R ={⊤}=∗ ∃ γ, is_lock γ l R *)
+    iIntros (r) "Hr".
+    iDestruct (ref_pointsto_is_ref with "Hr") as "[#Href Hr]".
+    (* Goal: ∀ R, ▷R ={⊤}=∗ ∃ γ, is_lock γ r R *)
     iIntros (R) "HR".
     iMod token_alloc as "(%γ & Htok)".
-    iMod (inv_alloc spinlock_N _ (lock_inv γ l R) with "[Hl Htok HR]") as "#Hinv".
-    { (* Provide ▷ (lock_inv γ l R) with b = false via [later_intro]. *)
+    iMod (inv_alloc spinlock_N _ (lock_inv γ r R) with "[Hr Htok HR]") as "#Hinv".
+    { (* Provide ▷ (lock_inv γ r R) with b = false via [later_intro]. *)
       iNext. iRight. iFrame. }
-    iModIntro. iExists γ. iExact "Hinv". }
+    iModIntro. iExists γ. iFrame "#". }
 
   iIntros (create) "#Hcreate".
 
   (* ------------------------------------------------------------------ *)
-  (* Subgoal: [let acquire lk = while !lk do () done; lk := true] *)
+  (* Subgoal: [let acquire lk = while not (Atomic.compare_and_set lk false true) do () done] *)
 
   iApply (imp_sitems_let acquire_spec).
   { unfold acquire_spec.
-    iApply (imp_EAnon_pers τ[loc]).
-    (* After introducing [l : loc], the spec universally quantifies over [γ] and
-       [R]; we introduce them here. *)
-    iIntros "!>" (l).
-    iIntros (γ R) "#Hinv".
+    iApply (imp_EAnon_pers τ[record]).
+    (* After introducing [r : record], the spec universally quantifies over
+       [γ] and [R]; we introduce them here. *)
+    iIntros "!>" (r).
+    iIntros (γ R) "#[Href Hinv]".
     iApply imp_please; iNext.
 
-    (* Subgoal: [while not (Atomic.set_and_compare lk false true) do () done] *)
+    (* Subgoal: [while not (Atomic.compare_and_set lk false true) do () done] *)
     iApply (imp_EWhile (λ b, if b then True else locked γ ∗ ▷ R)%I).
     - (* I true *)
       done.
-    - (* Condition: load [!lk] directly from [l ↦ #b'] *)
+    - (* Condition: the CAS on the field of [r] *)
       iIntros "!> _".
       iApply imp_EBoolNeg.
 
-      iApply (imp_CAS_inv (A:=bool) with "Hinv"); try imp_step. set_solver.
-      iIntros "!>" (???) "-> -> -> [Hl | (Hl & Htok & HR) ]".
+      iApply (imp_CAS_ref_inv (A:=bool) with "Hinv Href"); try imp_step. set_solver.
+      iIntros "!>" (??) "-> -> [Hl | (Hl & Htok & HR) ]".
 
       + (* Subcase: the CAS returned true. *)
         iFrame.
@@ -136,14 +141,14 @@ Proof.
   (* Subgoal: [let release lk = lk := false] *)
   iApply (imp_sitems_let release_spec).
   { unfold release_spec.
-    iApply (imp_EAnon_pers τ[loc]).
-    iIntros "!>" (l).
-    iIntros (γ R) "(#Hinv & Htok & HR)".
+    iApply (imp_EAnon_pers τ[record]).
+    iIntros "!>" (r).
+    iIntros (γ R) "(#[Href Hinv] & Htok & HR)".
     iApply imp_please; iNext.
-    (* Open invariant non-atomically: get [l ↦ #b] in hand, store [false],
-       then close with [l ↦ #false ∗ token γ ∗ ▷R]. *)
-    iApply (imp_store_inv (A:=bool) with "Hinv"); try imp_step. set_solver.
-    iIntros "!>" (??) "-> -> Hopened".
+    (* Open the invariant around the store: get [r ↦ #b] in hand, store
+       [false], then close with [r ↦ #false ∗ token γ ∗ ▷R]. *)
+    iApply (imp_assign_inv (A:=bool) with "Hinv Href"); try imp_step. set_solver.
+    iIntros "!>" (?) "-> Hopened".
     iDestruct "Hopened" as "[ $ | ($ & >Htok' & HR') ]".
     - iIntros "!> Hl".
       iSplitL. { iRight. iFrame. }

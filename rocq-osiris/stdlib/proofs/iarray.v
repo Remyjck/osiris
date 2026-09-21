@@ -11,7 +11,7 @@ Section iarray_resources.
   Context `{!osirisGS Σ}.
 
   Definition owniArray `{Encode A} (a : iarray) (xs : list A) : iProp Σ :=
-    ∃ ls, blockLocs a ls ∗ [∗ listZ] l;x ∈ ls; xs, l ↦□ #x.
+    ∃ ls, blockLocs a ls ∗ [∗ listZ] l;x ∈ ls; xs, l ↦ₗ□ #x.
 
   Global Instance blockLocs_pers' (a : iarray) ls : Persistent (blockLocs a ls).
   Proof. apply _. Qed.

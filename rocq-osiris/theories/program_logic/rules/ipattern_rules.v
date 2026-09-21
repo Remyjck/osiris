@@ -220,9 +220,9 @@ Section ipattern.
   (* Reading all the fields of a block. *)
 
   Lemma imp_loadn {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) :
-    ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
+    ([∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v) -∗
     EWP (loadn ls) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),
-        ⌜vs' = vs⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦{dq} v }}.
+        ⌜vs' = vs⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v }}.
   Proof.
     iInduction ls as [|l ls] "IH" forall (vs); iIntros "Hls"; simpl.
     - iDestruct (big_sepLZ2_nil_inv_l with "Hls") as %->.
@@ -241,9 +241,9 @@ Section ipattern.
 
   Lemma imp_loadfs {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) fps :
     Forall (λ fp, valid fp.1 ls) fps →
-    ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
+    ([∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v) -∗
     EWP (loadfs ls fps) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),
-        ⌜vs' = fvals vs fps⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦{dq} v }}.
+        ⌜vs' = fvals vs fps⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v }}.
   Proof.
     iIntros (Hvalid) "Hls".
     iInduction fps as [|[f p] fps] "IH"; simpl.

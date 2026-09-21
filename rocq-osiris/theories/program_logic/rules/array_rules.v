@@ -22,7 +22,7 @@ Section array_resources.
   Definition isSlice `{Encode A} a dq (i : Z) (xs : list A) : iProp Σ :=
     ∃ ls, blockLocs a ls ∗
     ⌜0 ≤ i ≤ length ls - length xs⌝ ∗
-    [∗ listZ] l;x ∈ seg i (i + length xs) ls; xs, l ↦{dq} #x.
+    [∗ listZ] l;x ∈ seg i (i + length xs) ls; xs, l ↦ₗ{dq} #x.
 
   Lemma isSlice_blockLocs `{Encode A} a dq i (xs : list A) :
     isSlice a dq i xs -∗ ∃ ls, blockLocs a ls ∗ ⌜0 ≤ i ≤ length ls - length xs⌝.
@@ -69,7 +69,7 @@ Section array_resources.
   Proof.
     iIntros "(%ls & #Hblock & %Hbound & Hpts)".
     iMod (big_opLZ.big_sepLZ2_fupd E
-            (λ (_ : Z) (l : locations.loc) (x : A), (l ↦□ #x)%I)
+            (λ (_ : Z) (l : locations.loc) (x : A), (l ↦ₗ□ #x)%I)
             with "[Hpts]") as "Hpts".
     { iApply (big_opLZ.big_sepLZ2_impl with "Hpts").
       iIntros "!>" (k l x _ _) "Hl".
@@ -193,7 +193,7 @@ Section array_reasoning.
     iFrame "HΦs".
 
     (* Goal: establish [a ↦∗ xs] from [a ⤇{1} Mut arr], [blockLocs a arr],
-       and [∀ l x ∈ arr xs, l ↦ #x ]. *)
+       and [∀ l x ∈ arr xs, l ↦ₗ #x ]. *)
     iApply (isSlice_ownArray with "Harr Ha [Hls] [//]").
     iFrame "Harr". seg. iFrame "Hls".
     iPureIntro; lia.
@@ -316,8 +316,8 @@ Section array_reasoning.
     j ≤ i < j + length xs →
     a ↦∗[j] xs -∗
     blockLocs a ls -∗
-    (ls !!! i) ↦ #(xs !!! (i - j)) ∗
-    (∀ y, (ls !!! i) ↦ #y -∗ a ↦∗[j] <[i - j := y]> xs).
+    (ls !!! i) ↦ₗ #(xs !!! (i - j)) ∗
+    (∀ y, (ls !!! i) ↦ₗ #y -∗ a ↦∗[j] <[i - j := y]> xs).
   Proof.
     iIntros "%Hbound_i Hslice #Hblock".
     iDestruct "Hslice" as "(% & #Hblock' & %Hbounds & Hseg)".
@@ -334,8 +334,8 @@ Section array_reasoning.
     j ≤ i < j + length xs →
     a ↦∗[j]{dq} xs -∗
     blockLocs a ls -∗
-    (ls !!! i) ↦{dq} #(xs !!! (i - j)) ∗
-    ((ls !!! i) ↦{dq} #(xs !!! (i - j)) -∗ a ↦∗[j]{dq} xs).
+    (ls !!! i) ↦ₗ{dq} #(xs !!! (i - j)) ∗
+    ((ls !!! i) ↦ₗ{dq} #(xs !!! (i - j)) -∗ a ↦∗[j]{dq} xs).
   Proof.
     iIntros "%Hbound_i Hslice #Hblock".
     iDestruct "Hslice" as "(% & #Hblock' & %Hbounds & Hseg)".

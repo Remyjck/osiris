@@ -160,7 +160,7 @@ Section imp_eval.
   Qed.
 
   Lemma imp_sitems_extend sitems x Q η δ :
-    (∀ l, l ↦ #() -∗
+    (∀ l, l ↦ₗ #() -∗
           EWP eval_sitems ((x, #l) :: η, (x, #l) :: δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
     EWP eval_sitems (η,δ) ((IExtend [x]) :: sitems) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}.
   Proof.
@@ -171,7 +171,7 @@ Section imp_eval.
       iIntros (l) "Hl"; simpl; iApply imp_ret. reflexivity.
       Unshelve.
       2: (apply (λ ηδ,
-                   (∃ l, ⌜ηδ = ((x, #l) :: η, (x, #l):: δ)⌝ ∗ l ↦ VUnit)%I)).
+                   (∃ l, ⌜ηδ = ((x, #l) :: η, (x, #l):: δ)⌝ ∗ l ↦ₗ VUnit)%I)).
       simpl.
       iExists l; iFrame. iPureIntro; reflexivity. }
     iIntros ([??]) "(% & -> & Hl)".
@@ -219,7 +219,7 @@ Section imp_eval.
   Qed.
 
   Lemma imp_type_extension_cons e es Q :
-    ▷ (∀ l, l ↦ #() -∗
+    ▷ (∀ l, l ↦ₗ #() -∗
             EWP eval_type_extensions es @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ δ, Q ((e, #l) :: δ) }}) -∗
     EWP eval_type_extensions (e :: es) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}.
   Proof.

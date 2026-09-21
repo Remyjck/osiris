@@ -727,11 +727,18 @@ Qed.
 
 (** ** The computation under a resolution. *)
 
-Definition eval_resolved (η : env) (e : expr) (p : loc) (v : val) : microvx :=
+Definition eval_resolved (η : env) (e : expr) (p : proph_id) (v : val) : microvx :=
   match e with
   | ELoad e1 =>
       l ← as_loc (eval η e1) ;
       resolve CLoad l p v
+  | ERecordAccess e1 f =>
+      r ← as_record (eval η e1) ;
+      '(_, ls) ← load_block r ;
+      match ls !! f with
+      | Some l => resolve CLoad l p v
+      | None => Crash
+      end
   | EExchange e1 e2 =>
       '(l, w) ← pair_op LiberalStrategy.fun_app_order
                   (as_loc (eval η e1)) (eval η e2) ;
@@ -1097,10 +1104,16 @@ Proof.
     eapply erase_bind; [ apply erase_update | ]; intros []; ee_pair;
     eapply erase_bind; [ apply erase_alloc_block | ]; intros l; ee_pair; ee_ret.
   - (* ERecordAccess *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_as_record, IHe0 | ]; intros r; ee_pair;
-    eapply erase_bind; [ apply erase_load_block | ]; intros [ t ls ]; ee_pair;
-    destruct (ls !! f); [ apply erase_load | apply EM_Crash ].
+    simpl_eval.
+    split.
+    + intros η.
+      eapply erase_bind; [ apply erase_as_record, IHe0 | ]; intros r; ee_pair;
+      eapply erase_bind; [ apply erase_load_block | ]; intros [ t ls ]; ee_pair;
+      destruct (ls !! f); [ apply erase_load | apply EM_Crash ].
+    + intros η p v. cbn beta iota delta [ eval_resolved ].
+      eapply erase_bind; [ apply erase_as_record, IHe0 | ]; intros r; ee_pair;
+      eapply erase_bind; [ apply erase_load_block | ]; intros [ t ls ]; ee_pair;
+      destruct (ls !! f); [ apply erase_resolve_load | apply EM_Crash ].
   - (* ERecordSet *)
     simpl_eval;
     eapply erase_bind;
@@ -1374,10 +1387,6 @@ Proof.
     apply IHe0. simpl in IHe0.
     intros (η' & δ). instantiate (1:= λ '(η, δ), (erase_env η, erase_env δ)). simpl.
     apply IHe1.
-  - (* ERef *)
-    simpl_eval;
-    eapply erase_bind; [ apply IHe0 | ]; intros w; ee_pair;
-    eapply erase_bind; [ apply erase_alloc | ]; intros l; ee_pair; ee_ret.
   - (* ELoad *)
     simpl_eval.
     split.
@@ -1387,11 +1396,6 @@ Proof.
     + intros η p v. cbn beta iota delta [ eval_resolved ].
       eapply erase_bind; [ apply erase_as_loc, IHe0 | ]. intros l. ee_pair.
       apply erase_resolve_load.
-  - (* EStore *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par; [ apply erase_as_loc, IHe0_1 | apply IHe0_2 ] | ];
-    intros [ l w ]; ee_pair; apply erase_store_op.
   - (* EExchange *)
     simpl_eval.
     split.

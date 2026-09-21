@@ -495,6 +495,20 @@ Section imp_rules_expr.
     iIntros (b) "->". iApply (imp_ret with "(Hjoin HΦ1 HΦ2)"). encode.
   Qed.
 
+  (* Physical equality of two references (see [field_loc.v]). *)
+  Lemma imp_EOpPhysEq_ref {ζ} η e1 e2 (Φ1 Φ2 : record → iProp Σ) (Φ : bool → iProp Σ) :
+    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ r, Φ1 r ∗ is_ref r }} -∗
+    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ r, Φ2 r ∗ is_ref r }} -∗
+    ▷ (∀ r1 r2, Φ1 r1 -∗ Φ2 r2 -∗ Φ (locations.eqb r1 r2)) -∗
+    EWP eval η (EOpPhysEq e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+  Proof.
+    iIntros "He1 He2 Hk".
+    iApply (imp_EOpPhysEq_record _ _ _ Φ1 Φ2 _ Mut Mut with "[He1] [He2] Hk");
+      first by left.
+    all: iApply (imp_wand with "[-]"); [ iAssumption | ].
+    all: rewrite /is_ref; iIntros (r) "($ & $ & _)".
+  Qed.
+
   (** * EOpEq : expr → expr → expr *)
 
   Lemma imp_EOpEq `{Encode A1, Encode A2} {Φ : bool → iProp Σ} {ζ} η e1 e2 Φ1 Φ2 :
@@ -1083,56 +1097,14 @@ Section imp_rules_expr.
     iApply "He".
   Qed.
 
-  (** * ERef : expr → expr *)
-
-  Lemma imp_ERef2' `{Encode A} {ζ} {Φ'} (Φ : A → iProp Σ) η e :
-    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
-    ▷ (∀ a l, Φ a -∗ l ↦ #a -∗ Φ' l) -∗
-    EWP eval η (ERef e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ' }}.
-  Proof.
-    iIntros "He Hmon". simpl_eval.
-    iApply (imp_bind with "He").
-    iIntros (x) "HΦ".
-    iApply (imp_bind with "[Hmon]").
-    { set_postcondition (λ l, l ↦ #x ∗ _)%I.
-      iApply imp_alloc2.
-      iNext. iIntros (l) "$". iApply "Hmon". }
-    iIntros (l) "(Hl & Hmon) /=".
-    iApply imp_ret; first encode.
-    iApply ("Hmon" with "HΦ Hl").
-  Qed.
-
-  Lemma imp_ERef2 `{Encode A} {ζ} (Φ : A → iProp Σ) η e :
-    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a, ▷ Φ a }} -∗
-    EWP eval η (ERef e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (l : loc), ∃ a, Φ a ∗ l ↦ #a }}.
-  Proof.
-    iIntros "He". simpl_eval.
-    iApply (imp_bind with "He").
-    iIntros (x) "HΦ".
-    iApply (imp_bind with "[HΦ]").
-    { set_postcondition (λ l, l ↦ #x ∗ Φ x)%I.
-      iApply imp_alloc2.
-      iNext. iIntros (l) "$". iApply "HΦ". }
-    iIntros (l) "(Hl & HΦ) /=".
-    iApply imp_ret; first encode.
-    iFrame.
-  Qed.
-
-  Lemma imp_ERef `{Encode A} {ζ} (a : A) η e :
-    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a', ⌜a' = a⌝ }} -∗
-    EWP eval η (ERef e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (l : loc), l ↦ #a }}.
-  Proof.
-    iIntros "He".
-    iApply (imp_wand E _ _ _ (λ l, ∃ a', ⌜a' = a⌝ ∗ l ↦ #a')%I with "[He]").
-    iApply (imp_ERef2 with "[He]"). { iApply (imp_wand with "He"). iIntros (?) "$". }
-    iIntros (l) "(% & -> & $)".
-  Qed.
-
   (** * ELoad : expr → expr *)
+
+  (* [ELoad] reads a field location (see [EAtomicLoc]). The rules for
+     references, which are one-field records, are in [ref_rules.v]. *)
 
   Lemma imp_ELoad2 `{Encode A} {Φ : A → iProp Σ} {ζ} (Φ1 : loc → iProp Σ) η e :
     EWP (eval η e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
-    (∀ l, Φ1 l -∗ ∃ q a, ▷ l ↦{q} #a ∗ ▷ (l ↦{q} #a -∗ Φ a)) -∗
+    (∀ l, Φ1 l -∗ ∃ q a, ▷ l ↦ₗ{q} #a ∗ ▷ (l ↦ₗ{q} #a -∗ Φ a)) -∗
     EWP eval η (ELoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "He P". simpl_eval.
@@ -1145,75 +1117,14 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_ELoad `{Encode A} {ζ} η e l q (a : A) :
-    ▷ l ↦{q} #a -∗
+    ▷ l ↦ₗ{q} #a -∗
     EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
-    EWP eval η (ELoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ v, ⌜v = a⌝ ∗ l ↦{q} #a }}.
+    EWP eval η (ELoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ v, ⌜v = a⌝ ∗ l ↦ₗ{q} #a }}.
   Proof.
     iIntros "Hl He /=".
     iApply (imp_ELoad2 with "He").
     iIntros (?) "->". iFrame.
     iIntros "!> $". auto.
-  Qed.
-
-  (** * EStore : expr → expr → expr *)
-
-  Lemma imp_EStore2' `{Encode A} {Φ : unit → iProp Σ} {ζ} η e1 e2 (Φ1 : loc → iProp Σ) (Φ2 : A → iProp Σ) :
-    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
-    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
-    (∀ l a, Φ1 l -∗ Φ2 a -∗
-      ▷ ∃ v1, l ↦ v1 ∗ ▷ (l ↦ #a -∗ Φ ())) -∗
-    EWP eval η (EStore e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
-  Proof.
-    iIntros "H1 H2 P /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] H2").
-    { iApply (imp_as_loc with "H1"). }
-    iIntros (l x) "H1 H2".
-    iSpecialize ("P" with "H1 H2").
-    iNext. iDestruct "P" as "(%v & Hl & HΦ)".
-    rewrite /continue /=.
-    iApply (imp_store' with "Hl HΦ").
-  Qed.
-
-  Lemma imp_EStore2 `{Encode A} {Φ : unit → iProp Σ} {ζ} (l : loc) η e1 e2 (Φ1 : A → iProp Σ) :
-    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
-    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
-    (∀ y, Φ1 y -∗
-      ▷ ∃ x, l ↦ x ∗ ▷ (l ↦ #y -∗ Φ ())) -∗
-    EWP eval η (EStore e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
-  Proof.
-    iIntros "H1 H2 P /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] H2").
-    { iApply (imp_as_loc with "H1"). }
-    iIntros (l' y) "-> H2".
-    iSpecialize ("P" with "H2").
-    iNext. iDestruct "P" as "(%v & Hl & HΦ)".
-    rewrite /continue /=.
-    iApply (imp_store' with "Hl HΦ").
-  Qed.
-
-  Lemma imp_EStore' `{Encode A} {ζ} {Φ} (Φ' : A → iProp Σ) {η e1 e2} l v :
-    ▷ l ↦ v -∗
-    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
-    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ' }} -∗
-    ▷ (∀ a, Φ' a -∗ l ↦ #a -∗ Φ) -∗
-    EWP eval η (EStore e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), Φ }}.
-  Proof.
-    iIntros "Hl H1 H2 Hcon".
-    iApply (imp_EStore2 with "H1 H2").
-    iIntros (a) "HΦ' !>".
-    iFrame. iIntros "!> Hl".
-    iApply ("Hcon" with "HΦ' Hl").
-  Qed.
-
-  Lemma imp_EStore `{Encode A} {ζ} {η e1 e2} l (x : A) v :
-    ▷ l ↦ v -∗
-    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
-    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ x', ⌜x' = x⌝ }} -∗
-    EWP eval η (EStore e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_ : unit), l ↦ #x }}.
-  Proof.
-    iIntros "Hl H1 H2".
-    iApply (imp_EStore' with "Hl H1 H2").
-    iIntros "!>" (?) "-> $".
   Qed.
 
   (** * ECAS : expr → expr → expr → expr *)
@@ -1224,8 +1135,8 @@ Section imp_rules_expr.
     EWP eval η e3 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ3 }} -∗
     (∀ l seen a,
        Φ1 l -∗ Φ2 seen -∗ Φ3 a -∗
-       ▷ ∃ v1, l ↦ #v1 ∗
-               ▷ (l ↦ (if phys_eq_val_ v1 seen then #a else #v1) -∗ Φ (phys_eq_val_ v1 seen))) -∗
+       ▷ ∃ v1, l ↦ₗ #v1 ∗
+               ▷ (l ↦ₗ (if phys_eq_val_ v1 seen then #a else #v1) -∗ Φ (phys_eq_val_ v1 seen))) -∗
     EWP eval η (ECAS e1 e2 e3) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H1 H2 H3 P /=". simpl_eval.
@@ -1245,8 +1156,8 @@ Section imp_rules_expr.
     EWP eval η e3 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ3 }} -∗
     (∀ seen a,
        Φ2 seen -∗ Φ3 a -∗
-       ▷ ∃ v1, l ↦ #v1 ∗
-               ▷ (l ↦ (if phys_eq_val_ v1 seen then #a else #v1) -∗ Φ (phys_eq_val_ v1 seen))) -∗
+       ▷ ∃ v1, l ↦ₗ #v1 ∗
+               ▷ (l ↦ₗ (if phys_eq_val_ v1 seen then #a else #v1) -∗ Φ (phys_eq_val_ v1 seen))) -∗
     EWP eval η (ECAS e1 e2 e3) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H1 H2 H3 P /=".
@@ -1256,13 +1167,13 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_ECAS' `{PhysEqDec A} {Φ : bool → iProp Σ} {ζ} (l : loc) v η e1 e2 e3 (Φ2 Φ3 : A → iProp Σ) :
-    l ↦ #v -∗
+    l ↦ₗ #v -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
     EWP eval η e3 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ3 }} -∗
     (∀ seen a,
        Φ2 seen -∗ Φ3 a -∗
-       ▷ ▷ (l ↦ (if phys_eq_val_ v seen then #a else #v) -∗ Φ (phys_eq_val_ v seen))) -∗
+       ▷ ▷ (l ↦ₗ (if phys_eq_val_ v seen then #a else #v) -∗ Φ (phys_eq_val_ v seen))) -∗
     EWP eval η (ECAS e1 e2 e3) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl H1 H2 H3 P".
@@ -1273,12 +1184,12 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_ECAS `{PhysEqDec A} {ζ} (l : loc) (v v' : A) η e1 e2 e3 (Φ2 Φ3 : A → iProp Σ) :
-    l ↦ #v -∗
+    l ↦ₗ #v -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
     EWP eval η e3 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ v, ⌜v = v'⌝ }} -∗
     EWP eval η (ECAS e1 e2 e3) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{
-          λ b, ∃ seen, Φ2 seen ∗ ⌜b = phys_eq_val_ v seen⌝ ∗ l ↦ (if b then #v' else #v)
+          λ b, ∃ seen, Φ2 seen ∗ ⌜b = phys_eq_val_ v seen⌝ ∗ l ↦ₗ (if b then #v' else #v)
       }}.
   Proof.
     iIntros "Hl H1 H2 H3".
@@ -1291,12 +1202,12 @@ Section imp_rules_expr.
   (** * EFAA : expr → expr → expr *)
 
   Lemma imp_EFAA' {Φ : Z → iProp Σ} {ζ} (l : loc) (j : Z) η e1 e2 (Φ2 : Z → iProp Σ) :
-    l ↦ #j -∗
+    l ↦ₗ #j -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
     (∀ i,
        Φ2 i -∗
-       ▷ ▷ (l ↦ #(j + i) -∗ Φ j)) -∗
+       ▷ ▷ (l ↦ₗ #(j + i) -∗ Φ j)) -∗
     EWP eval η (EFAA e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl H1 H2 P". simpl_eval.
@@ -1309,10 +1220,10 @@ Section imp_rules_expr.
   Qed.
 
   Lemma imp_EFAA {Φ : Z → iProp Σ} {ζ} (l : loc) (i j : Z) η e1 e2 :
-    l ↦ #j -∗
+    l ↦ₗ #j -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ i', ⌜i' = i⌝ }} -∗
-    EWP eval η (EFAA e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ j', ⌜j' = j⌝ ∗ l ↦ #(j + i) }}.
+    EWP eval η (EFAA e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ j', ⌜j' = j⌝ ∗ l ↦ₗ #(j + i) }}.
   Proof.
     iIntros "Hl H1 H2".
     iApply (imp_EFAA' with "Hl H1 H2").
@@ -1339,14 +1250,15 @@ Section imp_rules_expr.
      [imp_EPath], they are side conditions on the lookup, not premises about
      an evaluation. *)
 
-  (* The general case: the annotated expression is not one of the four
-     single-step operations, so the resolution happens one step after it
-     returns. See [CReturn] in code.v. *)
+  (* The general case: the annotated expression is not one of the
+     single-step operations (the four atomic ones and a field read), so the
+     resolution happens one step after it returns. See [CReturn] in
+     code.v. *)
 
   Lemma imp_EResolve {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
       η e (ep : path) (ev : proph_arg) (p : proph_id) (v : val) pvs (Φe : A → iProp Σ) :
     match e with
-    | ELoad _ | EExchange _ _ | ECAS _ _ _ | EFAA _ _ => False
+    | ELoad _ | ERecordAccess _ _ | EExchange _ _ | ECAS _ _ _ | EFAA _ _ => False
     | _ => True
     end →
     lookup_path η ep = Some #p →
@@ -1379,10 +1291,10 @@ Section imp_rules_expr.
       η e1 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) q (a : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
-    ▷ l ↦{q} #a -∗
+    ▷ l ↦ₗ{q} #a -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     proph p pvs -∗
-    (∀ pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦{q} #a -∗ Φ a) -∗
+    (∀ pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ₗ{q} #a -∗ Φ a) -∗
     EWP eval η (EResolve (ELoad e1) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hp Hv) "Hl H1 Hproph Hcont". simpl_eval.
@@ -1403,11 +1315,11 @@ Section imp_rules_expr.
       η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) (i j : Z) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
-    ▷ l ↦ #j -∗
+    ▷ l ↦ₗ #j -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ i', ⌜i' = i⌝ }} -∗
     proph p pvs -∗
-    (∀ pvs', ⌜pvs = (♯j, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ #(j + i) -∗ Φ j) -∗
+    (∀ pvs', ⌜pvs = (♯j, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ₗ #(j + i) -∗ Φ j) -∗
     EWP eval η (EResolve (EFAA e1 e2) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hp Hv) "Hl H1 H2 Hproph Hcont". simpl_eval.
@@ -1429,11 +1341,11 @@ Section imp_rules_expr.
       η e1 e2 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) (a b : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
-    ▷ l ↦ #a -∗
+    ▷ l ↦ₗ #a -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ b', ⌜b' = b⌝ }} -∗
     proph p pvs -∗
-    (∀ pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ #b -∗ Φ a) -∗
+    (∀ pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ₗ #b -∗ Φ a) -∗
     EWP eval η (EResolve (EExchange e1 e2) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hp Hv) "Hl H1 H2 Hproph Hcont". simpl_eval.
@@ -1455,13 +1367,13 @@ Section imp_rules_expr.
       (seen a v1 : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
-    ▷ l ↦ #v1 -∗
+    ▷ l ↦ₗ #v1 -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ s', ⌜s' = seen⌝ }} -∗
     EWP eval η e3 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a', ⌜a' = a⌝ }} -∗
     proph p pvs -∗
     (∀ pvs', ⌜pvs = (♯(phys_eq_val_ v1 seen), v) :: pvs'⌝ -∗ proph p pvs' -∗
-       l ↦ (if phys_eq_val_ v1 seen then #a else #v1) -∗
+       l ↦ₗ (if phys_eq_val_ v1 seen then #a else #v1) -∗
        Φ (phys_eq_val_ v1 seen)) -∗
     EWP eval η (EResolve (ECAS e1 e2 e3) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
