@@ -35,12 +35,8 @@ Proof.
   auto.
 Qed.
 
-(* References are one-field mutable records: [ref e] is [ERecord Mut [e]],
-   [!e] is [ERecordAccess e 0] and [e1 := e2] is [ERecordSet e1 0 e2]. *)
-
-Local Abbreviation ERef e := (ERecord Mut [e]).
-Local Abbreviation EDeref e := (ERecordAccess e 0%Z).
-Local Abbreviation EAssign e1 e2 := (ERecordSet e1 0%Z e2).
+(* References are one-field mutable records: [ref e], [!e] and [e1 := e2]
+   are [ERef e], [ELoad e] and [EStore e1 e2]. *)
 
 (* [ref 1] *)
 
@@ -52,7 +48,7 @@ Qed.
 
 (* [!x] *)
 Lemma example_load η x (r : record) v :
-  r ↦ #v ⊢ EWP (eval (x~>#r; η) (EDeref (EVar x))) {{ v', ⌜v' = v⌝ ∗ r ↦ v }}.
+  r ↦ #v ⊢ EWP (eval (x~>#r; η) (ELoad (EVar x))) {{ v', ⌜v' = v⌝ ∗ r ↦ v }}.
 Proof.
   iIntros "Hr".
   imp_step.
@@ -62,7 +58,7 @@ Qed.
 Lemma example_store η x (r : record) :
   lookup_name η x = Some #r ->
   r ↦ #1%Z
-    ⊢ EWP (eval η (EAssign (EVar x) (EInt 2)))
+    ⊢ EWP (eval η (EStore (EVar x) (EInt 2)))
     {{ (_ : unit), r ↦ #2 }}.
 Proof.
   iIntros (Hx) "Hr".
@@ -75,8 +71,8 @@ Lemma example_2_stores η x (r : record) :
   r ↦ #1%Z
   ⊢ EWP (eval η
            (ESeq
-              (EAssign (EVar x) (EInt 2))
-              (EAssign (EVar x) (EInt 4))))
+              (EStore (EVar x) (EInt 2))
+              (EStore (EVar x) (EInt 4))))
       {{ (_ : unit), r ↦ #4%Z }}.
 Proof.
   iIntros (Hx) "Hr".
@@ -88,7 +84,7 @@ Qed.
 
 (* [!(ref 1)]  *)
 Lemma example_load_ref η :
-  ⊢ EWP (eval η (EDeref (ERef (EInt 1)))) {{ r, ⌜r = 1%Z⌝ }}.
+  ⊢ EWP (eval η (ELoad (ERef (EInt 1)))) {{ r, ⌜r = 1%Z⌝ }}.
 Proof.
   iApply (imp_deref2 (λ r, r ↦ #1%Z)%I).
   - (* ref 1 *)
@@ -102,7 +98,7 @@ Qed.
 Lemma example_incr η x (rx : record) n :
   lookup_name η x = Some #rx ->
   rx ↦ #n
-  ⊢ EWP (eval η (EAssign (EVar x) (EIntAdd (EInt 1) (EDeref (EVar x)))))
+  ⊢ EWP (eval η (EStore (EVar x) (EIntAdd (EInt 1) (ELoad (EVar x)))))
     {{ (_ : unit), rx ↦ #(1 + n)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
@@ -127,7 +123,7 @@ Qed.
 Lemma example_double η x (rx : record) n :
   lookup_name η x = Some #rx ->
   rx ↦ #n
-  ⊢ EWP (eval η (EAssign (EVar x) (EDeref (EVar x) + EDeref (EVar x))))
+  ⊢ EWP (eval η (EStore (EVar x) (ELoad (EVar x) + ELoad (EVar x))))
     {{ (_ : unit), rx ↦ #(2 * n)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
@@ -155,8 +151,8 @@ Qed.
 Lemma example_double_double η x (rx : record) n :
   lookup_name η x = Some #rx ->
   rx ↦ #n
-  ⊢ EWP (eval η (EAssign (EVar x)
-     ((EDeref (EVar x) + EDeref (EVar x)) * (EDeref (EVar x) + EDeref (EVar x)) )))
+  ⊢ EWP (eval η (EStore (EVar x)
+     ((ELoad (EVar x) + ELoad (EVar x)) * (ELoad (EVar x) + ELoad (EVar x)) )))
     {{ (_ : unit), rx ↦ #((2 * n)^2)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
@@ -178,7 +174,7 @@ Lemma example_tuple_resources η x (rx : record) y (ry : record) (n : Z) :
   lookup_name η y = Some #ry ->
   rx ↦ #n -∗
   ry ↦ #n -∗
-  EWP (eval η (ETuple [EDeref (EVar x); EDeref (EVar y)]))
+  EWP (eval η (ETuple [ELoad (EVar x); ELoad (EVar y)]))
     {{ (x, y), ⌜x = n⌝ ∗ ⌜y = n⌝ ∗ rx ↦ #n ∗ ry ↦ #n }}.
 Proof.
   iIntros (Ex Ey) "Hx Hy".
@@ -190,7 +186,7 @@ Qed.
 Lemma example_data_resources η x (rx : record) (n : Z) :
   lookup_name η x = Some #rx ->
   rx ↦ #n -∗
-  EWP (eval η (EData "::" [EDeref (EVar x); EData "[]" []]))
+  EWP (eval η (EData "::" [ELoad (EVar x); EData "[]" []]))
     {{ (l : list Z), ⌜l = [n]⌝ ∗ rx ↦ #n }}.
 Proof.
   iIntros (Ex) "Hx".

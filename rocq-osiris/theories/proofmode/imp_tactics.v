@@ -278,27 +278,21 @@ Ltac2 rec imp_step0 (reading : constr option) :=
   if is_arith_expr e then imp_arith_tac None reading else
   lazy_match! e with
   | EPath _ => imp_path
-  | ELoad _ => imp_load0 None reading
-  (* References are one-field mutable records. *)
-  | ERecord Mut [_] => imp_alloc0 None reading
-  | ERecordAccess _ 0%Z =>
-      Control.plus
-        (fun _ => iApply (imp_deref with "[$]"); try (imp_step0 reading))
-        (fun _ => imp_field_access0 reading)
-  | ERecordSet _ 0%Z _ =>
+  | EFieldLoad _ => imp_load0 None reading
+  (* References. *)
+  | ERef _ => imp_alloc0 None reading
+  | ELoad _ => iApply (imp_deref with "[$]"); try (imp_step0 reading)
+  | EStore _ _ =>
       Control.plus
         (fun _ => iApply (imp_assign with "[$]");
                   Control.dispatch [(fun _ => imp_step0 reading); complete_steps])
         (fun _ =>
-           Control.plus
-             (fun _ =>
-                mk_evar @imp_store_A 'Type;
-                let store_a := Control.hyp @imp_store_A in
-                mk_evar @imp_store_HA open_constr:(Encode $store_a);
-                let specialized_store := open_constr:(imp_assign' (A:=$store_a)) in
-                iApply ($specialized_store with "[$]");
-                try (imp_step0 reading))
-             (fun _ => imp_field_set0 reading))
+           mk_evar @imp_store_A 'Type;
+           let store_a := Control.hyp @imp_store_A in
+           mk_evar @imp_store_HA open_constr:(Encode $store_a);
+           let specialized_store := open_constr:(imp_assign' (A:=$store_a)) in
+           iApply ($specialized_store with "[$]");
+           try (imp_step0 reading))
   | ERecordAccess _ _ => imp_field_access0 reading
   | ERecordSet _ _ _ => imp_field_set0 reading
   | EData _ _ => imp_data0 None reading
@@ -404,8 +398,8 @@ with imp_data0 (selpat : constr option) (reading : constr option) :=
 with imp_load0 (l : constr option) (reading : constr option) :=
   let specialized_load :=
     match l with
-    | Some l => open_constr:(imp_ELoad _ _ $l)
-    | None => 'imp_ELoad
+    | Some l => open_constr:(imp_EFieldLoad _ _ $l)
+    | None => 'imp_EFieldLoad
     end
   in
   iApply ($specialized_load with "[$]");
@@ -709,7 +703,7 @@ Ltac2 imp_store'_tac (l : constr) (phi : constr option) :=
   let e := (eval hnf in $e) in
   let e2 :=
     lazy_match! e with
-    | ERecordSet _ 0%Z ?e2 => e2
+    | EStore _ ?e2 => e2
     | _ =>
         Control.zero
           (Tactic_failure
@@ -753,7 +747,7 @@ Ltac2 imp_ref'_tac () :=
   let e := (eval hnf in $e) in
   let e1 :=
     lazy_match! e with
-    | ERecord Mut [?e1] => e1
+    | ERef ?e1 => e1
     | _ =>
         Control.zero
           (Tactic_failure

@@ -1097,15 +1097,15 @@ Section imp_rules_expr.
     iApply "He".
   Qed.
 
-  (** * ELoad : expr → expr *)
+  (** * EFieldLoad : expr → expr *)
 
-  (* [ELoad] reads a field location (see [EAtomicLoc]). The rules for
-     references, which are one-field records, are in [ref_rules.v]. *)
+  (* [EFieldLoad] reads a field location (see [EAtomicLoc]). The rules for
+     references ([ERef], [ELoad], [EStore]) are in [ref_rules.v]. *)
 
-  Lemma imp_ELoad2 `{Encode A} {Φ : A → iProp Σ} {ζ} (Φ1 : loc → iProp Σ) η e :
+  Lemma imp_EFieldLoad2 `{Encode A} {Φ : A → iProp Σ} {ζ} (Φ1 : loc → iProp Σ) η e :
     EWP (eval η e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
     (∀ l, Φ1 l -∗ ∃ q a, ▷ l ↦ₗ{q} #a ∗ ▷ (l ↦ₗ{q} #a -∗ Φ a)) -∗
-    EWP eval η (ELoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP eval η (EFieldLoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "He P". simpl_eval.
     iApply (imp_bind with "[He]").
@@ -1116,13 +1116,13 @@ Section imp_rules_expr.
     iApply (imp_load' with "Hl P").
   Qed.
 
-  Lemma imp_ELoad `{Encode A} {ζ} η e l q (a : A) :
+  Lemma imp_EFieldLoad `{Encode A} {ζ} η e l q (a : A) :
     ▷ l ↦ₗ{q} #a -∗
     EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
-    EWP eval η (ELoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ v, ⌜v = a⌝ ∗ l ↦ₗ{q} #a }}.
+    EWP eval η (EFieldLoad e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ v, ⌜v = a⌝ ∗ l ↦ₗ{q} #a }}.
   Proof.
     iIntros "Hl He /=".
-    iApply (imp_ELoad2 with "He").
+    iApply (imp_EFieldLoad2 with "He").
     iIntros (?) "->". iFrame.
     iIntros "!> $". auto.
   Qed.
@@ -1251,14 +1251,14 @@ Section imp_rules_expr.
      an evaluation. *)
 
   (* The general case: the annotated expression is not one of the
-     single-step operations (the four atomic ones and a field read), so the
-     resolution happens one step after it returns. See [CReturn] in
-     code.v. *)
+     single-step operations (the four atomic ones, a field read and a
+     reference lookup), so the resolution happens one step after it
+     returns. See [CReturn] in code.v. *)
 
   Lemma imp_EResolve {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
       η e (ep : path) (ev : proph_arg) (p : proph_id) (v : val) pvs (Φe : A → iProp Σ) :
     match e with
-    | ELoad _ | ERecordAccess _ _ | EExchange _ _ | ECAS _ _ _ | EFAA _ _ => False
+    | ELoad _ | EFieldLoad _ | ERecordAccess _ _ | EExchange _ _ | ECAS _ _ _ | EFAA _ _ => False
     | _ => True
     end →
     lookup_path η ep = Some #p →
@@ -1287,7 +1287,7 @@ Section imp_rules_expr.
      unannotated rule, with the operation's postcondition extended by the
      prophecy's head. *)
 
-  Lemma imp_EResolve_ELoad {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
+  Lemma imp_EResolve_EFieldLoad {A} `{Encode A} {Φ : A → iProp Σ} {ζ}
       η e1 (ep : path) (ev : proph_arg) (l : loc) (p : proph_id) (v : val) q (a : A) pvs :
     lookup_path η ep = Some #p →
     eval_proph_arg η ev = Some v →
@@ -1295,7 +1295,7 @@ Section imp_rules_expr.
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ l', ⌜l' = l⌝ }} -∗
     proph p pvs -∗
     (∀ pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ l ↦ₗ{q} #a -∗ Φ a) -∗
-    EWP eval η (EResolve (ELoad e1) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP eval η (EResolve (EFieldLoad e1) ep ev) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hp Hv) "Hl H1 Hproph Hcont". simpl_eval.
     rewrite (bind_proph_args Hp Hv).

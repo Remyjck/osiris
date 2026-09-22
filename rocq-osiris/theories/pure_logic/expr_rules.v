@@ -1351,14 +1351,40 @@ Lemma pure_eval_assertfalse `{Encode C} η (φ : _ -> Prop) (ζ : C → Prop) :
   pure (A := unit) (eval η EAssertFalse) φ ζ.
 Proof. done. Qed.
 
-(* Load from a field location: [Atomic.Loc.get e]. References are records,
-   see [ERecord]. *)
+(* Reference allocation: [ref e]. *)
+
+(* ERef (e: expr) *)
+
+Lemma pure_eval_ref `{Encode A} `{Encode C} η e (φ : _ -> Prop) (ζ : C → Prop) :
+  NOT_PURE "[ERef] is effectful; cannot be resolved with [pure]" ->
+  pure (A := A) (eval η (ERef e)) φ ζ.
+Proof. done. Qed.
+
+(* Reference lookup: [!e]. *)
 
 (* ELoad (e: expr) *)
 
 Lemma pure_eval_load `{Encode A} `{Encode C} η e (φ : _ -> Prop) (ζ : C → Prop) :
   NOT_PURE "[ELoad] is effectful; cannot be resolved with [pure]" ->
   pure (A := A) (eval η (ELoad e)) φ ζ.
+Proof. done. Qed.
+
+(* Reference assignment: [e1 := e2]. *)
+
+(* EStore (e1 e2: expr) *)
+
+Lemma pure_eval_store `{Encode A} `{Encode C} η e1 e2 (φ : _ -> Prop) (ζ : C → Prop) :
+  NOT_PURE "[EStore] is effectful; cannot be resolved with [pure]" ->
+  pure (A := A) (eval η (EStore e1 e2)) φ ζ.
+Proof. done. Qed.
+
+(* Load from a field location: [Atomic.Loc.get e]. *)
+
+(* EFieldLoad (e: expr) *)
+
+Lemma pure_eval_field_load `{Encode A} `{Encode C} η e (φ : _ -> Prop) (ζ : C → Prop) :
+  NOT_PURE "[EFieldLoad] is effectful; cannot be resolved with [pure]" ->
+  pure (A := A) (eval η (EFieldLoad e)) φ ζ.
 Proof. done. Qed.
 
 (* -------------------------------------------------------------------------- *)

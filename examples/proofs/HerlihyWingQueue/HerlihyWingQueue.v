@@ -1262,7 +1262,7 @@ Proof.
        of the next pass, and re-establishes the scan's licence. *)
     iApply (imp_ELet_var
               (λ n' : Z, ⌜0 ≤ n' ≤ cap⌝ ∗ scan_cont γ n' 0)%I with "[]").
-    { iApply (imp_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
+    { iApply (imp_field_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
       { iApply (imp_EAtomicLoc back_field q _ with "[] [] []").
         { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). list_z.length; lia. }
         { imp_path. }
@@ -1567,7 +1567,7 @@ Proof.
      scan's licence to disbelieve the prediction. *)
   iApply (imp_ELet_var
             (λ n' : Z, ⌜0 ≤ n' ≤ cap⌝ ∗ scan_cont γ n' 0)%I with "[]").
-  { iApply (imp_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
+  { iApply (imp_field_load_atomic (⊤ ∖ ↑hwqN) ⊤ _ _ (λ l : loc, ⌜l = bl⌝)%I).
     { iApply (imp_EAtomicLoc back_field q _ with "[] [] []").
       { iModIntro. iApply (blockLocs_field_at with "Hqlocs"). list_z.length; lia. }
       { imp_path. }

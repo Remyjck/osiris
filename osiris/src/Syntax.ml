@@ -315,11 +315,19 @@ type expr =
 
   | ELetSitem of sitem * expr
 
-  (* Atomic operations on a field location (see [EAtomicLoc]). References
-     are mutable records with one field, so [ref e], [!e] and [e1 := e2]
-     are [ERecord], [ERecordAccess] and [ERecordSet] at field [0]. *)
-  (* Load: [Atomic.Loc.get e]. *)
+  (* References. As in OCaml, a reference is a mutable record with a single
+     field: these behave as [ERecord], [ERecordAccess] and [ERecordSet] at
+     field [0]. *)
+  (* Reference allocation: [ref e]. *)
+  | ERef of expr
+  (* Reference lookup: [!e]. *)
   | ELoad of expr
+  (* Reference assignment: [e1 := e2]. *)
+  | EStore of expr * expr
+
+  (* Atomic operations on a field location (see [EAtomicLoc]). *)
+  (* Load: [Atomic.Loc.get e]. *)
+  | EFieldLoad of expr
   (* Exchange: [Atomic.Loc.exchange e1 e2]. *)
   | EExchange of expr * expr
   (* Compare-and-set: [Atomic.Loc.compare_and_set e1 e2 e3]. *)

@@ -614,7 +614,7 @@ Qed.
 Lemma imp_vertex_load {η E Ψ ζ} x lr lc (e : expr) :
   vertex x lr lc -∗
   impure E (eval η e) Ψ ζ (λ l', ⌜l' = x⌝) -∗
-  impure E (eval η (ERecordAccess e 0)) Ψ ζ
+  impure E (eval η (ELoad e)) Ψ ζ
     (λ v : val, ⌜v = content_of lr lc⌝ ∗ vertex x lr lc).
 Proof.
   iIntros "[Hx Hrec] He".
@@ -853,7 +853,7 @@ Lemma find_spec_inductive η :
   (* [fun_spec.] disambiguates the program-logic (iProp-valued) predicate
      from its pure-logic (Prop-valued) namesake. *)
   fun_spec.predicate_over_function_body τ[elem] find_spec' η
-      (EAnonFun (AnonFun "x" (EMatch (ERecordAccess (EPath ["x"]) 0%Z) __find_branches))).
+      (EAnonFun (AnonFun "x" (EMatch (ELoad (EPath ["x"])) __find_branches))).
 Proof.
   iIntros "#IH".
   iIntros (e).

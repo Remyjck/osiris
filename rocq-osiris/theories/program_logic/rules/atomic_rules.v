@@ -30,8 +30,8 @@ Proof.
   case_location_lookup; by econstructor.
 Qed.
 
-Global Instance eload_atomic η p :
-  subjective_step.Atomic (eval η (ELoad (EPath p))).
+Global Instance efieldload_atomic η p :
+  subjective_step.Atomic (eval η (EFieldLoad (EPath p))).
 Proof.
   simpl_eval.
   destruct (lookup_path η p); last apply _.
@@ -125,14 +125,15 @@ Section imp_atomic_rules.
      without it, [list val] postconditions do not typecheck here. *)
   Local Instance notval_listval : NotVal (list val) := {}.
 
-  (* [ELoad e]. The evaluation of [e] is not part of the atomic step, so
-     the mask-changing update is only entered once the location is known. *)
-  Lemma imp_load_atomic `{Encode A} (E2 E1 : coPset) η e (Φ1 : loc → _) (Φ : A → _) :
+  (* [EFieldLoad e]. The evaluation of [e] is not part of the atomic step,
+     so the mask-changing update is only entered once the location is
+     known. *)
+  Lemma imp_field_load_atomic `{Encode A} (E2 E1 : coPset) η e (Φ1 : loc → _) (Φ : A → _) :
     impure E1 (eval η e) Ψ ζ Φ1 -∗
     (∀ l, Φ1 l -∗
           |={E1,E2}=> ∃ dq a, ▷ l ↦ₗ{dq} #a ∗
                               ▷ (l ↦ₗ{dq} #a -∗ |={E2,E1}=> Φ a)) -∗
-    impure E1 (eval η (ELoad e)) Ψ ζ Φ.
+    impure E1 (eval η (EFieldLoad e)) Ψ ζ Φ.
   Proof.
     iIntros "He Hload". simpl_eval.
     iApply (imp_bind with "[He]").
@@ -450,11 +451,39 @@ Section imp_atomic_rules.
     ▷ is_ref r -∗
     impure E1 (eval η e) Ψ ζ (λ r' : record, ⌜r' = r⌝) -∗
     ▷ (|={E1,E2}=> ∃ a, ▷ r ↦ #a ∗ ▷ (r ↦ #a -∗ |={E2,E1}=> Φ a)) -∗
-    impure E1 (eval η (ERecordAccess e 0)) Ψ ζ Φ.
+    impure E1 (eval η (ELoad e)) Ψ ζ Φ.
   Proof.
+    rewrite eval_ELoad.
     iIntros ">#Hr He Hload".
     iDestruct (is_ref_field_at with "Hr") as (l) "[Hf Hls]".
     iApply (imp_ERecordAccess_atomic with "Hf He").
+    iNext. iMod "Hload" as (a) "[Ha Hload]".
+    iModIntro. iExists a. iSplitL "Ha".
+    { iNext. iDestruct (ref_pointsto_at with "Hls") as "[Hto _]".
+      iDestruct ("Hto" with "Ha") as "[_ $]". }
+    iIntros "!> Hl". iApply "Hload".
+    iDestruct (ref_pointsto_at _ _ _ #a with "Hls") as "[_ Hfrom]".
+    iApply "Hfrom". rewrite /is_ref. iDestruct "Hr" as "[$ _]". iFrame.
+  Qed.
+
+  (* A resolved lookup [!e [@resolve p v]]: the prophecy is resolved at the
+     load of the reference's field. See [imp_EResolve_ERecordAccess_atomic]. *)
+  Lemma imp_EResolve_ELoad_atomic `{Encode A} (E2 E1 : coPset) η e (r : record)
+      (ep : path) (ev : proph_arg) (p : proph_id) (v : val) pvs (Φe Φ : A → _) :
+    lookup_path η ep = Some #p →
+    eval_proph_arg η ev = Some v →
+    ▷ is_ref r -∗
+    proph p pvs -∗
+    impure E1 (eval η e) Ψ ζ (λ r' : record, ⌜r' = r⌝) -∗
+    ▷ (|={E1,E2}=> ∃ a, ▷ r ↦ #a ∗ ▷ (r ↦ #a -∗ |={E2,E1}=> Φe a)) -∗
+    (∀ a pvs', ⌜pvs = (♯a, v) :: pvs'⌝ -∗ proph p pvs' -∗ Φe a -∗ Φ a) -∗
+    impure E1 (eval η (EResolve (ELoad e) ep ev)) Ψ ζ Φ.
+  Proof.
+    rewrite eval_EResolve_ELoad.
+    iIntros (Hp Hv) ">#Hr Hproph He Hload Hcont".
+    iDestruct (is_ref_field_at with "Hr") as (l) "[Hf Hls]".
+    iApply (imp_EResolve_ERecordAccess_atomic with "Hf Hproph He [Hload] Hcont");
+      [ exact Hp | exact Hv | ].
     iNext. iMod "Hload" as (a) "[Ha Hload]".
     iModIntro. iExists a. iSplitL "Ha".
     { iNext. iDestruct (ref_pointsto_at with "Hls") as "[Hto _]".
@@ -471,8 +500,9 @@ Section imp_atomic_rules.
     impure E1 (eval η e2) Ψ ζ Φ2 -∗
     ▷ (∀ a, Φ2 a -∗
             |={E1,E2}=> ∃ v, ▷ r ↦ v ∗ ▷ (r ↦ #a -∗ |={E2,E1}=> Φ ())) -∗
-    impure E1 (eval η (ERecordSet e1 0 e2)) Ψ ζ Φ.
+    impure E1 (eval η (EStore e1 e2)) Ψ ζ Φ.
   Proof.
+    rewrite eval_EStore.
     iIntros ">#Hr He1 He2 Hstore".
     iDestruct (is_ref_field_at with "Hr") as (l) "[Hf Hls]".
     iApply (imp_ERecordSet_atomic with "Hf He1 He2").
@@ -582,7 +612,7 @@ Section imp_inv_rules.
             ▷ P -∗
             ∃ v, ▷ r ↦ v ∗
                  ▷ (r ↦ #x -∗ ▷ P ∗ Φ ())) -∗
-    impure E (eval η (ERecordSet e1 0 e2)) Ψ ζ Φ.
+    impure E (eval η (EStore e1 e2)) Ψ ζ Φ.
   Proof.
     iIntros (Hsubset) "#Hinv Hr He1 He2 Hstore".
     iApply (imp_assign_atomic (E ∖ ↑N) with "Hr He1 He2").
@@ -627,7 +657,7 @@ Section imp_inv_rules.
     ▷ is_ref r -∗
     impure E (eval η e) Ψ ζ (λ r' : record, ⌜r' = r⌝) -∗
     ▷ (▷ P -∗ ∃ a, ▷ r ↦ #a ∗ ▷ (r ↦ #a -∗ ▷ P ∗ Φ a)) -∗
-    impure E (eval η (ERecordAccess e 0)) Ψ ζ Φ.
+    impure E (eval η (ELoad e)) Ψ ζ Φ.
   Proof.
     iIntros (Hsubset) "#Hinv Hr He Hload".
     iApply (imp_deref_atomic (E ∖ ↑N) with "Hr He").

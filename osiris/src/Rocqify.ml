@@ -419,8 +419,17 @@ let rec expr (e : expr) =
   | ELetSitem (s, e) ->
       c "ELetSitem" [ structure_item s; cut_expr e ]
 
+  | ERef e ->
+      c "ERef" [ expr e ]
+
   | ELoad e ->
       c "ELoad" [ expr e ]
+
+  | EStore (e1, e2) ->
+      c "EStore" [ expr e1; expr e2 ]
+
+  | EFieldLoad e ->
+      c "EFieldLoad" [ expr e ]
 
   | EExchange (e1, e2) ->
       c "EExchange" [ expr e1; expr e2 ]

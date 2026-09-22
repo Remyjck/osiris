@@ -153,7 +153,10 @@ let rec expr : E.expr -> O.expr = function
   | EAssertFalse -> EAssertFalse
   | EAssert e -> EAssert (expr e)
   | ELetSitem (s, e) -> ELetSitem (sitem s, expr e)
+  | ERef e -> ERef (expr e)
   | ELoad e -> ELoad (expr e)
+  | EStore (e1, e2) -> EStore (expr e1, expr e2)
+  | EFieldLoad e -> EFieldLoad (expr e)
   | EExchange (e1, e2) -> EExchange (expr e1, expr e2)
   | ECAS (e1, e2, e3) -> ECAS (expr e1, expr e2, expr e3)
   | EFAA (e1, e2) -> EFAA (expr e1, expr e2)

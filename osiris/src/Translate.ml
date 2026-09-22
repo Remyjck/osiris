@@ -465,17 +465,18 @@ let apply e1 e2s =
 
 (* References. *)
 
-(* As in OCaml, a reference, like an [Atomic.t], is a mutable record with a
-   single field. *)
+(* A reference, like an [Atomic.t], is a mutable record with a single
+   field. Allocation, lookup and assignment keep their own nodes; the
+   atomic operations act on the location of that field. *)
 
 let make_ref e =
-  ERecord (Mut, [e])
+  ERef e
 
 let load_ref e =
-  ERecordAccess (e, 0)
+  ELoad e
 
 let store_ref e1 e2 =
-  ERecordSet (e1, 0, e2)
+  EStore (e1, e2)
 
 let field_loc_ref e =
   EAtomicLoc (e, 0)
@@ -851,7 +852,7 @@ and translate_primitive_application loc path p args =
      standard library or a local alias. Their first argument is an atomic
      location, that is, a value of the form [VLoc l]. *)
   | _, "%atomic_load_loc", [e] ->
-      ELoad e
+      EFieldLoad e
   | _, "%atomic_exchange_loc", [e1; e2] ->
       EExchange (e1, e2)
   | _, "%atomic_cas_loc", [e1; e2; e3] ->
@@ -1162,7 +1163,7 @@ and translate_primitive_expr prim_name args =
   (* Atomic field locations. *)
 
   | "%atomic_load_loc", [e] ->
-      ELoad e
+      EFieldLoad e
   | "%atomic_exchange_loc", [e1; e2] ->
       EExchange (e1, e2)
   | "%atomic_cas_loc", [e1; e2; e3] ->

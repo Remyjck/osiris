@@ -73,11 +73,10 @@ Section StdLib__code.
 
   (* ------------------------------------------------------------------------ *)
 
-  (* Store-related functions. A reference is a mutable record with one
-     field. *)
-  Definition Stdlib__ref : val := VClo1 (λ e, ERecord Mut [e]).
-  Definition Stdlib__load : val := VClo1 (λ e, ERecordAccess e 0%Z).
-  Definition Stdlib__store : val := VClo2 (λ e1 e2, ERecordSet e1 0%Z e2).
+  (* Store-related functions. *)
+  Definition Stdlib__ref : val := VClo1 ERef.
+  Definition Stdlib__load : val := VClo1 ELoad.
+  Definition Stdlib__store : val := VClo2 EStore.
 
   Definition Stdlib_store_env : env :=
     [("!", Stdlib__load);

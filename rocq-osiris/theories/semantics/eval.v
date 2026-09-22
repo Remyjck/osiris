@@ -1537,7 +1537,28 @@ Fixpoint pre_eval η e {struct e} : microvx :=
   | ELetSitem s e =>
       '(η,_) ← eval_sitem (η,[]) s ;
       eval η e
+  (* A reference is a mutable record with one field, like [ERecord Mut [e]];
+     it is read and written at field [0]. *)
+  | ERef e =>
+      v ← eval η e ;
+      l ← alloc v ;
+      r ← alloc_block Mut [l] ;
+      ret (VRecord r)
   | ELoad e =>
+      r ← as_record (eval η e) ;
+      '(_, ls) ← load_block r ;
+      match ls !! 0%Z with
+      | Some l => load l
+      | None => Crash
+      end
+  | EStore e1 e2 =>
+      '(r, v) ← par (as_record (eval η e1)) (eval η e2) ;
+      '(_, ls) ← load_block r ;
+      match ls !! 0%Z with
+      | Some l => store l v
+      | None => Crash
+      end
+  | EFieldLoad e =>
       l ← as_loc (eval η e) ;
       load l
   | EExchange e1 e2 =>
@@ -1561,6 +1582,13 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       v ← of_option (eval_proph_arg η a) ;
       match e with
       | ELoad e1 =>
+          r ← as_record (eval η e1) ;
+          '(_, ls) ← load_block r ;
+          match ls !! 0%Z with
+          | Some l => resolve CLoad l p v
+          | None => Crash
+          end
+      | EFieldLoad e1 =>
           l ← as_loc (eval η e1) ;
           resolve CLoad l p v
       | ERecordAccess e1 f =>
