@@ -93,6 +93,18 @@ Section imp_spec.
     iApply "Hmono".
   Qed.
 
+  (* The persistent version, which is the shape of a specification triple:
+     a triple entails another one if their bodies do, pointwise. *)
+
+  Lemma iSpec_mono_pers (τ : types) (P P' : τ -#> microvx -> iProp Σ) c :
+    □ iSpec τ c P -∗
+    □ (∀# args, ∀ m, (P args) m -∗ (P' args) m) -∗
+    □ iSpec τ c P'.
+  Proof.
+    iIntros "#HP #Hmono !>".
+    iApply (iSpec_mono with "HP Hmono").
+  Qed.
+
   (* -------------------------------------------------------------------------- *)
 
   (* We define [predicate_over_function_body τ P η e], which fetches the
@@ -303,6 +315,40 @@ Section imp_spec.
      similar to the pure case. *)
 
 End imp_spec.
+
+(* -------------------------------------------------------------------------- *)
+
+(* Function specifications given as triples.
+
+   [closure_spec η e spec] states that the function [e], defined in the
+   environment [η], satisfies [spec]. It is how a lemma about the body of a
+   (possibly recursive) function is stated when [spec] is a triple (see the
+   [{{ }}] notations below): the conclusion mentions [spec] itself, so
+   [closure_spec_intro], whose conclusion is the triple
+   [λ c, □ iSpec τ c P], finds [τ] and [P] by unfolding [spec].
+
+   It is kept from reducing, so that the closure it hides never shows up in
+   goals. *)
+
+Definition closure_spec `{!osirisGS Σ} (η : env) (e : expr)
+    (spec : val → iProp Σ) : iProp Σ :=
+  match e with
+  | EAnonFun a => spec (VClo η a)
+  | _ => False
+  end.
+
+Global Arguments closure_spec : simpl never.
+
+Section closure_spec.
+
+  Context `{!osirisGS Σ}.
+
+  Lemma closure_spec_intro τ (P : τ -#> microvx -> iProp Σ) η x e :
+    □ predicate_over_function_body τ P η (EAnonFun (AnonFun x e)) -∗
+    closure_spec η (EAnonFun (AnonFun x e)) (λ c, □ iSpec τ c P).
+  Proof. iIntros "#H". by iApply prove_iSpec_pers. Qed.
+
+End closure_spec.
 
 (* The following definitions are outside the section to avoid capturing Σ *)
 
@@ -628,6 +674,61 @@ Section triple_body.
   Global Arguments ipostX {_ _ _ _} _ _ _ _ /.
   Global Arguments ipostEX {_ _ _ _} _ _ _ _ _ _ /.
   Global Arguments iforall {_} _ _ /.
+
+  (* Rules of consequence for the triple bodies. Combined with
+     [iSpec_mono_pers], they derive one triple from another: the new
+     precondition must produce the old one, plus a frame that turns the old
+     postcondition into the new one. *)
+
+  Lemma ipost_mono `{Encode B} (P P' : iProp Σ) (Φ Φ' : B → iProp Σ) m :
+    ipost P Φ m -∗
+    (P' -∗ P ∗ ∀ v, Φ v -∗ Φ' v) -∗
+    ipost P' Φ' m.
+  Proof.
+    iIntros "H Hmono HP'".
+    iDestruct ("Hmono" with "HP'") as "[HP HΦ]".
+    iApply (imp_wand with "(H HP)"). iIntros (v) "Hv". by iApply "HΦ".
+  Qed.
+
+  Lemma ipostE_mono `{Encode B} E Ψ (P P' : iProp Σ) (Φ Φ' : B → iProp Σ) m :
+    ipostE E Ψ P Φ m -∗
+    (P' -∗ P ∗ ∀ v, Φ v -∗ Φ' v) -∗
+    ipostE E Ψ P' Φ' m.
+  Proof.
+    iIntros "H Hmono HP'".
+    iDestruct ("Hmono" with "HP'") as "[HP HΦ]".
+    iApply (imp_wand with "(H HP)"). iIntros (v) "Hv". by iApply "HΦ".
+  Qed.
+
+  Lemma ipostX_mono `{Encode B} `{Encode C} (P P' : iProp Σ)
+    (Φ Φ' : B → iProp Σ) (ζ ζ' : C → iProp Σ) m :
+    ipostX P Φ ζ m -∗
+    (P' -∗ P ∗ (∀ v, Φ v -∗ Φ' v) ∧ (∀ w, ζ w -∗ ζ' w)) -∗
+    ipostX P' Φ' ζ' m.
+  Proof.
+    iIntros "H Hmono HP'".
+    iDestruct ("Hmono" with "HP'") as "[HP HΦ]".
+    iApply (imp_strong_mono with "(H HP) [] [HΦ]"); first done.
+    { iApply iEff_le_refl. }
+    iSplit.
+    - iIntros (w) "Hw". iDestruct "HΦ" as "[_ HΦ]". iModIntro. by iApply "HΦ".
+    - iIntros (v) "Hv". iDestruct "HΦ" as "[HΦ _]". iModIntro. by iApply "HΦ".
+  Qed.
+
+  Lemma ipostEX_mono `{Encode B} `{Encode C} E Ψ (P P' : iProp Σ)
+    (Φ Φ' : B → iProp Σ) (ζ ζ' : C → iProp Σ) m :
+    ipostEX E Ψ P Φ ζ m -∗
+    (P' -∗ P ∗ (∀ v, Φ v -∗ Φ' v) ∧ (∀ w, ζ w -∗ ζ' w)) -∗
+    ipostEX E Ψ P' Φ' ζ' m.
+  Proof.
+    iIntros "H Hmono HP'".
+    iDestruct ("Hmono" with "HP'") as "[HP HΦ]".
+    iApply (imp_strong_mono with "(H HP) [] [HΦ]"); first done.
+    { iApply iEff_le_refl. }
+    iSplit.
+    - iIntros (w) "Hw". iDestruct "HΦ" as "[_ HΦ]". iModIntro. by iApply "HΦ".
+    - iIntros (v) "Hv". iDestruct "HΦ" as "[HΦ _]". iModIntro. by iApply "HΦ".
+  Qed.
 
 End triple_body.
 

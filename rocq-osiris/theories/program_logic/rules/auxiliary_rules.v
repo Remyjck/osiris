@@ -385,6 +385,39 @@ Section imp_eval.
     by iApply iSpec_letrec.
   Qed.
 
+  (* The same rules, with the body obligation stated with [closure_spec]
+     (fun_spec.v): the function, in the environment where [f] is bound to
+     some [c] that satisfies the triple one step later, satisfies the
+     triple. [τ] and [P] are found by unification, from the [closure_spec]
+     lemma that proves the body. *)
+
+  Lemma iSpec_letrec_spec {τ} {P : τ -#> microvx -> iProp Σ} f x e η :
+    □ (∀ c, ▷ □ iSpec τ c P -∗
+            closure_spec ((f, c) :: η) (EAnonFun (AnonFun x e))
+              (λ c, □ iSpec τ c P)) -∗
+    □ iSpec τ (VCloRec η [RecBinding f (AnonFun x e)] f) P.
+  Proof.
+    iIntros "#Hbody".
+    iLöb as "IH".
+    iEval (rewrite (iSpec_call_ext τ _ _ P
+                      (call_VCloRec_singleton f (AnonFun x e) η))).
+    iApply ("Hbody" with "IH").
+  Qed.
+
+  Lemma imp_sitems_letrec_spec {τ} {P : τ -#> microvx -> iProp Σ}
+      f x e sitems (η δ : env) Q :
+    □ (∀ c, ▷ □ iSpec τ c P -∗
+            closure_spec ((f, c) :: η) (EAnonFun (AnonFun x e))
+              (λ c, □ iSpec τ c P)) -∗
+    (∀ c, □ iSpec τ c P -∗
+          EWP (eval_sitems ((f, c) :: η, (f, c) :: δ) sitems) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
+    EWP (eval_sitems (η, δ) (ILetRec [RecBinding f (AnonFun x e)] :: sitems)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Q }}.
+  Proof.
+    iIntros "#Hbody Hcont".
+    iApply (imp_sitems_letrec _ (λ c, □ iSpec τ c P)%I with "[] Hcont").
+    by iApply iSpec_letrec_spec.
+  Qed.
+
   (* ---------------------------------------------------------------------- *)
 
   Lemma imp_sitems_open Φ sitems me Q η δ :
