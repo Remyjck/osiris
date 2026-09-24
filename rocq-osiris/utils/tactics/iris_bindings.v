@@ -59,3 +59,6 @@ Ltac2 Notation "iModIntro" := iModIntro ().
 
 Ltac2 iAssumption () := ltac1:(iAssumption).
 Ltac2 Notation "iAssumption" := iAssumption ().
+
+Ltac2 iExact (h : constr) := ltac1:(h |- iExact h) (Ltac1.of_constr h).
+Ltac2 Notation "iExact" h(constr) := iExact h.
