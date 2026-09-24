@@ -11,11 +11,11 @@ Section init_proof.
   Context `{!osirisGS Σ}.
 
   Definition init_spec init : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
+    □ {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
         ⌜0 ≤ n ≤ max_array_length⌝ ∗ I [] ∗
         (* [f] is a function [Z → A], such that [f i] preserves
             an invariant [I] over the results of all calls to [f i] so far. *)
-        {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
+        □ {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
         f i : Z
         {{ RET x; I (xs ++ singleton x) }}
     }}
@@ -25,14 +25,14 @@ Section init_proof.
     {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦∗ xs ∗ I xs }}.
 
   Definition init_spec' init : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A → iProp Σ);
-      ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; Φ i x }} }}
+    □ {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A → iProp Σ);
+      ⌜0 ≤ n ≤ max_array_length⌝ ∗ □ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; Φ i x }} }}
     init n f : Z val
     {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦∗ xs ∗ [∗ listZ] i↦x ∈ xs, Φ i x }}.
 
   Definition init_pure_spec init : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A);
-       ⌜0 ≤ n ≤ max_array_length⌝ ∗ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; ⌜x = Φ i⌝ }} }}
+    □ {{ ∀ `(Encode A, Inhabited A) (Φ : Z → A);
+       ⌜0 ≤ n ≤ max_array_length⌝ ∗ □ {{ ⌜0 ≤ i < n⌝ }} f i : Z {{ RET x; ⌜x = Φ i⌝ }} }}
     init n f : Z val
     {{ RET a; a ↦∗ list_z.init n Φ }}.
 
@@ -184,12 +184,12 @@ Section iter_proof.
   Context `{!osirisGS Σ}.
 
   Definition invariant_preserving `{Encode A, Inhabited A} I xs f : iProp Σ :=
-    {{ ∀ Xs; ⌜Xs ++ singleton X `prefix_of` xs⌝ ∗ I Xs }}
+    □ {{ ∀ Xs; ⌜Xs ++ singleton X `prefix_of` xs⌝ ∗ I Xs }}
        f X : A
     {{ RET (); I (Xs ++ singleton X) }}.
 
   Definition iter_spec iter : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
         a ↦∗{dq} xs ∗ invariant_preserving I xs f ∗ I [] }}
     iter f a : val array
     {{ RET (); I xs ∗ a ↦∗{dq} xs }}.
@@ -293,12 +293,12 @@ Section iter2_spec.
   (** [iter2 f a b] applies function [f] to all elements of [a] and [b]
       pairwise. Raises if the arrays have different lengths. *)
   Definition iter2_spec iter2 : iProp Σ :=
-  {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+  □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
         dq1 dq2 (xs : list A) (ys : list B) (I : list (A * B) → iProp Σ);
         ⌜length xs = length ys⌝ ∗
          a ↦∗{dq1} xs ∗
          b ↦∗{dq2} ys ∗
-         {{ ∀ (visited : list (A * B)); ⌜visited ++ singleton (x, y) `prefix_of` zip xs ys⌝ ∗ I visited }}
+         □ {{ ∀ (visited : list (A * B)); ⌜visited ++ singleton (x, y) `prefix_of` zip xs ys⌝ ∗ I visited }}
          f x y : A B
          {{ RET (); I (visited ++ singleton (x, y)) }} ∗
          I [] }}
@@ -315,8 +315,8 @@ Section map_spec.
   (** [map f a] applies function [f] to all elements of [a], and builds
       a new array with the results returned by [f]. *)
   Definition map_spec map : iProp Σ :=
-  {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) dq (xs : list A) (Φ : A → B → iProp Σ);
-     a ↦∗{dq} xs ∗ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
+  □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) dq (xs : list A) (Φ : A → B → iProp Σ);
+     a ↦∗{dq} xs ∗ □ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
   map f a : val array
   {{ RET b; ∃ (ys : list B), b ↦∗ ys ∗ a ↦∗{dq} xs ∗
                              [∗ listZ] x;y ∈ xs;ys, Φ x y }}.
@@ -465,8 +465,8 @@ Section map_inplace_spec.
   (** [map_inplace f a] applies function [f] to all elements of [a],
       replacing each element with the result in place. *)
   Definition map_inplace_spec map_inplace : iProp Σ :=
-  {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : A → A → iProp Σ);
-     a ↦∗ xs ∗ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
+  □ {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : A → A → iProp Σ);
+     a ↦∗ xs ∗ □ {{ True }} f x : τ[A] {{ RET y; Φ x y }} }}
   map_inplace f a : val array
   {{ RET (); ∃ (ys : list A), a ↦∗ ys ∗ [∗ listZ] x;y ∈ xs;ys, Φ x y }}.
 
@@ -558,8 +558,8 @@ Section mapi_inplace_spec.
   (** [mapi_inplace f a] applies function [f] to the index and all elements
       of [a], replacing each element with the result in place. *)
   Definition mapi_inplace_spec mapi_inplace : iProp Σ :=
-  {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : Z → A → A → iProp Σ);
-     a ↦∗ xs ∗ {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET y; Φ i x y }} }}
+  □ {{ ∀ `(Encode A, Inhabited A) (xs : list A) (Φ : Z → A → A → iProp Σ);
+     a ↦∗ xs ∗ □ {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET y; Φ i x y }} }}
   mapi_inplace f a : val array
   {{ RET (); ∃ (ys : list A), a ↦∗ ys ∗ [∗ listZ] i↦x;y ∈ xs;ys, Φ i x y }}.
 
@@ -655,12 +655,12 @@ Section map2_spec.
   (** [map2 f a b] applies function [f] to all elements of [a] and [b]
       pairwise, and builds an array with the results. *)
   Definition map2_spec map2 : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) `(Encode C)
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) `(Encode C)
          dq1 dq2 (xs : list A) (ys : list B) (Φ : A → B → C → iProp Σ);
        ⌜length xs = length ys⌝ ∗
        a ↦∗{dq1} xs ∗
        b ↦∗{dq2} ys ∗
-       {{ True }} f x y : A B {{ RET (z : C); Φ x y z }} }}
+       □ {{ True }} f x y : A B {{ RET (z : C); Φ x y z }} }}
     map2 f a b : val array array
     {{ RET c; ∃ (zs : list C),
                 ⌜length zs = length xs⌝ ∗
@@ -680,9 +680,9 @@ Section iteri_spec.
   (** [iteri f a] applies function [f] to the index and all elements of [a],
       in order. Like [iter] but [f] also receives the index. *)
   Definition iteri_spec iteri : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
        a ↦∗{dq} xs ∗
-       {{ ∀ (Xs : list A);
+       □ {{ ∀ (Xs : list A);
           ⌜Xs ++ singleton x `prefix_of` xs⌝ ∗ ⌜length Xs = i⌝ ∗ I Xs }}
        f i x : Z A
        {{ RET (); I (Xs ++ singleton x) }} ∗
@@ -756,10 +756,10 @@ Section mapi_spec.
   (** [mapi f a] applies function [f] to the index and all elements of [a],
       and builds an array with the results. *)
   Definition mapi_spec mapi : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B)
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B)
          dq (xs : list A) (Φ : Z → A → B → iProp Σ);
        a ↦∗{dq} xs ∗
-       {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (y : B); Φ i x y }} }}
+       □ {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (y : B); Φ i x y }} }}
     mapi f a : val array
     {{ RET b; ∃ (ys : list B),
                 b ↦∗ ys ∗
@@ -776,7 +776,7 @@ Section to_list_spec.
 
   (** [to_list a] returns a list containing the elements of [a]. *)
   Definition to_list_spec to_list : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A);
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A);
        a ↦∗{dq} xs }}
     to_list a : array
     {{ RET (ys : list A); ⌜ys = xs⌝ ∗ a ↦∗{dq} xs }}.
@@ -791,7 +791,7 @@ Section of_list_spec.
 
   (** [of_list l] returns a fresh array containing the elements of [l]. *)
   Definition of_list_spec of_list : iProp Σ :=
-    {{ ∀ `(Encode A) (xs : list A);
+    □ {{ ∀ `(Encode A) (xs : list A);
        ⌜l = #xs⌝ ∗ ⌜length xs ≤ max_array_length⌝ }}
     of_list l : val
     {{ RET a; a ↦∗ xs }}.
@@ -807,11 +807,11 @@ Section equal_spec.
   (** [equal eq a b] tests whether [a] and [b] are element-wise equal,
       using [eq] to compare elements. *)
   Definition equal_spec equal : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A)
+    □ {{ ∀ `(Encode A, Inhabited A)
          dq1 dq2 (xs ys : list A) (P : A → A → Prop) (_ : ∀ x y, Decision (P x y));
        a ↦∗{dq1} xs ∗
        b ↦∗{dq2} ys ∗
-       {{ True }} eq x y : A A {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+       □ {{ True }} eq x y : A A {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
     equal eq a b : val array array
     {{ RET (r : bool);
          a ↦∗{dq1} xs ∗
@@ -829,10 +829,10 @@ Section compare_spec.
   (** [compare cmp a b] compares arrays lexicographically using [cmp]
       for elements. Returns an integer: negative, zero, or positive. *)
   Definition compare_spec compare : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq1 dq2 (xs ys : list A) (f : A → A → Z);
+    □ {{ ∀ `(Encode A, Inhabited A) dq1 dq2 (xs ys : list A) (f : A → A → Z);
        a ↦∗{dq1} xs ∗
        b ↦∗{dq2} ys ∗
-       {{ True }} cmp x y : A A {{ RET (c : Z); ⌜c = f x y⌝ }} }}
+       □ {{ True }} cmp x y : A A {{ RET (c : Z); ⌜c = f x y⌝ }} }}
     compare cmp a b : val array array
     {{ RET (r : Z);
          a ↦∗{dq1} xs -∗
@@ -850,10 +850,10 @@ Section fold_left_spec.
 
   (** [fold_left f init a] computes [f (... (f (f init a.(0)) a.(1)) ...) a.(n-1)]. *)
   Definition fold_left_spec fold_left : iProp Σ :=
-  ∀∀ `(Encode A) `(Encode B);
+  □ ∀∀ `(Encode A) `(Encode B);
   {{ ∀ `(Inhabited B) dq (xs : list B) (I : A → list B → iProp Σ);
      a ↦∗{dq} xs ∗
-     {{ ∀ visited; ⌜visited ++ singleton b `prefix_of` xs⌝ ∗ I acc visited }}
+     □ {{ ∀ visited; ⌜visited ++ singleton b `prefix_of` xs⌝ ∗ I acc visited }}
      f acc b : A B
      {{ RET acc'; I acc' (visited ++ singleton b) }} ∗
      I x [] }}
@@ -862,10 +862,10 @@ Section fold_left_spec.
 
   (** [fold_left f init a] computes [f (... (f (f init a.(0)) a.(1)) ...) a.(n-1)]. *)
   Definition fold_left_pure_spec fold_left : iProp Σ :=
-  ∀∀ `(Encode A) `(Encode B);
+  □ ∀∀ `(Encode A) `(Encode B);
   {{ ∀ `(Inhabited B) dq (xs : list B) (Φ : A → B → A);
      a ↦∗{dq} xs ∗
-     {{ True }} f acc b : A B {{ RET acc'; ⌜acc' = Φ acc b⌝ }} }}
+     □ {{ True }} f acc b : A B {{ RET acc'; ⌜acc' = Φ acc b⌝ }} }}
   fold_left f x a : val A array
   {{ RET r; ⌜r = List.fold_left Φ xs x⌝ ∗ a ↦∗{dq} xs }}.
 
@@ -979,10 +979,10 @@ Section fold_left_map_spec.
   (** [fold_left_map f acc input_array] is like [fold_left] but also builds
       an output array from the second component of [f]'s return value. *)
   Definition fold_left_map_spec fold_left_map : iProp Σ :=
-    {{ ∀ `(Encode B, Inhabited B) `(Encode C)
+    □ {{ ∀ `(Encode B, Inhabited B) `(Encode C)
          dq (xs : list B) (Φ : A → B → A → C → iProp Σ);
        input_array ↦∗{dq} xs ∗
-       {{ True }} f acc b : A B {{ RET (p : τ[A; C]); Φ acc b p.1 p.2 }} }}
+       □ {{ True }} f acc b : A B {{ RET (p : τ[A; C]); Φ acc b p.1 p.2 }} }}
     fold_left_map f x input_array : val A array
     {{ RET ((y, output_array) : τ[A; array]);
          ∃ (ys : list C), ⌜length ys = length xs⌝ ∗
@@ -1001,9 +1001,9 @@ Section fold_right_spec.
 
   (** [fold_right f a init] computes [f a.(0) (f a.(1) (... (f a.(n-1) init) ...))]. *)
   Definition fold_right_spec fold_right : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : B → Z → iProp Σ);
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : B → Z → iProp Σ);
        a ↦∗{dq} xs ∗
-       {{ ∀ i; ⌜0 ≤ i < length xs⌝ ∗ ⌜xs !!! i = y⌝ ∗ I b (i + 1) }}
+       □ {{ ∀ i; ⌜0 ≤ i < length xs⌝ ∗ ⌜xs !!! i = y⌝ ∗ I b (i + 1) }}
        f y b : A B
        {{ RET (b' : B); I b' i }} ∗
        I x (length xs) }}
@@ -1020,10 +1020,10 @@ Section exists_spec.
 
   (** [exists p a] checks if at least one element of [a] satisfies [p]. *)
   Definition exists_spec exists_ : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
          (_ : ∀ x, Decision (P x));
        a ↦∗{dq} xs ∗
-       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+       □ {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
     exists_ p a : val array
     {{ RET (b : bool); a ↦∗{dq} xs ∗ ⌜b = true ↔ Exists P xs⌝ }}.
 
@@ -1037,10 +1037,10 @@ Section for_all_spec.
 
   (** [for_all p a] checks if all elements of [a] satisfy the predicate [p]. *)
   Definition for_all_spec for_all : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
          (_ : ∀ x, Decision (P x));
        a ↦∗{dq} xs ∗
-       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+       □ {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
     for_all p a : val array
     {{ RET (b : bool); a ↦∗{dq} xs ∗ ⌜b = true ↔ Forall P xs⌝ }}.
 
@@ -1055,13 +1055,13 @@ Section for_all2_spec.
   (** [for_all2 p a b] checks if all corresponding elements of [a] and [b]
       satisfy the predicate [p]. Raises if the arrays have different lengths. *)
   Definition for_all2_spec for_all2 : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
          dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop)
          (_ : ∀ x y, Decision (P x y));
        ⌜length xs = length ys⌝ ∗
        a ↦∗{dq1} xs ∗
        b ↦∗{dq2} ys ∗
-       {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+       □ {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
     for_all2 p a b : val array array
     {{ RET (r : bool);
          a ↦∗{dq1} xs ∗ b ↦∗{dq2} ys ∗ ⌜r = true ↔ Forall2 P xs ys⌝ }}.
@@ -1077,13 +1077,13 @@ Section exists2_spec.
   (** [exists2 p a b] checks if there exist corresponding elements of [a]
       and [b] that satisfy [p]. Raises if the arrays have different lengths. *)
   Definition exists2_spec exists2_ : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
          dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop)
          (_ : ∀ x y, Decision (P x y));
        ⌜length xs = length ys⌝ ∗
        a ↦∗{dq1} xs ∗
        b ↦∗{dq2} ys ∗
-       {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+       □ {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
     exists2_ p a b : val array array
     {{ RET (r : bool);
          a ↦∗{dq1} xs ∗
@@ -1105,10 +1105,10 @@ Section find_opt_spec.
   (** [find_opt p a] returns the first element of [a] that satisfies [p],
       or [None] if no such element exists. *)
   Definition find_opt_spec find_opt : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
          (_ : ∀ x, Decision (P x));
        a ↦∗{dq} xs ∗
-       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+       □ {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
     find_opt p a : val array
     {{ RET (r : option A);
          a ↦∗{dq} xs ∗
@@ -1128,10 +1128,10 @@ Section find_index_spec.
   (** [find_index p a] returns the index of the first element that
       satisfies [p], or [None]. *)
   Definition find_index_spec find_index : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+    □ {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
          (_ : ∀ x, Decision (P x));
        a ↦∗{dq} xs ∗
-       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+       □ {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
     find_index p a : val array
     {{ RET (r : option Z);
          a ↦∗{dq} xs ∗
@@ -1152,9 +1152,9 @@ Section find_map_spec.
   (** [find_map f a] applies [f] to each element and returns the first
       [Some] result, or [None] if [f] returns [None] on all elements. *)
   Definition find_map_spec find_map : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : A → option B);
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : A → option B);
        a ↦∗{dq} xs ∗
-       {{ True }} f x : A {{ RET (r : option B); ⌜r = g x⌝ }} }}
+       □ {{ True }} f x : A {{ RET (r : option B); ⌜r = g x⌝ }} }}
     find_map f a : val array
     {{ RET (r : option B);
          a ↦∗{dq} xs ∗
@@ -1174,9 +1174,9 @@ Section find_mapi_spec.
   (** [find_mapi f a] applies [f] to the index and each element and returns
       the first [Some] result, or [None]. *)
   Definition find_mapi_spec find_mapi : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : Z → A → option B);
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : Z → A → option B);
        a ↦∗{dq} xs ∗
-       {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (r : option B); ⌜r = g i x⌝ }} }}
+       □ {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (r : option B); ⌜r = g i x⌝ }} }}
     find_mapi f a : val array
     {{ RET (r : option B);
          a ↦∗{dq} xs ∗
@@ -1195,7 +1195,7 @@ Section split_spec.
 
   (** [split x] takes an array of pairs and returns a pair of arrays. *)
   Definition split_spec split : iProp Σ :=
-    {{ ∀ `(Encode A) `(Encode B) (_ : Inhabited (A * B)) dq (ps : list (A * B));
+    □ {{ ∀ `(Encode A) `(Encode B) (_ : Inhabited (A * B)) dq (ps : list (A * B));
        a ↦∗{dq} ps }}
     split a : array
     {{ RET ((b1, b2) : τ[array;array]);
@@ -1212,7 +1212,7 @@ Section combine_spec.
   (** [combine a b] takes two arrays and returns an array of pairs.
       Raises if the arrays have different lengths. *)
   Definition combine_spec combine : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+    □ {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
          dq1 dq2 (xs : list A) (ys : list B);
        ⌜length xs = length ys⌝ ∗ a ↦∗{dq1} xs ∗ b ↦∗{dq2} ys }}
     combine a b : array array
@@ -1333,7 +1333,7 @@ Section module_proof.
     iIntros (? ->).
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_init; (iFrame "#"; auto). }
+    { iApply imp_init; solve_env. }
     iIntros (init) "#Hinit".
 
     iApply (imp_sitems_let (A:=val)).
@@ -1365,7 +1365,7 @@ Section module_proof.
     iIntros (blit) "Hblit".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_iter; (iFrame "#"; auto). }
+    { iApply imp_iter; solve_env. }
     iIntros (iter) "#Hiter".
 
     iApply (imp_sitems_let (A:=val)).
@@ -1373,15 +1373,15 @@ Section module_proof.
     iIntros (iter2) "Hiter2".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_map; (iFrame "#"; auto). }
+    { iApply imp_map; solve_env. }
     iIntros (map) "#Hmap".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_map_inplace; (iFrame "#"; auto). }
+    { iApply imp_map_inplace; solve_env. }
     iIntros (map_inplace) "#Hmap_inplace".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_mapi_inplace; (iFrame "#"; auto). }
+    { iApply imp_mapi_inplace; solve_env. }
     iIntros (mapi_inplace) "#Hmapi_inplace".
 
     iApply (imp_sitems_let (A:=val)).
@@ -1389,7 +1389,7 @@ Section module_proof.
     iIntros (map2) "Hmap2".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_iteri; (iFrame "#"; auto). }
+    { iApply imp_iteri; solve_env. }
     iIntros (iteri) "#Hiteri".
 
     iApply (imp_sitems_let (A:=val)).
@@ -1421,7 +1421,7 @@ Section module_proof.
     iIntros (compare) "Hcompare".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_fold_left; (iFrame "#"; auto). }
+    { iApply imp_fold_left; solve_env. }
     iIntros (fold_left) "#Hfold_left".
 
     iApply (imp_sitems_let (A:=val)).

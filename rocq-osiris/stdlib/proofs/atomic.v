@@ -21,7 +21,7 @@ Section atomic_proofs.
      at inline-record values. *)
 
   Definition compare_and_set_spec compare_and_set : iProp Σ :=
-  ∀∀ `(InlineEncode A);
+  □ ∀∀ `(InlineEncode A);
   {{ ∀ E2 Φ;
      ▷ (|={⊤, E2}=>
         ∃ (a : A) dq1 dq2 t,

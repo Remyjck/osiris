@@ -74,7 +74,8 @@ Osiris reasons about arbitrary OCaml programs with Iris.
 
 - `pure_tactics.v`: tactics for discharging pure goals
 - `imp_tactics.v`: tactics for Iris/EWP goals (`imp_store_atomic`, `imp_arith`, `imp_if`, …)
-- `env_lookups.v`: specifications for modules (environments) and the `imp_path` tactic
+- `env_lookups.v`: specifications for modules (environments), the `imp_path` tactic, and
+  the `solve_env` tactic
 - `handler_tactics.v`: tactics for reasoning about handlers
 - `setup.v`: opacity settings and general proofmode configuration (exported last)
 - `proofmode.v`: umbrella re-export

@@ -231,8 +231,8 @@ Qed.
    As it stands, this specification is too strong and not provable,
    as we may overflow and return an identifier which is not fresh. *)
 
-Definition fresh_spec (γ : uf_names) fresh : iProp Σ :=
-  {{ is_uf γ }}
+Definition fresh_spec fresh : iProp Σ :=
+  □ {{ ∀ γ; is_uf γ }}
   fresh u : unit
   {{ RET (i : Z); i ↪[γ.(uf_ids)] () ∗ ⌜representable i⌝ }}.
 
@@ -257,10 +257,10 @@ Definition fresh_root (cx : content) (v : val) : iProp Σ :=
    because [R] is the identity function outside of the domain [D], so
    [x] is already its own representative. *)
 
-Definition make_spec (γ : uf_names) (v : val) (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
+Definition make_spec make : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+    make v : val @ ↑ufN
   <<{ ∃∃ x : elem, ⌜(x ∉ D) ∧ R x = x⌝ ∗ UF γ (D ∪ {[x]}) R V.[x -/R/> v]
     | RET x; in_uf γ x }>>.
 
@@ -268,17 +268,17 @@ Definition make_spec (γ : uf_names) (v : val) (m : microvx) : iProp Σ :=
 Hypothesis Hmax1 : (1 ≤ max_array_length)%Z.
 Hypothesis Hmax2 : (2 ≤ max_array_length)%Z.
 
-Lemma make_proof γ η :
-  path_spec ["G"; "fresh"] (fresh_spec γ)%I η -∗
-  EWP (eval η (EAnonFun __make)) {{ c, □ iSpec τ[val] c (make_spec γ) }}.
+Lemma make_proof η :
+  path_spec ["G"; "fresh"] fresh_spec η -∗
+  EWP (eval η (EAnonFun __make)) {{ make_spec }}.
 Proof.
   iIntros "#HG".
   iApply imp_EAnon_pers.
-  iIntros "!>" (v).
-  unfold make_spec.
+  iIntros "!> /=".
+  iIntros (v γ) "#Hinv".
   (* We are proving a logically atomic triple: introduce the atomic
      update [AU] and the abstract postcondition [Φ]. *)
-  iIntros "#Hinv" (Φ) "AU".
+  iIntros (Φ) "AU".
   iApply imp_please; iNext.
 
   (* [let id = G.fresh() and content = Root { value = v } in ...].
@@ -334,103 +334,164 @@ Qed.
    with the pure precondition [⌜e ∈ D⌝] replaced by the persistent
    [in_uf γ x]. *)
 
-Definition find_spec (γ : uf_names) x (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  in_uf γ x -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
+Definition find_spec find : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ ∗ in_uf γ x
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+    find x : elem @ ↑ufN
   <<{ ∃∃ z : elem, ⌜z = R x⌝ ∗ UF γ D R V
     | RET z; in_uf γ z ∗ same_class γ x z }>>.
 
+(* Stating the triple as [UF γ D R V | RET (R x); …], with no [∃∃] binder
+   and no equation, would make its atomic update literally the one
+   [find_au] below asks for, and [find_atomic_spec] a bare [iExact "AU"].
+   With the [∃∃] form the two have different shapes, so the triple has to
+   re-package the update. *)
+
 (* ------------------------------------------------------------------------ *)
 
-(* A stronger specification for [find] using a hook to pass around the
-   atomic update. *)
+(* The specification [find] is proved against, and the one its callers
+   use: they are the same. What a caller hands over is its own atomic
+   update, [find_au]; an observing caller, which linearizes nothing, hands
+   over nothing. The two cases are the [op] parameter, after Zoo's
+   [operation] variant (zoo_saturn/queue_mpmc_1.v:419). *)
 
-Definition find_hook (γ : uf_names) (x : elem) (Ψ : elem → iProp Σ) : iProp Σ :=
-  ∀ D (R : elem → elem) (V : elem → val),
-    UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ (R x).
+Definition find_au (γ : uf_names) (x : elem) (Ψ : elem → iProp Σ) : iProp Σ :=
+  AU <{ ∃∃ D (R : elem → elem) (V : elem → val), UF γ D R V }>
+     @ ⊤ ∖ ↑ufN, ∅
+  <{ UF γ D R V, COMM Ψ (R x) }>.
 
-Lemma find_hook_rebase γ x z Ψ :
-  same_class γ x z -∗ find_hook γ x Ψ -∗ find_hook γ z Ψ.
+Definition find_pre (γ : uf_names) (x : elem)
+    (op : option (elem → iProp Σ)) : iProp Σ :=
+  match op with
+  | None => True
+  | Some Ψ => find_au γ x Ψ
+  end.
+
+Definition find_post (z : elem) (op : option (elem → iProp Σ)) : iProp Σ :=
+  match op with
+  | None => True
+  | Some Ψ => Ψ z
+  end.
+
+(* At a linearization point the atomic update is committed against the
+   state the accessor exposes, which is where the one-shot fupd the
+   accessors consume comes from. It is internal to the proofs: no
+   specification mentions it. *)
+
+Lemma find_au_commit γ x Ψ D R V :
+  find_au γ x Ψ -∗ UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ (R x).
 Proof.
-  iIntros "#Hxz Hhook" (D R V) "Hst".
-  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
-  rewrite -Heq. iApply ("Hhook" with "Hst").
+  iIntros "AU Hst".
+  iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
+  iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
+  iMod ("Hcommit" with "Hcl") as "HΨ".
+  by iFrame.
 Qed.
 
-Definition find_aux_spec (γ : uf_names) (x : elem) (m : microvx) : iProp Σ :=
-  ∀ (Ψ : elem → iProp Σ),
-    is_uf γ -∗
-    in_uf γ x -∗
-    find_hook γ x Ψ -∗
-    EWP m {{ (z : elem), Ψ z ∗ in_uf γ z ∗ same_class γ x z }}.
+(* Re-basing onto another member of the same class: the recursive call
+   speaks of the vertex the traversal reached. Unlike a one-shot fupd, an
+   atomic update has to be re-packaged, but [UF_same_class_eq] is still
+   all the argument needs. *)
 
-(* A weaker specification for [find], which isn't atomic at all. *)
-
-Lemma find_observe γ x m :
-  find_aux_spec γ x m -∗
-  is_uf γ -∗
-  in_uf γ x -∗
-  EWP m {{ (z : elem), in_uf γ z ∗ same_class γ x z }}.
+Lemma find_au_rebase γ x z Ψ :
+  same_class γ x z -∗ find_au γ x Ψ -∗ find_au γ z Ψ.
 Proof.
-  iIntros "Hspec #Hinv #Hx".
-  iSpecialize ("Hspec" $! (λ _, True)%I with "Hinv Hx []").
-  { iIntros (D R V) "$". by iModIntro. }
-  iApply (imp_wand with "Hspec").
+  iIntros "#Hxz AU". rewrite /find_au. iAuIntro.
+  iApply (aacc_aupd with "AU"); first done.
+  iIntros (D R V) "Hst".
+  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
+  iAaccIntro with "Hst".
+  { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+  iIntros "Hst !>". iRight. iFrame "Hst".
+  iIntros "HΨ !>". by rewrite Heq.
+Qed.
+
+Lemma find_pre_rebase γ x z op :
+  same_class γ x z -∗ find_pre γ x op -∗ find_pre γ z op.
+Proof.
+  iIntros "#Hxz Hop". destruct op as [Ψ|]; simpl; last done.
+  iApply (find_au_rebase with "Hxz Hop").
+Qed.
+
+Definition find_aux_spec find : iProp Σ :=
+  □ {{ ∀ γ op; is_uf γ ∗ in_uf γ x ∗ find_pre γ x op }}
+  find x : elem
+  {{ RET (z : elem); find_post z op ∗ in_uf γ z ∗ same_class γ x z }}.
+
+(* The observing caller: [op] is [None], so it hands over nothing and
+   learns only where the traversal ended. *)
+
+Lemma find_observe find :
+  find_aux_spec find -∗
+  □ {{ ∀ γ; is_uf γ ∗ in_uf γ x }}
+  find x : elem
+  {{ RET (z : elem); in_uf γ z ∗ same_class γ x z }}.
+Proof.
+  iIntros "#Hspec !>".
+  iApply (iSpec_mono with "Hspec"). simpl.
+  iIntros (x m) "Hspec'". iIntros (γ) "(#Hinv & #Hin)".
+  iApply (imp_wand with "[Hspec']").
+  { iApply ("Hspec'" $! γ None). by iFrame "#". }
   iIntros (z) "(_ & $ & $)".
 Qed.
 
-Lemma find_atomic_spec γ x m :
-  find_aux_spec γ x m -∗ find_spec γ x m.
+(* The linearizing caller: [op] is [Some Ψ], with [Ψ] the continuation
+   folding in the private postcondition (compare
+   [nextｰspecｰpop (λ o, _ -∗ Φ o)], queue_mpmc_1.v:876).
+
+   The re-packaging below is only there because [find_spec]'s atomic
+   postcondition has an [∃∃] binder while [find_au]'s does not; stating
+   the triple as [UF γ D R V | RET (R x); …] would make it [iExact "AU"],
+   as in [get_atomic_spec]. *)
+
+Lemma find_atomic_spec find :
+  find_aux_spec find -∗ find_spec find.
 Proof.
-  iIntros "Hspec #Hinv #Hx".
-  unfold find_spec. iIntros (Φ) "AU".
-  iSpecialize ("Hspec" $! (λ z, in_uf γ z ∗ same_class γ x z -∗ Φ z)%I
-                 with "Hinv Hx [AU]").
-  { iIntros (D R V) "Hst".
-    iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
-    iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
-    iMod ("Hcommit" $! (R x) with "[$Hcl]") as "HΦ"; first done.
-    by iFrame. }
-  iApply (imp_wand with "Hspec").
+  iIntros "Hspec".
+  iApply (iSpec_mono_pers with "Hspec").
+  iIntros "!>" (x m) "Hm". iIntros (γ) "[#Hinv #Hx]". iIntros (Φ) "AU".
+  iApply (imp_wand with "[Hm AU]").
+  { iApply ("Hm" $! γ (Some (λ z, in_uf γ z ∗ same_class γ x z -∗ Φ z)%I)).
+    iFrame "Hinv Hx".
+    rewrite /find_pre /find_au. iAuIntro.
+    iApply (aacc_aupd with "AU"); first done.
+    iIntros (D R V) "Hst".
+    iAaccIntro with "Hst".
+    { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+    iIntros "Hst !>". iRight. iExists (R x).
+    iSplitL "Hst"; first by iFrame "Hst".
+    iIntros "HΦ !>". iExact "HΦ". }
   iIntros (z) "(HΦ & #Hin & #Hsc)". iApply "HΦ". by iFrame "Hin Hsc".
 Qed.
 
-Lemma find_atomic_iSpec γ c :
-  iSpec τ[elem] c (find_aux_spec γ) -∗ iSpec τ[elem] c (find_spec γ).
+Lemma find_proof η :
+  ▷ in_env "find" find_aux_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x"
+    (EMatch (ERecordAccess (EPath ["x"]) content_field) __find_branches)))
+    find_aux_spec.
 Proof.
-  iIntros "Hspec".
-  iApply (iSpec_mono with "Hspec").
-  iIntros (x m) "Hm". by iApply find_atomic_spec.
-Qed.
-
-Lemma find_proof γ η :
-  ▷ in_env "find" (λ find, □ iSpec τ[elem] find (find_aux_spec γ)) η -∗
-  □ fun_spec.predicate_over_function_body τ[elem] (find_aux_spec γ) η
-      (EAnonFun (AnonFun "x"
-        (EMatch (ERecordAccess (EPath ["x"]) content_field) __find_branches))).
-Proof.
-  iIntros "#IH".
-  iIntros "!>" (x).
-  unfold find_aux_spec at 2.
-  iIntros (Ψ) "#Hinv #Hx Hhook".
+  iIntros "#IH". iApply closure_spec_intro.
+  iIntros "!> /=" (x γ op) "(#Hinv & #Hx & Hop)".
   iDestruct "Hx" as (i) "#Hxv".
   iApply imp_please; iNext.
 
-  (* Goal: [ match x.content with ... ]. The scrutinee read carries the
-     hook: on a [Root] it is run there and then, and the branch's whole
-     postcondition comes back in its place. *)
-  imp_match content with "[Hhook]".
-  { iApply (read_vertex_lp (λ _, Ψ x ∗ in_uf γ x ∗ same_class γ x x)%I
-              with "Hinv Hxv Hhook [] []"); last first.
+  (* Goal: [ match x.content with ... ]. The scrutinee read carries what
+     the caller handed over: on a [Root] its atomic update is committed
+     there and then, and the branch's whole postcondition comes back in
+     its place. *)
+  imp_match content with "[Hop]".
+  { iApply (read_vertex_lp (λ _, find_post x op ∗ in_uf γ x ∗ same_class γ x x)%I
+              with "Hinv Hxv Hop [] []"); last first.
     { imp_path. }
-    iNext. iIntros (c D R V) "_ %HRx _ _ Hhook Hst".
+    iNext. iIntros (c D R V) "_ %HRx _ _ Hop Hst".
     (* The linearization point: [x] is its own representative in the
-       state the accessor exposes. *)
-    iMod ("Hhook" with "Hst") as "[$ HΨ]".
-    iEval (rewrite HRx) in "HΨ".
-    iFrame "HΨ Hxv". iApply same_class_refl. }
+       state the accessor exposes. An observing caller has nothing to
+       commit. *)
+    destruct op as [Ψ|]; simpl.
+    - iMod (find_au_commit with "Hop Hst") as "[$ HΨ]".
+      iEval (rewrite HRx) in "HΨ".
+      iFrame "HΨ Hxv". iApply same_class_refl.
+    - iFrame "Hst Hxv". iModIntro. iApply same_class_refl. }
   iIntros "Hc".
 
   (* Branches of the match. TODO: Make the iris-level pattern-matching
@@ -447,21 +508,21 @@ Proof.
   rewrite (@encode_encode' content).
   next_branch.
   next_branch.
-  iDestruct "Hc" as "[(_ & (%lp & #Hlk)) Hhook]".
+  iDestruct "Hc" as "[(_ & (%lp & #Hlk)) Hop]".
   iDestruct (linked_locs with "Hlk") as "#Hlocs".
   iApply (ipat_PRecord_atomic (A:=elem) (⊤ ∖ ↑ufN) ⊤
-            with "[] [Hhook]").
+            with "[] [Hop]").
   { iModIntro. iApply (blockLocs_field_at with "Hlocs"). done. }
   iNext.
-  iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hhook]").
+  iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hop]").
   iNext.
   iIntros (y j Hj) "#Hxy #Hy".
 
   (* Recursive call [find y]. *)
   imp_app τ[elem].
   iIntros "Hm".
-  iSpecialize ("Hm" $! Ψ with "Hinv [$] [Hhook]").
-  { iApply (find_hook_rebase with "Hxy Hhook"). }
+  iSpecialize ("Hm" $! γ op with "[$Hinv $Hy Hop]").
+  { iApply (find_pre_rebase with "Hxy Hop"). }
   (* Show that the found ancestor of the parent [y] is also an ancestor
      of the original vertex. *)
   iApply (imp_wand with "Hm").
@@ -478,25 +539,18 @@ Qed.
    It has no other observable effect as it preserves the
    datastructure's invariant. *)
 
-Definition compress_spec (γ : uf_names) (x z : elem) (m : microvx) : iProp Σ :=
-  ∀ i k,
-    is_uf γ -∗
-    vertex γ x i -∗
-    vertex γ z k -∗
-    same_class γ x z -∗
-    EWP m {{ (w : elem), ⌜w = z⌝ }}.
+Definition compress_spec compress : iProp Σ :=
+  □ {{ ∀ γ i k; is_uf γ ∗ vertex γ x i ∗ vertex γ z k ∗ same_class γ x z }}
+  compress x z : elem elem
+  {{ RET (w : elem); ⌜w = z⌝ }}.
 
-Lemma compress_proof γ η :
-  ▷ in_env "compress"
-      (λ compress, □ iSpec τ[elem; elem] compress (compress_spec γ)) η -∗
-  □ fun_spec.predicate_over_function_body τ[elem; elem] (compress_spec γ) η
-      (EAnonFun (AnonFun "x" (EAnonFun __compress_fun))).
+Lemma compress_proof η :
+  ▷ in_env "compress" compress_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x" (EAnonFun __compress_fun)))
+    compress_spec.
 Proof.
-  iIntros "#IH".
-  iIntros "!> /=".
-  iIntros (x z).
-  unfold compress_spec at 2.
-  iIntros (i k) "#Hinv #Hx #Hz #Hxz".
+  iIntros "#IH". iApply closure_spec_intro.
+  iIntros "!> /=" (x z γ i k) "(#Hinv & #Hx & #Hz & #Hxz)".
   (* Both identifiers are compared by machine instructions below. *)
   iMod (vertex_representable with "Hinv Hx") as %Hrepi.
   iMod (vertex_representable with "Hinv Hz") as %Hrepk.
@@ -588,46 +642,40 @@ Proof.
     iDestruct (same_class_sibling with "Hsxy Hxz") as "#Hyz".
     imp_app τ[elem; elem].
     iIntros "Hm".
-    iApply ("Hm" $! jy k with "Hinv Hy Hz Hyz"). }
-
+    iApply ("Hm" $! γ jy k with "[$Hinv $Hy $Hz $Hyz]"). }
   (* [else z]: compression would not lower the identifier, so stop. *)
   { iIntros "%Hcmp". imp_path. }
 Qed.
-
 (* ------------------------------------------------------------------------ *)
 (* Verification of [findc]. *)
-
 (* [findc] satisfies [find]'s specification: the compression is invisible.
-
    [findc] is [find] followed by [compress], and its linearization point
    is inside the [find], at the instant [find] reports its answer.
    So [findc] hands its client's atomic update straight to [find]. *)
-
-Lemma findc_proof γ η :
-  in_env "find" (λ find, □ iSpec τ[elem] find (find_aux_spec γ)) η -∗
-  in_env "compress"
-    (λ compress, □ iSpec τ[elem; elem] compress (compress_spec γ)) η -∗
-  EWP (eval η (EAnonFun __findc))
-    {{ c, □ iSpec τ[elem] c (find_aux_spec γ) }}.
+Lemma findc_proof η :
+  in_env "find" find_aux_spec η -∗
+  in_env "compress" compress_spec η -∗
+  EWP (eval η (EAnonFun __findc)) {{ findc, find_aux_spec findc }}.
 Proof.
   iIntros "#IFind #ICompress".
   iApply imp_EAnon_pers.
-  iIntros "!>" (x).
-  unfold find_aux_spec at 2.
-  iIntros (Ψ) "#Hinv #Hx Hhook".
+  iIntros "!> /=" (x γ op) "(#Hinv & #Hx & Hop)".
   iDestruct "Hx" as (i) "#Hxv".
   iApply imp_please; iNext.
 
   (* [match x.content with ...]. *)
-  imp_match content with "[Hhook]".
-  { iApply (read_vertex_lp (λ _, Ψ x ∗ in_uf γ x ∗ same_class γ x x)%I
-              with "Hinv Hxv Hhook [] []"); last first.
+  imp_match content with "[Hop]".
+  { iApply (read_vertex_lp (λ _, find_post x op ∗ in_uf γ x ∗ same_class γ x x)%I
+              with "Hinv Hxv Hop [] []"); last first.
     { imp_path. }
-    iNext. iIntros (c D R V) "_ %HRx _ _ Hhook Hst".
-    iMod ("Hhook" with "Hst") as "[$ HΨ]".
-    iEval (rewrite HRx) in "HΨ".
-    iFrame "HΨ".
-    iSplitR; [by iExists i | iApply same_class_refl]. }
+    iNext. iIntros (c D R V) "_ %HRx _ _ Hop Hst".
+    destruct op as [Ψ|]; simpl.
+    - iMod (find_au_commit with "Hop Hst") as "[$ HΨ]".
+      iEval (rewrite HRx) in "HΨ".
+      iFrame "HΨ".
+      iSplitR; [by iExists i | iApply same_class_refl].
+    - iFrame "Hst". iModIntro. iSplitR; first done.
+      iSplitR; [by iExists i | iApply same_class_refl]. }
   iIntros "Hc".
   destruct a as [rc|rc]; simpl.
 
@@ -636,28 +684,28 @@ Proof.
     imp_path. }
 
   (* [Link { parent = y } -> let z = find y in compress x z]. *)
-  iDestruct "Hc" as "[(_ & (%lp & #Hlk)) Hhook]".
+  iDestruct "Hc" as "[(_ & (%lp & #Hlk)) Hop]".
   iDestruct (linked_locs with "Hlk") as "#Hlocs".
   rewrite (@encode_encode' content).
   next_branch.
   next_branch.
   iApply (ipat_PRecord_atomic (A:=elem) (⊤ ∖ ↑ufN) ⊤
-            with "[] [Hhook]").
+            with "[] [Hop]").
   { iModIntro. iApply (blockLocs_field_at with "Hlocs"). done. }
   iNext.
-  iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hhook]").
+  iApply (uf_link_parent_acc with "Hinv Hxv Hlk [Hop]").
   iNext.
   iIntros (y jy Hjy) "#Hxy #Hy".
 
-  (* [let z = find y in ...]: the call is on [y], but the hook [findc]
-     holds is about [x], so it is transported across [same_class γ x y]
-     by [find_hook_rebase]. *)
+  (* [let z = find y in ...]: the call is on [y], but what [findc] holds
+     is about [x], so it is transported across [same_class γ x y] by
+     [find_pre_rebase]. *)
   iApply (imp_ELet_var (B:=elem)
-    (λ z : elem, Ψ z ∗ in_uf γ z ∗ same_class γ x z)%I with "[Hhook]").
+    (λ z : elem, find_post z op ∗ in_uf γ z ∗ same_class γ x z)%I with "[Hop]").
   { imp_app τ[elem].
     iIntros "Hm".
-    iSpecialize ("Hm" $! Ψ with "Hinv [$] [Hhook]").
-    { iApply (find_hook_rebase with "Hxy Hhook"). }
+    iSpecialize ("Hm" $! γ op with "[$Hinv $Hy Hop]").
+    { iApply (find_pre_rebase with "Hxy Hop"). }
     iApply (imp_wand with "Hm").
     iIntros (z) "($ & $ & #Hyz)".
     iApply (same_class_trans with "Hxy Hyz"). }
@@ -667,8 +715,7 @@ Proof.
   iDestruct "Hz" as (k) "#Hzv".
   imp_app τ[elem; elem].
   iIntros "Hm".
-  unfold compress_spec.
-  iSpecialize ("Hm" $! i k with "Hinv Hxv Hzv Hxz").
+  iSpecialize ("Hm" $! γ i k with "[$Hinv $Hxv $Hzv $Hxz]").
   iApply (imp_wand with "Hm").
   iIntros (w) "->".
   iFrame "HΨ Hxz Hzv".
@@ -677,87 +724,106 @@ Qed.
 (* ------------------------------------------------------------------------ *)
 (* Verification of [get]. *)
 
-Definition get_hook (γ : uf_names) (x : elem) (Ψ : val → iProp Σ) : iProp Σ :=
-  ∀ D (R : elem → elem) (V : elem → val),
-    UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ (V (R x)).
+(* [get] is only ever called by a client that linearizes, so it needs no
+   observing mode: what it is handed is always an atomic update. *)
 
-Lemma get_hook_rebase γ x z Ψ :
-  same_class γ x z -∗ get_hook γ x Ψ -∗ get_hook γ z Ψ.
+Definition get_au (γ : uf_names) (x : elem) (Ψ : val → iProp Σ) : iProp Σ :=
+  AU <{ ∃∃ D (R : elem → elem) (V : elem → val), UF γ D R V }>
+     @ ⊤ ∖ ↑ufN, ∅
+  <{ UF γ D R V, COMM Ψ (V (R x)) }>.
+
+Lemma get_au_commit γ x Ψ D R V :
+  get_au γ x Ψ -∗ UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ (V (R x)).
 Proof.
-  iIntros "#Hxz Hhook" (D R V) "Hst".
-  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
-  rewrite -Heq. iApply ("Hhook" with "Hst").
-Qed.
-
-Definition get_aux_spec (γ : uf_names) (x : elem) (m : microvx) : iProp Σ :=
-  ∀ (Ψ : val → iProp Σ),
-    is_uf γ -∗
-    in_uf γ x -∗
-    get_hook γ x Ψ -∗
-    EWP m {{ Ψ }}.
-
-Definition get_spec (γ : uf_names) (x : elem) (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  in_uf γ x -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
-  <<{ UF γ D R V | RET (V (R x)) }>>.
-
-Lemma get_atomic_spec γ x m :
-  get_aux_spec γ x m -∗ get_spec γ x m.
-Proof.
-  iIntros "Hspec #Hinv #Hx" (Φ) "AU".
-  iApply ("Hspec" $! Φ with "Hinv Hx [AU]").
-  (* The hook: the state the client's atomic update offers is the state at
-     the linearization point, so this is where it is committed. *)
-  iIntros (D R V) "Hst".
+  iIntros "AU Hst".
   iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
   iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
-  iMod ("Hcommit" with "Hcl") as "HΦ".
-  by iFrame "Hst HΦ".
+  iMod ("Hcommit" with "Hcl") as "HΨ".
+  by iFrame.
 Qed.
 
-Lemma get_proof γ η :
-  ▷ in_env "get" (λ get, □ iSpec τ[elem] get (get_aux_spec γ)) η -∗
-  ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
-  □ fun_spec.predicate_over_function_body τ[elem] (get_aux_spec γ) η
-      (EAnonFun (AnonFun "x"
+Lemma get_au_rebase γ x z Ψ :
+  same_class γ x z -∗ get_au γ x Ψ -∗ get_au γ z Ψ.
+Proof.
+  iIntros "#Hxz AU". rewrite /get_au. iAuIntro.
+  iApply (aacc_aupd with "AU"); first done.
+  iIntros (D R V) "Hst".
+  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
+  iAaccIntro with "Hst".
+  { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+  iIntros "Hst !>". iRight. iFrame "Hst".
+  iIntros "HΨ !>". by rewrite Heq.
+Qed.
+
+Definition get_aux_spec get : iProp Σ :=
+  □ {{ ∀ γ Ψ; is_uf γ ∗ in_uf γ x ∗ get_au γ x Ψ }}
+  get x : elem
+  {{ RET v; Ψ v }}.
+
+Definition get_spec get : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ ∗ in_uf γ x
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+  get x : elem @ ↑ufN
+  <<{ UF γ D R V | RET (V (R x)) }>>.
+
+(* [get_spec]'s atomic postcondition has no [∃∃] binder and its return
+   value is [V (R x)], so it is exactly what [get_au] asks for: the
+   client's atomic update is passed on as it stands. *)
+
+Lemma get_atomic_spec get :
+  get_aux_spec get -∗ get_spec get.
+Proof.
+  iIntros "Hspec".
+  iApply (iSpec_mono_pers with "Hspec").
+  iIntros "!>" (x m) "Hm /=".
+  iIntros (γ) "(#Hinv & #Hx) %Φ AU".
+  iApply ("Hm" $! γ Φ with "[$Hinv $Hx AU]").
+  iExact "AU".
+Qed.
+
+Lemma get_proof η :
+  ▷ in_env "get" get_aux_spec η -∗
+  ▷ in_env "findc" find_aux_spec η -∗
+  closure_spec η
+    (EAnonFun (AnonFun "x"
         (ELet [Binding (PVar "x") (EApp (EPath ["findc"]) (EPath ["x"]))]
-              __get_exp))).
+              __get_exp)))
+    get_aux_spec.
 Proof.
   iIntros "#IGet #IFindc".
-  iIntros "!>" (x).
-  unfold get_aux_spec at 2.
-  iIntros (Ψ) "#Hinv #Hx Hhook".
+  iApply closure_spec_intro.
+  simpl.
+  iIntros "!>" (x γ Ψ) "(#Hinv & #Hx & AU)".
   iApply imp_please; iNext.
 
   (* [let x = findc x in ...].
      This is just an observer call as the traversal is not [get]'s
      linearization point. *)
-  iApply (imp_ELet_var (B:=elem)
-    (λ z : elem, in_uf γ z ∗ same_class γ x z)%I with "[]").
-  { imp_app τ[elem].
-    iIntros "Hm".
-    iApply (find_observe with "Hm Hinv Hx"). }
+  imp_let $! (λ z : elem, in_uf γ z ∗ same_class γ x z)%I.
+  { iPoseProof (in_env_mono with "IFindc []") as "IFindc'".
+    { iIntros (find). iApply find_observe. }
+    iClear "IFindc".
+    imp_app τ[elem].
+    iIntros "Hm". iApply "Hm". iFrame "#". }
   iIntros (z) "[#Hz #Hxz]".
   iDestruct "Hz" as (j) "#Hzv".
 
-  (* From here on everything is stated at [z], so the hook moves there
-     once and for all. *)
-  iDestruct (get_hook_rebase with "Hxz Hhook") as "Hhook".
+  (* From here on everything is stated at [z], so the atomic update moves
+     there once and for all. *)
+  iDestruct (get_au_rebase with "Hxz AU") as "AU".
 
   (* [match x.content with ...]: [get]'s linearization point. *)
-  imp_match content with "[Hhook]".
+  imp_match content with "[AU]".
   { iApply (read_vertex_lp
               (λ c : content, match c with
                               | CtRoot rc => ∃ v : val, root_val rc v ∗ Ψ v
                               | CtLink _ => False
                               end)%I
-              with "Hinv Hzv Hhook [] []"); last first.
+              with "Hinv Hzv AU [] []"); last first.
     { imp_path. }
-    iNext. iIntros (c D R V) "%Hroot %HRz _ #Hval Hhook Hst".
+    iNext. iIntros (c D R V) "%Hroot %HRz _ #Hval AU Hst".
     destruct c as [rc|rc]; last discriminate.
-    iMod ("Hhook" $! D R V with "Hst") as "[Hst HΨ]".
+    iMod (get_au_commit with "AU Hst") as "[Hst HΨ]".
     (* [z] is its own representative in the state just committed, so the
        value that state assigns to it is the payload of this record. *)
     rewrite HRz. by iFrame "Hst Hval HΨ". }
@@ -776,14 +842,15 @@ Proof.
     { iIntros "!> _". iExact "HΨ". } }
 
   (* [Link _ -> get x]: [z] was linked away between [findc] and the read,
-     so nothing was linearized; retry from [z]. *)
-  iDestruct "Hc" as "[_ Hhook]".
+     so nothing was linearized; the atomic update comes back unspent and
+     the call retries from [z]. *)
+  iDestruct "Hc" as "[_ AU]".
   rewrite (@encode_encode' content).
   next_branch.
   next_branch.
   imp_app τ[elem].
-  iIntros "Hm".
-  iApply ("Hm" $! Ψ with "Hinv [$] Hhook").
+  iIntros "Hm /=".
+  iApply ("Hm" $! γ Ψ with "[$]").
 Qed.
 
 (* ------------------------------------------------------------------------ *)
@@ -795,59 +862,20 @@ Qed.
    [Root { value = v }] and CASes the whole content cell. The
    linearization point is the successful CAS. *)
 
-Definition set_hook (γ : uf_names) (x : elem) (v : val)
+Definition set_au (γ : uf_names) (x : elem) (v : val)
     (Ψ : iProp Σ) : iProp Σ :=
-  ∀ D (R : elem → elem) (V : elem → val),
-    UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V.[x -/R/> v] ∗ Ψ.
+  AU <{ ∃∃ D (R : elem → elem) (V : elem → val), UF γ D R V }>
+     @ ⊤ ∖ ↑ufN, ∅
+  <{ UF γ D R V.[x -/R/> v], COMM Ψ }>.
 
-(* Re-basing, for the retry, as in [get]. Here, naming a class by one
-   member or another is literally the same function. *)
+(* Committing at the linearization point. Unlike [find] and [get], both
+   halves of the abstract state move here, so the commit also updates the
+   invariant's half. *)
 
-Lemma set_hook_rebase γ x z v Ψ :
-  same_class γ x z -∗ set_hook γ x v Ψ -∗ set_hook γ z v Ψ.
+Lemma set_au_commit γ x v Ψ D R V :
+  set_au γ x v Ψ -∗ UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V.[x -/R/> v] ∗ Ψ.
 Proof.
-  iIntros "#Hxz Hhook" (D R V) "Hst".
-  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
-  rewrite -(update_class_congr_class R x z V v Heq).
-  iApply ("Hhook" with "Hst").
-Qed.
-
-Definition set_content_spec (γ : uf_names) (x : elem) (cx' : content)
-    (m : microvx) : iProp Σ :=
-  ∀ (v : val) (Ψ : iProp Σ),
-    is_uf γ -∗
-    in_uf γ x -∗
-    fresh_root cx' v -∗
-    set_hook γ x v Ψ -∗
-    EWP m {{ (_ : unit), Ψ }}.
-
-Definition set_aux_spec (γ : uf_names) (x : elem) (v : val)
-    (m : microvx) : iProp Σ :=
-  ∀ (Ψ : iProp Σ),
-    is_uf γ -∗
-    in_uf γ x -∗
-    set_hook γ x v Ψ -∗
-    EWP m {{ (_ : unit), Ψ }}.
-
-(* The specification as a client sees it. *)
-
-Definition set_spec (γ : uf_names) (x : elem) (v : val)
-    (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  in_uf γ x -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
-  <<{ UF γ D R V.[x -/R/> v] | RET tt }>>.
-
-Lemma set_atomic_spec γ x v m :
-  set_aux_spec γ x v m -∗ set_spec γ x v m.
-Proof.
-  iIntros "Hspec #Hinv #Hx" (Φ) "AU".
-  iApply (imp_wand _ _ _ _ (λ _ : unit, Φ tt)%I _ with "[Hspec AU]"); last first.
-  { iIntros ([]) "H". iExact "H". }
-  iApply ("Hspec" $! (Φ tt) with "Hinv Hx [AU]").
-  (* The hook: here both halves of the abstract state move together. *)
-  iIntros (D R V) "Hst".
+  iIntros "AU Hst".
   iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
   iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
   iDestruct (UF_val_congr with "Hst") as %Hcongr.
@@ -855,36 +883,82 @@ Proof.
   iMod (UF_update_2 _ _ _ _ D R V.[x -/R/> v]
           with "Hdeth Hst Hcl") as "[Hst Hcl]";
     [done | by apply uf_val_congr_set |].
-  iMod ("Hcommit" with "Hcl") as "HΦ".
-  by iFrame "Hst HΦ".
+  iMod ("Hcommit" with "Hcl") as "HΨ".
+  by iFrame "Hst HΨ".
 Qed.
 
-Lemma set_proof γ η :
-  ▷ in_env "set"
-      (λ set, □ iSpec τ[elem; content] set (set_content_spec γ)) η -∗
-  ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
-  in_env "cas"
-    compare_and_set_spec η -∗
-  □ fun_spec.predicate_over_function_body τ[elem; content] (set_content_spec γ) η
-      (EAnonFun (AnonFun "x" (EAnonFun __set_fun))).
+(* Re-basing, for the retry, as in [get]. Here, naming a class by one
+   member or another is literally the same function. *)
+
+Lemma set_au_rebase γ x z v Ψ :
+  same_class γ x z -∗ set_au γ x v Ψ -∗ set_au γ z v Ψ.
+Proof.
+  iIntros "#Hxz AU". rewrite /set_au. iAuIntro.
+  iApply (aacc_aupd with "AU"); first done.
+  iIntros (D R V) "Hst".
+  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
+  iAaccIntro with "Hst".
+  { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+  iIntros "Hst !>". iRight.
+  rewrite (update_class_congr_class R x z V v Heq).
+  iFrame "Hst". iIntros "HΨ !>". iExact "HΨ".
+Qed.
+
+Definition set_content_spec set : iProp Σ :=
+  □ {{ ∀ γ v Ψ; is_uf γ ∗ in_uf γ x ∗ fresh_root cx' v ∗ set_au γ x v Ψ }}
+  set x cx' : elem content
+  {{ RET (); Ψ }}.
+
+Definition set_aux_spec set : iProp Σ :=
+  □ {{ ∀ γ Ψ; is_uf γ ∗ in_uf γ x ∗ set_au γ x v Ψ }}
+  set x v : elem val
+  {{ RET (); Ψ }}.
+
+(* The specification as a client sees it. *)
+
+Definition set_spec set : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ ∗ in_uf γ x
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+  set x v : elem val @ ↑ufN
+  <<{ UF γ D R V.[x -/R/> v] | RET () }>>.
+
+Lemma set_atomic_spec :
+  (∀ set, set_aux_spec set -∗ set_spec set).
+Proof.
+  iIntros (set) "Hspec".
+  iApply (iSpec_mono_pers with "Hspec").
+  iIntros "!>" (x v m) "Hm /=".
+  iIntros (γ) "(#Hinv & #Hx) %Φ AU".
+  iSpecialize ("Hm" $! γ (Φ ()) with "[$Hinv $Hx AU]").
+  { iExact "AU". }
+  iApply (imp_wand with "Hm"). iIntros ([]) "$".
+Qed.
+
+Lemma set_proof η :
+  ▷ in_env "set" set_content_spec η -∗
+  ▷ in_env "findc" find_aux_spec η -∗
+  in_env "cas" compare_and_set_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x" (EAnonFun __set_fun))) set_content_spec.
 Proof.
   iIntros "#ISet #IFindc #Hcas".
+  iApply closure_spec_intro.
   iIntros "!> /=".
-  iIntros (x cx' v Ψ).
-  iIntros "#Hinv #Hx Hcx' Hhook".
+  iIntros (x cx' γ v Ψ).
+  iIntros "(#Hinv & #Hx & Hcx' & AU)".
   (* The caller's record is a [Root]. *)
   destruct cx' as [rcn|rcn]; last by iDestruct "Hcx'" as "[]".
   iApply imp_please; iNext.
 
   (* [let x = findc x in ...]: an observer call, as in [get]. *)
-  iApply (imp_ELet_var (B:=elem)
-    (λ z : elem, in_uf γ z ∗ same_class γ x z)%I with "[]").
-  { imp_app τ[elem].
-    iIntros "Hm".
-    iApply (find_observe with "Hm Hinv Hx"). }
+  imp_let $! (λ z, in_uf γ z ∗ same_class γ x z)%I.
+  { iPoseProof (in_env_mono with "IFindc []") as "IFindc'".
+    { iIntros (find) "H". iApply (find_observe with "H"). }
+    iClear "IFindc".
+    imp_app τ[elem].
+    iIntros "Hm". iApply "Hm". iFrame "#". }
   iIntros (z) "[#Hz #Hxz]".
   iDestruct "Hz" as (j) "#Hzv".
-  iDestruct (set_hook_rebase with "Hxz Hhook") as "Hhook".
+  iDestruct (set_au_rebase with "Hxz AU") as "AU".
 
   (* [let cx = x.content in ...]. *)
   iApply (imp_ELet_var (B:=content) (λ c : content, content_info γ z c)%I).
@@ -901,57 +975,55 @@ Proof.
     next_branch.
 
     (* [if cas [%atomic.loc x.content] cx cx']. *)
-    imp_if with "[Hcx' Hhook]".
+    imp_if with "[Hcx' AU]".
     { set_postcondition (λ res : bool,
-        if res then Ψ else set_hook γ z v Ψ ∗ rcn ⤇ {| root_value := v |})%I.
+        if res then Ψ else set_au γ z v Ψ ∗ rcn ⤇ {| root_value := v |})%I.
       imp_app τ[loc;content;content].
       { iApply (vertex_content_ptr with "Hzv"). imp_path. }
       iIntros "Hptr Hm".
       iApply ("Hm" $! (⊤ ∖ ↑ufN)).
       iNext.
-      iApply (uf_cas_set_fupd _ z j _ rc rcn vexp v (set_hook γ z v Ψ) Ψ
+      iApply (uf_cas_set_fupd _ z j _ rc rcn vexp v (set_au γ z v Ψ) Ψ
                 (λ res : bool,
                    if res then Ψ
-                   else set_hook γ z v Ψ ∗ rcn ⤇ {| root_value := v |})%I
-                with "Hinv Hzv Hptr Hrv Hcx' Hhook [] []").
-      { (* Handover from set's hook to CAS' hook. *)
-        iNext. iIntros (D R V) "%Hax %Hval Hhook Hst".
-        iMod ("Hhook" $! D R V with "Hst") as "[Hst HΨ]".
+                   else set_au γ z v Ψ ∗ rcn ⤇ {| root_value := v |})%I
+                with "Hinv Hzv Hptr Hrv Hcx' AU [] []").
+      { (* The CAS is the linearization point: commit there. *)
+        iNext. iIntros (D R V) "%Hax %Hval AU Hst".
+        iMod (set_au_commit with "AU Hst") as "[Hst HΨ]".
         by iFrame "Hst HΨ". }
       { iIntros "!> % $". } }
 
     { (* CAS succeeded: the hook has already produced the postcondition. *)
-      iIntros "HΨ". iApply (imp_EUnit with "HΨ"). }
-    { (* CAS failed: retry on the vertex [findc] found, with the hook and
-         the fresh record handed back. *)
-      iIntros "[Hhook Hcx']".
+      iIntros "HΨ". iApply imp_EUnit. iFrame. }
+    { (* CAS failed: retry on the vertex [findc] found, with the atomic
+         update and the fresh record handed back. *)
+      iIntros "[AU Hcx']".
       imp_app τ[elem; content].
-      iIntros "Hm".
-      iApply ("Hm" $! v Ψ with "Hinv [$] Hcx' Hhook"). } }
+      iIntros "Hm /=". iApply "Hm".
+      iFrame "∗#". } }
 
   (* [_ -> set x cx']: the cell raced ahead of us; retry likewise. *)
   rewrite {2}(@encode_encode' content).
   next_branch.
   next_branch.
   imp_app τ[elem; content].
-  iIntros "Hm".
-  iApply ("Hm" $! v Ψ with "Hinv [$] Hcx' Hhook").
+  iIntros "Hm /=". iApply "Hm".
+  iFrame "∗#".
 Qed.
 
 (* The public, one-argument [set x v]: allocates the fresh
    [Root { value = v }] and calls the helper above. *)
 
-Lemma set_wrapper_proof γ η :
-  in_env "set"
-    (λ setv, □ iSpec τ[elem; content] setv (set_content_spec γ)) η -∗
-  EWP (eval η (EAnonFun __set))
-    {{ c, □ iSpec τ[elem; val] c (set_aux_spec γ) }}.
+Lemma set_wrapper_proof η :
+  in_env "set" set_content_spec η -∗
+  EWP (eval η (EAnonFun __set)) {{ set_aux_spec }}.
 Proof.
   iIntros "#ISet".
   iApply imp_EAnon_pers.
   iIntros "!> /=".
-  iIntros (x v Ψ).
-  iIntros "#Hinv #Hx Hhook".
+  iIntros (x v γ Ψ).
+  iIntros "(#Hinv & #Hx & AU)".
   iApply imp_please; iNext.
 
   (* [let cx' = Root { value = v } in set x cx']. *)
@@ -962,8 +1034,8 @@ Proof.
     iApply "Hown". }
   iIntros (cx') "Hco".
   imp_app τ[elem; content].
-  iIntros "Hm".
-  iApply ("Hm" $! v Ψ with "Hinv Hx Hco Hhook").
+  iIntros "Hm". iApply "Hm".
+  iFrame. iFrame "#".
 Qed.
 
 (* ------------------------------------------------------------------------ *)
@@ -974,107 +1046,115 @@ Qed.
    [f] is described by an arbitrary relation [Φf] between its argument
    and its result. Its specification must be persistent. *)
 
-Definition update_hook (γ : uf_names) (x : elem)
+Definition update_au (γ : uf_names) (x : elem)
     (Φf : val → val → iProp Σ) (Ψ : iProp Σ) : iProp Σ :=
-  ∀ D (R : elem → elem) (V : elem → val) (w : val),
-    Φf (V x) w -∗ UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V.[x -/R/> w] ∗ Ψ.
+  AU <{ ∃∃ D (R : elem → elem) (V : elem → val), UF γ D R V }>
+     @ ⊤ ∖ ↑ufN, ∅
+  <{ ∀∀ w : val, Φf (V x) w ∗ UF γ D R V.[x -/R/> w], COMM Ψ }>.
 
-Lemma update_hook_rebase γ x z Φf Ψ :
-  same_class γ x z -∗ update_hook γ x Φf Ψ -∗ update_hook γ z Φf Ψ.
+(* The value the attempt computed is what the commit reports, so unlike
+   the other operations this one consumes [Φf (V x) w] as well. *)
+
+Lemma update_au_commit γ x Φf Ψ D R V w :
+  update_au γ x Φf Ψ -∗ Φf (V x) w -∗
+  UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V.[x -/R/> w] ∗ Ψ.
 Proof.
-  iIntros "#Hxz Hhook" (D R V w) "HΦf Hst".
-  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
-  iDestruct (UF_val_congr with "Hst") as %Hcongr.
-  rewrite -(update_class_congr_class R x z V w Heq).
-  iApply ("Hhook" with "[HΦf] Hst").
-  rewrite (Hcongr x z Heq). iExact "HΦf".
-Qed.
-
-Definition update_aux_spec (γ : uf_names) (x : elem) (f : val)
-    (m : microvx) : iProp Σ :=
-  ∀ (Φf : val → val → iProp Σ) (Ψ : iProp Σ),
-    □ iSpec τ[val] f (λ v m', EWP m' {{ (w : val), Φf v w }}) -∗
-    is_uf γ -∗
-    in_uf γ x -∗
-    update_hook γ x Φf Ψ -∗
-    EWP m {{ (_ : unit), Ψ }}.
-
-Definition update_spec (γ : uf_names) (x : elem) (f : val)
-    (m : microvx) : iProp Σ :=
-  ∀ (Φf : val → val → iProp Σ),
-    □ iSpec τ[val] f (λ v m', EWP m' {{ (w : val), Φf v w }}) -∗
-    is_uf γ -∗
-    in_uf γ x -∗
-    <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-      m @ ↑ufN
-    <<{ ∃∃ w : val, Φf (V x) w ∗ UF γ D R V.[x -/R/> w] | RET tt }>>.
-
-Lemma update_atomic_spec γ x f m :
-  update_aux_spec γ x f m -∗ update_spec γ x f m.
-Proof.
-  iIntros "Hspec" (Φf) "#Hf #Hinv #Hx".
-  iIntros (Φ) "AU".
-  iApply (imp_wand _ _ _ _ (λ _ : unit, Φ tt)%I _ with "[Hspec AU]"); last first.
-  { iIntros ([]) "H". iExact "H". }
-  iApply ("Hspec" $! Φf (Φ tt) with "Hf Hinv Hx [AU]").
-  iIntros (D R V w) "HΦf Hst".
+  iIntros "AU HΦf Hst".
   iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
   iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
   iDestruct (UF_val_congr with "Hst") as %Hcongr.
   iDestruct (UF_dethroned with "Hst") as "#Hdeth".
-  iMod (UF_update_2 _ _ _ _ D R V.[x -/R/> w] with "Hdeth Hst Hcl") as "[Hst Hcl]";
+  iMod (UF_update_2 _ _ _ _ D R V.[x -/R/> w]
+          with "Hdeth Hst Hcl") as "[Hst Hcl]";
     [done | by apply uf_val_congr_set |].
-  iMod ("Hcommit" $! w with "[$HΦf $Hcl]") as "HΦ".
-  by iFrame "Hst HΦ".
+  iMod ("Hcommit" $! w with "[$HΦf $Hcl]") as "HΨ".
+  by iFrame "Hst HΨ".
 Qed.
 
-Lemma update_proof γ η :
-  ▷ in_env "update"
-      (λ update, □ iSpec τ[elem; val] update (update_aux_spec γ)) η -∗
-  ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
-  in_env "cas"
-    compare_and_set_spec η -∗
-  □ fun_spec.predicate_over_function_body τ[elem; val] (update_aux_spec γ) η
-      (EAnonFun (AnonFun "x" (EAnonFun __update_fun))).
+Lemma update_au_rebase γ x z Φf Ψ :
+  same_class γ x z -∗ update_au γ x Φf Ψ -∗ update_au γ z Φf Ψ.
+Proof.
+  iIntros "#Hxz AU". rewrite /update_au. iAuIntro.
+  iApply (aacc_aupd with "AU"); first done.
+  iIntros (D R V) "Hst".
+  iDestruct (UF_same_class_eq with "Hst Hxz") as "[%Heq Hst]".
+  iDestruct (UF_val_congr with "Hst") as %Hcongr.
+  iAaccIntro with "Hst".
+  { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+  iIntros (w) "[HΦf Hst] !>". iRight. iExists w.
+  rewrite (update_class_congr_class R x z V w Heq) (Hcongr x z Heq).
+  iFrame "HΦf Hst". iIntros "HΨ !>". iExact "HΨ".
+Qed.
+
+Definition update_aux_spec update : iProp Σ :=
+  □ {{ ∀ γ Φf Ψ; is_uf γ ∗ in_uf γ x ∗
+     □ {{ True }} f v : val {{ RET w; Φf v w }} ∗
+     update_au γ x Φf Ψ }}
+  update x f : elem val
+  {{ RET (); Ψ }}.
+
+Definition update_spec update : iProp Σ :=
+  □ <<{ ∀ γ Φf; □ {{ True }} f v : val {{ RET w; Φf v w }} ∗ is_uf γ ∗ in_uf γ x
+     |  ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+  update x f : elem val @ ↑ufN
+  <<{ ∃∃ w : val, Φf (V x) w ∗ UF γ D R V.[x -/R/> w] | RET () }>>.
+
+Lemma update_atomic_spec :
+  (∀ update, update_aux_spec update -∗ update_spec update).
+Proof.
+  iIntros (update) "Hspec".
+  iApply (iSpec_mono_pers with "Hspec").
+  iIntros "!>" (x f m) "Hm /=".
+  iIntros (γ Φf) "(#Hf & #Hinv & #Hx)".
+  iIntros (Φ) "AU".
+  iSpecialize ("Hm" $! γ Φf (Φ ()) with "[$Hinv $Hx $Hf AU]").
+  { iExact "AU". }
+  iApply (imp_wand with "Hm"). iIntros ([]) "$".
+Qed.
+
+Lemma update_proof η :
+  ▷ in_env "update" update_aux_spec η -∗
+  ▷ in_env "findc" find_aux_spec η -∗
+  in_env "cas" compare_and_set_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x" (EAnonFun __update_fun))) update_aux_spec.
 Proof.
   iIntros "#IUpdate #IFindc #Hcas".
+  iApply closure_spec_intro.
   iIntros "!> /=".
-  iIntros (x f).
-  unfold update_aux_spec at 2.
-  iIntros (Φf Ψ) "#Hf #Hinv #Hx Hhook".
+  iIntros (x f γ Φf Ψ).
+  iIntros "(#Hinv & #Hx & #Hf & AU)".
   iApply imp_please; iNext.
 
   (* [let x = findc x in ...]: an observer call, as in [get] and [set]. *)
-  iApply (imp_ELet_var (B:=elem)
-    (λ z : elem, in_uf γ z ∗ same_class γ x z)%I with "[]").
-  { imp_app τ[elem].
-    iIntros "Hm".
-    iApply (find_observe with "Hm Hinv Hx"). }
+  imp_let $! (λ z, in_uf γ z ∗ same_class γ x z)%I.
+  { iPoseProof (in_env_mono with "IFindc []") as "IFindc'".
+    { iIntros (find) "Hfind". iApply (find_observe with "Hfind"). }
+    iClear "IFindc".
+    imp_app τ[elem].
+    iIntros "Hm". iApply "Hm".
+    iFrame "#". }
   iIntros (z) "[#Hz #Hxz]".
   iDestruct "Hz" as (j) "#Hzv".
-  iDestruct (update_hook_rebase with "Hxz Hhook") as "Hhook".
+  iDestruct (update_au_rebase with "Hxz AU") as "AU".
 
   (* [let cx = x.content in ...]. *)
   imp_let $! (λ c : content, content_info γ z c)%I.
   { iApply (read_vertex with "Hinv Hzv"). imp_path. }
   iIntros (cx) "#Hcx".
-
   imp_match content with "[]".
   destruct cx as [rc|rc]; simpl.
-
   { (* [Root { value = v } -> ...] *)
     iDestruct "Hcx" as "(#HrcP & (%v & #Hrv))".
     rewrite {3}(@encode_encode' content).
     next_branch.
     iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-    iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+    iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [AU]");
       first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
     iNext. iIntros "_".
-
     (* [if cas [%atomic.loc x.content] cx (Root { value = f v})]. *)
-    imp_if with "[Hhook]".
+    imp_if with "[AU]".
     { set_postcondition
-        (λ res : bool, if res then Ψ else update_hook γ z Φf Ψ)%I.
+        (λ res : bool, if res then Ψ else update_au γ z Φf Ψ)%I.
       imp_app τ[loc;content;content].
       { iApply (vertex_content_ptr with "Hzv"). imp_path. }
       { (* The CAS's third argument: call [f] and wrap its result in a
@@ -1085,45 +1165,45 @@ Proof.
         imp_record $! root_fields.
         { set_postcondition (λ w : val, Φf v w)%I.
           imp_app τ[val].
-          iIntros "Hm". iApply "Hm". }
+          iIntros "Hm". by iApply "Hm". }
         iIntros (c) "(%r' & -> & %xs & Hown & HΦf)".
         iExists r', xs. iSplit; first done. iFrame "HΦf Hown". }
       iIntros "Hptr (%rcn & %w & -> & Hrcn & HΦf) Hm".
       iApply ("Hm" $! (⊤ ∖ ↑ufN)).
       iNext.
-      (* The attempt's [Φf v w] rides along with the hook as the CAS's
-         linearization resources: spent together on success, dropped
+      (* The attempt's [Φf v w] rides along with the atomic update as the
+         CAS's linearization resources: spent together on success, dropped
          together on failure. *)
       iApply (uf_cas_set_fupd _ z j _ rc rcn v w
-                (update_hook γ z Φf Ψ ∗ Φf v w)%I Ψ
-                (λ res : bool, if res then Ψ else update_hook γ z Φf Ψ)%I
-                with "Hinv Hzv Hptr [] Hrcn [Hhook HΦf] [] []").
+                (update_au γ z Φf Ψ ∗ Φf v w)%I Ψ
+                (λ res : bool, if res then Ψ else update_au γ z Φf Ψ)%I
+                with "Hinv Hzv Hptr [] Hrcn [AU HΦf] [] []").
       { by iFrame "Hrclocs Hlv". }
-      { by iFrame "Hhook HΦf". }
+      { by iFrame "AU HΦf". }
       { (* The main difference with the proof of [set]: the CAS reports
            [V z = v] against the state at the linearization point. *)
-        iIntros "!>" (D R V) "%Hroot %Hval [Hhook HΦf] Hst".
-        iApply ("Hhook" $! D R V w with "[HΦf] Hst").
+        iIntros "!>" (D R V) "%Hroot %Hval [AU HΦf] Hst".
+        iApply (update_au_commit with "AU [HΦf] Hst").
         rewrite Hval. iExact "HΦf". }
       { iIntros "!>" ([|]) "H";
           [iExact "H" | by iDestruct "H" as "[[$ _] _]"]. } }
 
     { (* CAS succeeded: the hook has already produced the postcondition. *)
-      iIntros "HΨ". iApply (imp_EUnit with "HΨ"). }
-    { (* CAS failed: retry on the vertex [findc] found, with the hook
-         handed back. *)
-      iIntros "Hhook".
+      iIntros "HΨ". iApply imp_EUnit. iApply "HΨ". }
+    { (* CAS failed: retry on the vertex [findc] found, with the atomic
+         update handed back. *)
+      iIntros "AU".
       imp_app τ[elem; val].
-      iIntros "Hm".
-      iApply ("Hm" $! Φf Ψ with "Hf Hinv [$] Hhook"). } }
+      iIntros "Hm". iApply "Hm".
+      iFrame. iFrame "#". } }
 
   (* [_ -> update x f]: the cell raced ahead of us; retry likewise. *)
   rewrite {3}(@encode_encode' content).
   next_branch.
   next_branch.
   imp_app τ[elem; val].
-  iIntros "Hm".
-  iApply ("Hm" $! Φf Ψ with "Hf Hinv [$] Hhook").
+  iIntros "Hm". iApply "Hm".
+  iFrame. iFrame "#".
 Qed.
 
 (* ------------------------------------------------------------------------ *)
@@ -1144,142 +1224,147 @@ Definition union_post (γ : uf_names) (D : gset elem) (R : elem → elem)
         UF γ D R.[b -/R/> R c] V.[b -/R/> V c]
   end.
 
-(* Here, there is a pair of linearization points as hooks, one per
-   outcome. *)
+(* [union] has a pair of linearization points, one per outcome, and the
+   caller's atomic update covers both: its atomic postcondition is
+   [union_post], which is a match on the outcome. *)
 
-Definition union_hook (γ : uf_names) (x y : elem)
+Definition union_au (γ : uf_names) (x y : elem)
     (Ψ : option val → iProp Σ) : iProp Σ :=
-  (* Nothing to do: the two are already in one class. *)
-  (∀ D (R : elem → elem) (V : elem → val), ⌜R x = R y⌝ -∗
-     UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ None)
-  ∧
-  (* The merge: [dethroned] for the state being moved to. *)
-  (∀ D (R : elem → elem) (V : elem → val) b c,
-     ⌜(b = x ∧ c = y) ∨ (b = y ∧ c = x)⌝ -∗ ⌜R x ≠ R y⌝ -∗
-     dethroned γ R.[b -/R/> R c] -∗
-     UF γ D R V ={⊤ ∖ ↑ufN}=∗
-     UF γ D R.[b -/R/> R c] V.[b -/R/> V c] ∗
-     same_class γ b c ∗ Ψ (Some (V b))).
+  AU <{ ∃∃ D (R : elem → elem) (V : elem → val), UF γ D R V }>
+     @ ⊤ ∖ ↑ufN, ∅
+  <{ ∀∀ o : option val, union_post γ D R V x y o, COMM Ψ o }>.
 
-Definition union_aux_spec (γ : uf_names) (x y : elem) (m : microvx) : iProp Σ :=
-  ∀ (Ψ : option val → iProp Σ),
-    is_uf γ -∗
-    in_uf γ x -∗ in_uf γ y -∗
-    union_hook γ x y Ψ -∗
-    EWP m {{ Ψ }}.
+Definition union_aux_spec union : iProp Σ :=
+  □ {{ ∀ γ Ψ; is_uf γ ∗ in_uf γ x ∗ in_uf γ y ∗ union_au γ x y Ψ }}
+  union x y : elem elem
+  {{ RET o; Ψ o }}.
 
-(* Re-basing a hook onto other members of the same two classes:
-   after an unsuccesfful CAS the call restarts on the vertices its
-   traversals reached, and the hook it is carrying speaks of the
-   original arguments. *)
+(* The two commits. [None]: the state does not move, so the update is
+   committed with the state it was offered. [Some]: the merge, whose
+   [same_class] is minted at the instant both halves of the class
+   authority are in hand. *)
 
-Lemma union_hook_rebase γ x y a b Ψ :
-  same_class γ x a -∗ same_class γ y b -∗
-  union_hook γ x y Ψ -∗ union_hook γ a b Ψ.
+Lemma union_au_none γ x y Ψ :
+  union_au γ x y Ψ -∗
+  ∀ D (R : elem → elem) (V : elem → val), ⌜R x = R y⌝ -∗
+    UF γ D R V ={⊤ ∖ ↑ufN}=∗ UF γ D R V ∗ Ψ None.
 Proof.
-  iIntros "#Hxa #Hyb Hhook".
-  iSplit.
-  - iIntros (D R V) "%Hab Hst".
-    iDestruct (UF_same_class_eq with "Hst Hxa") as "[%Hx Hst]".
-    iDestruct (UF_same_class_eq with "Hst Hyb") as "[%Hy Hst]".
-    iDestruct "Hhook" as "[Hnone _]".
-    iApply ("Hnone" with "[%] Hst"). congruence.
-  - iIntros (D R V b' c') "%Hdir %Hne #Hdeth' Hst".
-    iDestruct (UF_same_class_eq with "Hst Hxa") as "[%Hx Hst]".
-    iDestruct (UF_same_class_eq with "Hst Hyb") as "[%Hy Hst]".
-    iDestruct (UF_val_congr with "Hst") as %Hcongr.
-    iDestruct "Hhook" as "[_ Hsome]".
-    assert (Hne' : R x ≠ R y) by congruence.
+  iIntros "AU" (D R V) "%Heq Hst".
+  iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
+  iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
+  iMod ("Hcommit" $! None with "[$Hcl]") as "HΨ"; first done.
+  by iFrame "Hst HΨ".
+Qed.
+
+Lemma union_au_some γ x y Ψ :
+  union_au γ x y Ψ -∗
+  ∀ D (R : elem → elem) (V : elem → val) b c,
+    ⌜(b = x ∧ c = y) ∨ (b = y ∧ c = x)⌝ -∗ ⌜R x ≠ R y⌝ -∗
+    dethroned γ R.[b -/R/> R c] -∗
+    UF γ D R V ={⊤ ∖ ↑ufN}=∗
+    UF γ D R.[b -/R/> R c] V.[b -/R/> V c] ∗
+    same_class γ b c ∗ Ψ (Some (V b)).
+Proof.
+  iIntros "AU" (D R V b c) "%Hdir %Hne #Hdeth' Hst".
+  iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
+  iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
+  iDestruct (UF_val_congr with "Hst") as %Hcongr.
+  iMod (UF_update_2 _ _ _ _ D R.[b -/R/> R c] V.[b -/R/> V c]
+          with "Hdeth' Hst Hcl") as "[Hst Hcl]".
+  { intros u w. apply update_class_R_congr. }
+  { by apply uf_val_congr_link. }
+  iMod (UF_same_class_update _ _ _ _ b c with "Hst Hcl")
+    as "(Hst & Hcl & #Hbc)".
+  { rewrite /update_class /fcupdate; repeat case_decide; done. }
+  iMod ("Hcommit" $! (Some (V b)) with "[Hcl]") as "HΨ".
+  { iExists b, c. by iFrame "Hcl". }
+  by iFrame "Hst Hbc HΨ".
+Qed.
+
+(* Re-basing onto other members of the same two classes: after an
+   unsuccessful CAS the call restarts on the vertices its traversals
+   reached, while the update it carries speaks of the original
+   arguments. *)
+
+Lemma union_au_rebase γ x y a b Ψ :
+  same_class γ x a -∗ same_class γ y b -∗
+  union_au γ x y Ψ -∗ union_au γ a b Ψ.
+Proof.
+  iIntros "#Hxa #Hyb AU". rewrite /union_au. iAuIntro.
+  iApply (aacc_aupd with "AU"); first done.
+  iIntros (D R V) "Hst".
+  iDestruct (UF_same_class_eq with "Hst Hxa") as "[%Hx Hst]".
+  iDestruct (UF_same_class_eq with "Hst Hyb") as "[%Hy Hst]".
+  iDestruct (UF_val_congr with "Hst") as %Hcongr.
+  iAaccIntro with "Hst".
+  { iIntros "Hst !>". iFrame "Hst". iIntros "AU". by iModIntro. }
+  iIntros (o) "Hpost !>". iRight. iExists o.
+  iSplitL "Hpost"; last by iIntros "HΨ !>".
+  destruct o as [v|]; simpl.
+  - iDestruct "Hpost" as (b' c') "(%Hdir & %Hne & -> & Hst)".
     destruct Hdir as [[-> ->] | [-> ->]].
-    + rewrite -(update_class_congr_class R x a R (R b) Hx).
-      rewrite -(update_class_congr_class R x a V (V b) Hx).
-      rewrite -Hy -(Hcongr y b Hy) -(Hcongr x a Hx).
-      iMod ("Hsome" $! D R V x y with "[%] [%] Hdeth' Hst")
-        as "(Hst & #Hxy & HΨ)"; [by left | done |].
-      iModIntro. iFrame "Hst HΨ".
-      iDestruct (same_class_sym with "Hxa") as "#Hax".
-      iDestruct (same_class_trans with "Hax Hxy") as "#Hay".
-      iApply (same_class_trans with "Hay Hyb").
-    + rewrite -(update_class_congr_class R y b R (R a) Hy).
-      rewrite -(update_class_congr_class R y b V (V a) Hy).
-      rewrite -Hx -(Hcongr x a Hx) -(Hcongr y b Hy).
-      iMod ("Hsome" $! D R V y x with "[%] [%] Hdeth' Hst")
-        as "(Hst & #Hyx & HΨ)"; [by right | done |].
-      iModIntro. iFrame "Hst HΨ".
-      iDestruct (same_class_sym with "Hyb") as "#Hby".
-      iDestruct (same_class_trans with "Hby Hyx") as "#Hbx".
-      iApply (same_class_trans with "Hbx Hxa").
+    + iExists x, y. iSplit; first by iLeft.
+      iSplit; first (iPureIntro; congruence).
+      rewrite (Hcongr x a Hx). iSplit; first done.
+      rewrite Hy (update_class_congr_class R x a R (R b) Hx).
+      rewrite (Hcongr y b Hy) (update_class_congr_class R x a V (V b) Hx).
+      iExact "Hst".
+    + iExists y, x. iSplit; first by iRight.
+      iSplit; first (iPureIntro; congruence).
+      rewrite (Hcongr y b Hy). iSplit; first done.
+      rewrite Hx (update_class_congr_class R y b R (R a) Hy).
+      rewrite (Hcongr x a Hx) (update_class_congr_class R y b V (V a) Hy).
+      iExact "Hst".
+  - iDestruct "Hpost" as "[%Hab $]". iPureIntro. congruence.
 Qed.
 
 (* The specification as a client sees it. *)
 
-Definition union_spec (γ : uf_names) (x y : elem) (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  in_uf γ x -∗ in_uf γ y -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
+Definition union_spec union : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ ∗ in_uf γ x ∗ in_uf γ y
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+  union x y : elem elem @ ↑ufN
   <<{ ∃∃ o : option val, union_post γ D R V x y o | RET o }>>.
 
-Lemma union_atomic_spec γ x y m :
-  union_aux_spec γ x y m -∗ union_spec γ x y m.
+Lemma union_atomic_spec :
+  (∀ union, union_aux_spec union -∗ union_spec union).
 Proof.
-  iIntros "Hspec #Hinv #Hx #Hy" (Φ) "AU".
-  iApply ("Hspec" $! Φ with "Hinv Hx Hy").
-  iSplit.
-  - (* [None]: the state does not move, so the atomic update is committed
-       with the state it was offered. *)
-    iIntros (D R V) "%Heq Hst".
-    iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
-    iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
-    iMod ("Hcommit" $! None with "[$Hcl]") as "HΦ"; first done.
-    by iFrame "Hst HΦ".
-  - iIntros (D R V b c) "%Hdir %Hne #Hdeth' Hst".
-    iMod "AU" as (D' R' V') "[Hcl [_ Hcommit]]".
-    iDestruct (UF_agree with "Hst Hcl") as %(<- & <- & <-).
-    iDestruct (UF_val_congr with "Hst") as %Hcongr.
-    iMod (UF_update_2 _ _ _ _ D R.[b -/R/> R c] V.[b -/R/> V c]
-            with "Hdeth' Hst Hcl") as "[Hst Hcl]".
-    { intros u w. apply update_class_R_congr. }
-    { by apply uf_val_congr_link. }
-    iMod (UF_same_class_update _ _ _ _ b c with "Hst Hcl")
-      as "(Hst & Hcl & #Hbc)".
-    { rewrite /update_class /fcupdate; repeat case_decide; done. }
-    iMod ("Hcommit" $! (Some (V b)) with "[Hcl]") as "HΦ".
-    { iExists b, c. by iFrame "Hcl". }
-    by iFrame "Hst Hbc HΦ".
+  iIntros (union) "Hspec".
+  iApply (iSpec_mono_pers with "Hspec").
+  iIntros "!>" (x y m) "Hm /=".
+  iIntros (γ) "(#Hinv & #Hx & #Hy) %Φ AU".
+  iApply ("Hm" $! γ Φ). iFrame "Hinv Hx Hy". iExact "AU".
 Qed.
 
-Lemma union_proof γ η :
-  ▷ in_env "union"
-      (λ union, □ iSpec τ[elem; elem] union (union_aux_spec γ)) η -∗
-  ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
-  in_env "cas"
-    compare_and_set_spec η -∗
-  □ fun_spec.predicate_over_function_body τ[elem; elem] (union_aux_spec γ) η
-      (EAnonFun (AnonFun "x" (EAnonFun __union_fun))).
+Lemma union_proof η :
+  ▷ in_env "union" union_aux_spec η -∗
+  ▷ in_env "findc" find_aux_spec η -∗
+  in_env "cas" compare_and_set_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x" (EAnonFun __union_fun))) union_aux_spec.
 Proof.
   iIntros "#IUnion #IFindc #Hcas".
+  iApply closure_spec_intro.
   iIntros "!> /=".
-  iIntros (x y).
-  unfold union_aux_spec at 2.
-  iIntros (Ψ) "#Hinv #Hx #Hy Hhook".
+  iIntros (x y γ Φ) "(#Hinv & #Hx & #Hy & AU)".
   iApply imp_please; iNext.
+
+  (* Weaken the specification of [findc]. *)
+  iPoseProof (in_env_mono with "IFindc []") as "IFindc'".
+  { iIntros (find) "Hfind". iApply (find_observe with "Hfind"). }
 
   (* [let x = findc x and y = findc y in ...] *)
   imp_let $! (λ z : elem, in_uf γ z ∗ same_class γ x z)%I
           $! (λ z : elem, in_uf γ z ∗ same_class γ y z)%I.
   { imp_app τ[elem].
-    iIntros "Hm".
-    iApply (find_observe with "Hm Hinv Hx"). }
+    iIntros "Hm". iApply "Hm". iFrame "#". }
   { imp_app τ[elem].
-    iIntros "Hm".
-    iApply (find_observe with "Hm Hinv Hy"). }
+    iIntros "Hm". iApply "Hm". iFrame "#". }
   iIntros (a b) "[#Ha #Hxa] [#Hb #Hyb]".
   iDestruct "Ha" as (i') "#Hav".
   iDestruct "Hb" as (j') "#Hbv".
 
   (* Re-base the hook onto the vertices the traversals reached. *)
-  iDestruct (union_hook_rebase with "Hxa Hyb Hhook") as "Hhook".
+  iDestruct (union_au_rebase with "Hxa Hyb AU") as "AU".
   iDestruct (vertex_mut with "Hav") as "#HaP".
   iDestruct (vertex_mut with "Hbv") as "#HbP".
   iClear "Hx Hxa Hy Hyb".
@@ -1300,7 +1385,7 @@ Proof.
   { (* Case: [a = b]. The two arguments were already equivalent and
        nothing needs to happen. *)
     iIntros "->".
-    iDestruct "Hhook" as "[Hnone _]".
+    iPoseProof (union_au_none with "AU") as "Hnone".
     iMod (uf_same_class_commit with "Hinv [] [] Hnone") as "HΨ";
       [iApply same_class_refl | iApply same_class_refl |].
     iApply (imp_EConstant' with "[HΨ]"). iExact "HΨ". }
@@ -1346,13 +1431,13 @@ Proof.
       (* Read the absorbed root's payload. Its field is immutable and the
          invariant has discarded its fraction, so this opens nothing. *)
       iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [AU]");
         first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
       iNext. iIntros "_".
 
-      imp_if with "[Hhook]".
+      imp_if with "[AU]".
       { set_postcondition
-          (λ res : bool, if res then Ψ (Some v) else union_hook γ a b Ψ)%I.
+          (λ res : bool, if res then Φ (Some v) else union_au γ a b Φ)%I.
         imp_app τ[loc;content;content].
         { iApply (vertex_content_ptr with "Hav"). imp_path. }
         { set_postcondition
@@ -1365,15 +1450,15 @@ Proof.
         iApply ("Hm" $! (⊤ ∖ ↑ufN)).
         iNext.
         iApply (uf_cas_link_fupd _ a b i' j' _ rc rcn v
-                  (union_hook γ a b Ψ) (Ψ (Some v))
-                  (λ res : bool, if res then Ψ (Some v) else union_hook γ a b Ψ)
-                  with "Hinv Hav Hptr [] Hbv Hrcn Hhook [] []").
+                  (union_au γ a b Φ) (Φ (Some v))
+                  (λ res : bool, if res then Φ (Some v) else union_au γ a b Φ)
+                  with "Hinv Hav Hptr [] Hbv Hrcn AU [] []").
         { lia. }
         { iExists lv. by iFrame "Hrclocs Hlv". }
-        { (* Hook and CAS now speak of the same two vertices, so this is a
-             hand-over with nothing to re-index. *)
-          iNext. iIntros (D R V) "%Hax %Hne %Hval #Hdeth' Hhook Hst".
-          iDestruct "Hhook" as "[_ Hsome]".
+        { (* The update and the CAS now speak of the same two vertices, so
+             this is a hand-over with nothing to re-index. *)
+          iNext. iIntros (D R V) "%Hax %Hne %Hval #Hdeth' AU Hst".
+          iPoseProof (union_au_some with "AU") as "Hsome".
           iMod ("Hsome" $! D R V a b with "[%] [%] Hdeth' Hst")
             as "($ & #Hab & HΨ)".
           { by left. }
@@ -1387,11 +1472,11 @@ Proof.
         imp_data.
         2: { iIntros (w) "H". iExact "H". }
         iExact "HΨ". }
-      { iIntros "Hhook".
+      { iIntros "AU".
         (* CAS failed: retry on the vertices [findc] found. *)
         imp_app τ[elem; elem].
-        iIntros "Hm3".
-        iApply ("Hm3" $! Ψ with "Hinv [] [] Hhook").
+        iIntros "Hm3". iApply "Hm3". iFrame. iFrame "Hinv".
+        iSplit.
         { by iExists i'. }
         { by iExists j'. } } }
 
@@ -1400,8 +1485,8 @@ Proof.
       next_branch.
       next_branch.
       imp_app τ[elem; elem].
-      iIntros "Hm3".
-      iApply ("Hm3" $! Ψ with "Hinv [] [] Hhook").
+      iIntros "Hm3". iApply "Hm3". iFrame. iFrame "Hinv".
+      iSplit.
       { by iExists i'. }
       { by iExists j'. } } }
 
@@ -1420,13 +1505,13 @@ Proof.
       next_branch.
 
       iDestruct "Hrv" as (lv) "(#Hrclocs & _ & #Hlv)".
-      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [Hhook]");
+      iApply (ipat_PRecord_pers ⊤ _ _ _ 0%Z rc _ _ v with "[] Hlv [AU]");
         first (iModIntro; iApply (blockLocs_field_at with "Hrclocs"); done).
       iNext. iIntros "_".
 
-      imp_if with "[Hhook]".
+      imp_if with "[AU]".
       { set_postcondition
-          (λ res : bool, if res then Ψ (Some v) else union_hook γ a b Ψ)%I.
+          (λ res : bool, if res then Φ (Some v) else union_au γ a b Φ)%I.
         imp_app τ[loc;content;content].
         { iApply (vertex_content_ptr with "Hbv"). imp_path. }
         { set_postcondition
@@ -1439,14 +1524,14 @@ Proof.
         iApply ("Hm" $! (⊤ ∖ ↑ufN)).
         iNext.
         iApply (uf_cas_link_fupd _ b a j' i' _ rc rcn v
-                  (union_hook γ a b Ψ) (Ψ (Some v))
-                  (λ res : bool, if res then Ψ (Some v) else union_hook γ a b Ψ)
-                  with "Hinv Hbv Hptr [] Hav Hrcn Hhook [] []").
+                  (union_au γ a b Φ) (Φ (Some v))
+                  (λ res : bool, if res then Φ (Some v) else union_au γ a b Φ)
+                  with "Hinv Hbv Hptr [] Hav Hrcn AU [] []").
         { lia. }
         { iExists lv. by iFrame "Hrclocs Hlv". }
         { (* The mirror image: here it is [b]'s class that is absorbed. *)
-          iNext. iIntros (D R V) "%Hby %Hne %Hval #Hdeth' Hhook Hst".
-          iDestruct "Hhook" as "[_ Hsome]".
+          iNext. iIntros (D R V) "%Hby %Hne %Hval #Hdeth' AU Hst".
+          iPoseProof (union_au_some with "AU") as "Hsome".
           iMod ("Hsome" $! D R V b a with "[%] [%] Hdeth' Hst")
             as "($ & #Hba & HΨ)".
           { by right. }
@@ -1458,10 +1543,10 @@ Proof.
         imp_data.
         2: { iIntros (w) "H". iExact "H". }
         iExact "HΨ". }
-      { iIntros "Hhook".
+      { iIntros "AU".
         imp_app τ[elem; elem].
-        iIntros "Hm3".
-        iApply ("Hm3" $! Ψ with "Hinv [] [] Hhook").
+        iIntros "Hm3". iApply "Hm3". iFrame. iFrame "Hinv".
+        iSplit.
         { by iExists i'. }
         { by iExists j'. } } }
 
@@ -1469,8 +1554,8 @@ Proof.
       next_branch.
       next_branch.
       imp_app τ[elem; elem].
-      iIntros "Hm3".
-      iApply ("Hm3" $! Ψ with "Hinv [] [] Hhook").
+      iIntros "Hm3". iApply "Hm3". iFrame "∗ Hinv".
+      iSplit.
       { by iExists i'. }
       { by iExists j'. } } }
 Qed.
@@ -1478,17 +1563,14 @@ Qed.
 (* The public wrapper:
    [union x y = if x == y then None else union x y]. *)
 
-Lemma union_wrapper_proof γ η :
-  in_env "union" (λ union, □ iSpec τ[elem; elem] union (union_spec γ)) η -∗
-  EWP (eval η (EAnonFun __union))
-    {{ c, □ iSpec τ[elem; elem] c (union_spec γ) }}.
+Lemma union_wrapper_proof η :
+  in_env "union" union_spec η -∗
+  EWP (eval η (EAnonFun __union)) {{ union_spec }}.
 Proof.
   iIntros "#IUnion".
   iApply imp_EAnon_pers.
   iIntros "!> /=".
-  iIntros (x y).
-  unfold union_spec.
-  iIntros "#Hinv #Hx #Hy".
+  iIntros (x y γ) "(#Hinv & #Hx & #Hy)".
   iIntros (Φ) "AU".
   iApply imp_please; iNext.
   iDestruct "Hx" as (i) "#Hxv".
@@ -1519,10 +1601,10 @@ Proof.
 
   iIntros "%Hne".
   imp_app τ[elem; elem].
-  iIntros "Hm".
-  iApply ("Hm" with "Hinv [] [] [AU]").
-  { by iExists i. }
-  { by iExists j. }
+  iIntros "Hm". iApply ("Hm" with "[$Hinv]").
+  { iSplit.
+    - by iExists i.
+    - by iExists j. }
 
   iApply (atomic_update_mono with "[] AU").
   iIntros "!>" (D R V o) "H". by iModIntro.
@@ -1581,11 +1663,10 @@ Definition eq_au (γ : uf_names) (x y : elem) (Φ : bool → iProp Σ) : iProp �
     @ ⊤ ∖ ↑ufN, ∅
   <{ ∀∀ b : bool, ⌜b = true ↔ R x = R y⌝ ∗ UF γ D R V , COMM Φ b }>.
 
-Definition eq_spec (γ : uf_names) (x y : elem) (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  in_uf γ x -∗ in_uf γ y -∗
-  <<{ ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
-    m @ ↑ufN
+Definition eq_spec eq : iProp Σ :=
+  □ <<{ ∀ γ; is_uf γ ∗ in_uf γ x ∗ in_uf γ y
+    | ∀∀ (D : gset elem) (R : elem → elem) (V : elem → val), UF γ D R V }>>
+  eq x y : elem elem @ ↑ufN
   <<{ ∃∃ b : bool, ⌜b = true ↔ R x = R y⌝ ∗ UF γ D R V | RET b }>>.
 
 Definition eq_kont (γ : uf_names) (a z : elem) (pvs : list (val * val))
@@ -1609,17 +1690,15 @@ Definition eq_kont (γ : uf_names) (a z : elem) (pvs : list (val * val))
    6. [Link { parent = x } -> eq x y]: in case of interference we retry
       from [x]'s parent. *)
 
-Lemma eq_proof γ η :
-  ▷ in_env "eq" (λ eq, □ iSpec τ[elem; elem] eq (eq_spec γ)) η -∗
-  ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_spec γ)) η -∗
-  □ fun_spec.predicate_over_function_body τ[elem; elem] (eq_spec γ) η
-      (EAnonFun (AnonFun "x" (EAnonFun __eq_fun))).
+Lemma eq_proof η :
+  ▷ in_env "eq" eq_spec η -∗
+  ▷ in_env "findc" find_spec η -∗
+  closure_spec η (EAnonFun (AnonFun "x" (EAnonFun __eq_fun))) eq_spec.
 Proof.
   iIntros "#IEq #IFindc".
+  iApply closure_spec_intro.
   iIntros "!> /=".
-  iIntros (x y).
-  unfold eq_spec at 2.
-  iIntros "#Hinv #Hx #Hy".
+  iIntros (x y γ) "(#Hinv & #Hx & #Hy)".
   iIntros (Φ) "AU".
   iApply imp_please; iNext.
 
@@ -1633,7 +1712,7 @@ Proof.
     (λ z : elem, (in_uf γ z ∗ same_class γ x z) ∗ eq_au γ x y Φ)%I
     with "[AU]").
   { imp_app τ[elem]. iIntros "Hm".
-    iApply ("Hm" with "Hinv Hx [AU]").
+    iApply ("Hm" with "[$] [AU]").
     iAuIntro.
     iApply (aacc_aupd with "AU"); first done.
     iIntros (D R V) "Hst".
@@ -1651,7 +1730,7 @@ Proof.
                  proph p pvs ∗ eq_kont γ a z pvs (eq_au γ x y Φ) Φ)%I
     with "[AU Hp]").
   { imp_app τ[elem]. iIntros "Hm".
-    iApply ("Hm" with "Hinv Hy [AU Hp]").
+    iApply ("Hm" with "[$]").
     iAuIntro.
     iApply (aacc_aupd with "AU"); first done.
     iIntros (D R V) "Hst".
@@ -1778,10 +1857,10 @@ Proof.
   iIntros (x' jx' Hjx') "#Hax' #Hx'v".
   iDestruct (same_class_trans with "Hxa Hax'") as "#Hxx'".
   imp_app τ[elem; elem].
-  iIntros "Hm".
-  iApply ("Hm" with "Hinv [] [] [AU]").
-  { by iExists jx'. }
-  { by iExists j'. }
+  iIntros "Hm". iApply ("Hm" with "[$Hinv]").
+  { iSplit.
+    - by iExists jx'.
+    - by iExists j'. }
   (* The recursive call is on [x'] and on the vertex [findc y] reached,
      while the atomic update is about [x] and [y]; both ends are
      conciled via equivalence class facts. *)
@@ -1801,17 +1880,14 @@ Qed.
 
 (* The public wrapper [eq x y = x == y || eq x y]. *)
 
-Lemma eq_wrapper_proof γ η :
-  in_env "eq" (λ eq, □ iSpec τ[elem; elem] eq (eq_spec γ)) η -∗
-  EWP (eval η (EAnonFun __eq))
-    {{ c, □ iSpec τ[elem; elem] c (eq_spec γ) }}.
+Lemma eq_wrapper_proof η :
+  in_env "eq" eq_spec η -∗
+  EWP (eval η (EAnonFun __eq)) {{ eq_spec }}.
 Proof.
   iIntros "#IEq".
   iApply imp_EAnon_pers.
   iIntros "!> /=".
-  iIntros (x y).
-  unfold eq_spec.
-  iIntros "#Hinv #Hx #Hy".
+  iIntros (x y γ) "(#Hinv & #Hx & #Hy)".
   iIntros (Φ) "AU".
   iApply imp_please; iNext.
   iDestruct "Hx" as (i) "#Hxv".
@@ -1834,10 +1910,10 @@ Proof.
     by iModIntro. }
   iDestruct "Hcmp" as %Hne.
   imp_app τ[elem; elem].
-  iIntros "Hm".
-  iApply ("Hm" with "Hinv [] [] [AU]").
-  { by iExists i. }
-  { by iExists j. }
+  iIntros "Hm". iApply ("Hm" with "[$Hinv]").
+  { iSplit.
+    - by iExists i.
+    - by iExists j. }
 
   iApply (atomic_update_mono with "[] AU").
   iIntros "!>" (D R V bb) "H". by iModIntro.
@@ -1856,64 +1932,31 @@ Qed.
    be saturated. As this is quite an unrealistic means of failure, we
    simply admit the incorrect spec for now. *)
 
-Lemma G_module_proof γ (η : env) :
-  ⊢ EWP (eval_mexpr η MUnsupported)
-    {{ (δ : env),
-         in_env "fresh" (fresh_spec γ) δ }}.
+Lemma G_module_proof (η : env) :
+  ⊢ EWP (eval_mexpr η MUnsupported) {{ in_env "fresh" fresh_spec }}.
 Proof.
 Admitted.
 
 (* Weakening the composable specifications to the client-facing atomic
    triples. *)
 
-Lemma get_atomic_iSpec γ c :
-  iSpec τ[elem] c (get_aux_spec γ) -∗ iSpec τ[elem] c (get_spec γ).
-Proof.
-  iIntros "Hspec".
-  iApply (iSpec_mono with "Hspec").
-  iIntros (x m) "Hm". by iApply get_atomic_spec.
-Qed.
-
-Lemma set_atomic_iSpec γ c :
-  iSpec τ[elem; val] c (set_aux_spec γ) -∗ iSpec τ[elem; val] c (set_spec γ).
-Proof.
-  iIntros "Hspec".
-  iApply (iSpec_mono with "Hspec").
-  iIntros (x v m) "Hm". by iApply set_atomic_spec.
-Qed.
-
-Lemma update_atomic_iSpec γ c :
-  iSpec τ[elem; val] c (update_aux_spec γ) -∗ iSpec τ[elem; val] c (update_spec γ).
-Proof.
-  iIntros "Hspec".
-  iApply (iSpec_mono with "Hspec").
-  iIntros (x f m) "Hm". by iApply update_atomic_spec.
-Qed.
-
-Lemma union_atomic_iSpec γ c :
-  iSpec τ[elem; elem] c (union_aux_spec γ) -∗ iSpec τ[elem; elem] c (union_spec γ).
-Proof.
-  iIntros "Hspec".
-  iApply (iSpec_mono with "Hspec").
-  iIntros (x y m) "Hm". by iApply union_atomic_spec.
-Qed.
 
 Definition ConcurrentUnionFind_names : gset var :=
   {["cas"; "SharedGeneratorOfUniqueIds"; "G"; "make"; "find"; "compress";
     "findc"; "get"; "set"; "update"; "union"; "eq"]}.
 
-Theorem ConcurrentUnionFind_module_proof γ η :
+Theorem ConcurrentUnionFind_module_proof (η : env) :
   in_env "Atomic" atomic_module_spec η -∗
   EWP (eval_mexpr η __main)
     {{ context [
-         var_spec "make"   (λ make,   □ iSpec τ[val] make (make_spec γ));
-         var_spec "find"   (λ find,   □ iSpec τ[elem] find (find_spec γ));
-         var_spec "findc"  (λ findc,  □ iSpec τ[elem] findc (find_spec γ));
-         var_spec "get"    (λ get,    □ iSpec τ[elem] get (get_spec γ));
-         var_spec "set"    (λ set,    □ iSpec τ[elem; val] set (set_spec γ));
-         var_spec "update" (λ update, □ iSpec τ[elem; val] update (update_spec γ));
-         var_spec "union"  (λ union,  □ iSpec τ[elem; elem] union (union_spec γ));
-         var_spec "eq"     (λ eq,     □ iSpec τ[elem; elem] eq (eq_spec γ))
+         var_spec "make"   make_spec;
+         var_spec "find"   find_spec;
+         var_spec "findc"  find_spec;
+         var_spec "get"    get_spec;
+         var_spec "set"    set_spec;
+         var_spec "update" update_spec;
+         var_spec "union"  union_spec;
+         var_spec "eq"     eq_spec
        ] ConcurrentUnionFind_names }}.
 Proof.
   iIntros "#HAtomic".
@@ -1921,7 +1964,7 @@ Proof.
 
   (* [let cas = Atomic.Loc.compare_and_set] *)
   iApply (imp_sitems_let compare_and_set_spec).
-  { iApply cas_proof. iFrame "#". }
+  { iApply cas_proof; solve_env. }
   iIntros (cas) "#Hcas".
 
   (* [module SharedGeneratorOfUniqueIds]: evaluated for its bindings only.
@@ -1939,107 +1982,85 @@ Proof.
     iApply imp_sitems_nil. done. }
   iIntros (δS) "_".
 
-  iApply (imp_sitems_module
-            (λ δ : env,
-               in_env "fresh" (fresh_spec γ) δ)%I).
+  iApply (imp_sitems_module (in_env "fresh" fresh_spec)).
   { iApply G_module_proof. }
-  iIntros (δG) "HG".
-  iDestruct "HG" as (fresh) "[%Hfresh #Hfresh]".
+  iIntros (δG) "#HG".
 
   (* [let make v = ...]: the only consumer of [G.fresh]. *)
-  iApply (imp_sitems_let (λ make : val, □ iSpec τ[val] make (make_spec γ))%I).
-  { iApply make_proof. iFrame "#". auto. }
+  iApply (imp_sitems_let make_spec)%I.
+  { iApply make_proof; solve_env. }
   iIntros (make) "#Hmake".
 
-  iApply (imp_sitems_letrec_iSpec τ[elem] (find_aux_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply find_proof. iFrame "#". auto. }
+  (* [let rec find x = ...] *)
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply find_proof. solve_env. }
   iIntros (find) "#Hfind".
 
   (* [let rec compress x z = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem; elem] (compress_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply compress_proof. iFrame "#". auto. }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply compress_proof. solve_env. }
   iIntros (compress) "#Hcompress".
 
   (* [let findc x = ...] *)
-  iApply (imp_sitems_let (λ findc : val, □ iSpec τ[elem] findc (find_aux_spec γ))%I).
-  { iApply findc_proof; (iFrame "#"; auto). }
+  iApply (imp_sitems_let find_aux_spec).
+  { iApply findc_proof; solve_env. }
   iIntros (findc) "#Hfindc".
 
   (* [let rec get x = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem] (get_aux_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply get_proof; (iFrame "#"; auto). }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply get_proof; solve_env. }
   iIntros (get) "#Hget".
 
   (* [let rec set x cx' = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem; content] (set_content_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply set_proof; (iFrame "#"; auto). }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply set_proof; solve_env. }
   iIntros (setc) "#Hsetc".
 
   (* [let set x v = ...]: the wrapper, which shadows the name. *)
-  iApply (imp_sitems_let (λ set : val, □ iSpec τ[elem; val] set (set_aux_spec γ))%I).
-  { iApply set_wrapper_proof; (iFrame "#"; auto). }
+  iApply (imp_sitems_let set_aux_spec).
+  { iApply set_wrapper_proof; solve_env. }
   iIntros (set) "#Hset".
 
   (* [let rec update x f = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem; val] (update_aux_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply update_proof; (iFrame "#"; auto). }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply update_proof; solve_env. }
   iIntros (update) "#Hupdate".
 
   (* [let rec union x y = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem; elem] (union_aux_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply union_proof; (iFrame "#"; auto). }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply union_proof; solve_env. }
   iIntros (unionr) "#Hunionr".
 
   (* The wrapper is stated against the atomic triple, so the recursive
      [union] is weakened to it first, putting a hypothesis of the
      premise's shape in context. *)
-  iAssert (□ iSpec τ[elem; elem] unionr (union_spec γ))%I as "#Hunionr'".
-  { iModIntro. by iApply union_atomic_iSpec. }
+  iDestruct (union_atomic_spec with "Hunionr") as "#Hunionr'".
 
   (* [let union x y = if x == y then None else union x y] *)
-  iApply (imp_sitems_let (λ union : val, □ iSpec τ[elem; elem] union (union_spec γ))%I).
-  { iApply union_wrapper_proof; (iFrame "#"; auto). }
+  iApply (imp_sitems_let union_spec).
+  { iApply union_wrapper_proof; solve_env. }
   iIntros (union) "#Hunion".
 
   (* [eq] is the one caller that hands its own update down, so it wants
      [findc] at the atomic triple. *)
-  iAssert (□ iSpec τ[elem] findc (find_spec γ))%I as "#Hfindc'".
-  { iModIntro. by iApply find_atomic_iSpec. }
+  iDestruct (find_atomic_spec with "Hfindc") as "#Hfindc'".
 
   (* [let rec eq x y = ...] *)
-  iApply (imp_sitems_letrec_iSpec τ[elem; elem] (eq_spec γ)).
-  { iIntros "!> #IH".
-    iApply bi.intuitionistically_elim.
-    iApply eq_proof; (iFrame "#"; auto). }
+  iApply imp_sitems_letrec_spec.
+  { iIntros "!>" (c) "#IH". iApply eq_proof; solve_env. }
   iIntros (eqr) "#Heqr".
 
   (* [let eq x y = x == y || eq x y] *)
-  iApply (imp_sitems_let (λ eq : val, □ iSpec τ[elem; elem] eq (eq_spec γ))%I).
-  { iApply eq_wrapper_proof; (iFrame "#"; auto). }
+  iApply (imp_sitems_let eq_spec).
+  { iApply eq_wrapper_proof; solve_env. }
   iIntros (eq) "#Heq".
 
   (* The four remaining composable specifications are weakened to the
      triples the module exports. *)
-  iAssert (□ iSpec τ[elem] find (find_spec γ))%I as "#Hfind'".
-  { iModIntro. by iApply find_atomic_iSpec. }
-  iAssert (□ iSpec τ[elem] get (get_spec γ))%I as "#Hget'".
-  { iModIntro. by iApply get_atomic_iSpec. }
-  iAssert (□ iSpec τ[elem; val] set (set_spec γ))%I as "#Hset'".
-  { iModIntro. by iApply set_atomic_iSpec. }
-  iAssert (□ iSpec τ[elem; val] update (update_spec γ))%I as "#Hupdate'".
-  { iModIntro. by iApply update_atomic_iSpec. }
+  iDestruct (find_atomic_spec with "Hfind") as "#Hfind'".
+  iDestruct (get_atomic_spec with "Hget") as "#Hget'".
+  iDestruct (set_atomic_spec with "Hset") as "#Hset'".
+  iDestruct (update_atomic_spec with "Hupdate") as "#Hupdate'".
 
   (* Conclude: frame every exported specification out of the context.
      The hypothesis is named at each conjunct because [find] and [findc]

@@ -742,8 +742,7 @@ End triple_body.
   (*  t1 closed binder, tn closed binder). *)
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b,
@@ -762,8 +761,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }
   : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b, ipost P (λ v, Q)) ..)
@@ -777,7 +775,7 @@ Notation "'{{' P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
   : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpec (Tbase τ) c
+  (iSpec (Tbase τ) c
        (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y, ipost P (λ v, Q))) ..)) ..))%I
     (at level 20, x closed binder, y closed binder, τ, c at level 9, Q at level 200,
                   a closed binder, b closed binder, v at level 200 as pattern,
@@ -785,15 +783,14 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
      : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpec (Tbase τ) c (λ a, .. (λ b, ipost P (λ v, Q)) ..))%I
+  (iSpec (Tbase τ) c (λ a, .. (λ b, ipost P (λ v, Q)) ..))%I
     (at level 20, τ, c at level 9, Q at level 200,
                   a closed binder, b closed binder, v at level 200 as pattern,
      format "'[hv' {{  '[' P  ']' } }  '/  ' c  '[' a  ..  b ']'  ':'  τ  '/' {{  '[' 'RET'  v ;  '/' Q  ']' } } ']'")
      : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b,
@@ -812,8 +809,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q '|'
   : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b, ipostX P (λ v, Q) (λ w, S)) ..)
@@ -827,7 +823,7 @@ Notation "'{{' P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q '|' 'EXN' w ; S 
   : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpec (Tbase τ) c
+  (iSpec (Tbase τ) c
        (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y, ipostX P (λ v, Q) (λ w, S))) ..)) ..))%I
     (at level 20, x closed binder, y closed binder, τ, c at level 9,
                   Q at level 200, S at level 200,
@@ -837,7 +833,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S
      : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpec (Tbase τ) c (λ a, .. (λ b, ipostX P (λ v, Q) (λ w, S)) ..))%I
+  (iSpec (Tbase τ) c (λ a, .. (λ b, ipostX P (λ v, Q) (λ w, S)) ..))%I
     (at level 20, τ, c at level 9, Q at level 200, S at level 200,
                   a closed binder, b closed binder,
                   v at level 200 as pattern, w at level 200 as pattern,
@@ -845,8 +841,7 @@ Notation "'{{' P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
      : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ; Q } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b,
@@ -865,8 +860,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>'
   : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ; Q } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b, ipostE E Ψ P (λ v, Q)) ..)
@@ -880,7 +874,7 @@ Notation "'{{' P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ;
   : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v ; Q } }" :=
-  (□ iSpec (Tbase τ) c
+  (iSpec (Tbase τ) c
        (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y, ipostE E Ψ P (λ v, Q))) ..)) ..))%I
     (at level 20, x closed binder, y closed binder, τ, c at level 9,
                   Ψ at level 200, Q at level 200,
@@ -889,15 +883,14 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v 
      : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v ; Q } }" :=
-  (□ iSpec (Tbase τ) c (λ a, .. (λ b, ipostE E Ψ P (λ v, Q)) ..))%I
+  (iSpec (Tbase τ) c (λ a, .. (λ b, ipostE E Ψ P (λ v, Q)) ..))%I
     (at level 20, τ, c at level 9, Ψ at level 200, Q at level 200,
                   a closed binder, b closed binder, v at level 200 as pattern,
      format "'[hv' {{  '[' P  ']' } }  '/  ' c  '[' a  ..  b ']'  ':'  τ  '/' @  E  <|  Ψ  |>  '/' {{  '[' 'RET'  v ;  '/' Q  ']' } } ']'")
      : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b,
@@ -917,8 +910,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>'
   : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□
-         iSpec
+  (iSpec
            (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (Tbase τm)) ..))
            c
            (λ a, .. (λ b, ipostEX E Ψ P (λ v, Q) (λ w, S)) ..)
@@ -933,7 +925,7 @@ Notation "'{{' P } } c a .. b ':' τ1 .. τn τm '@' E '<|' Ψ '|>' {{ 'RET' v ;
   : bi_scope.
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpec (Tbase τ) c
+  (iSpec (Tbase τ) c
        (λ a, .. (λ b,
           iforall (λ x, .. (iforall (λ y, ipostEX E Ψ P (λ v, Q) (λ w, S))) ..)) ..))%I
     (at level 20, x closed binder, y closed binder, τ, c at level 9,
@@ -944,7 +936,7 @@ Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v 
      : bi_scope.
 
 Notation "'{{' P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpec (Tbase τ) c (λ a, .. (λ b, ipostEX E Ψ P (λ v, Q) (λ w, S)) ..))%I
+  (iSpec (Tbase τ) c (λ a, .. (λ b, ipostEX E Ψ P (λ v, Q) (λ w, S)) ..))%I
     (at level 20, τ, c at level 9, Ψ at level 200, Q at level 200, S at level 200,
                   a closed binder, b closed binder,
                   v at level 200 as pattern, w at level 200 as pattern,
@@ -952,7 +944,7 @@ Notation "'{{' P } } c a .. b ':' τ '@' E '<|' Ψ '|>' {{ 'RET' v ; Q '|' 'EXN'
      : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v ; Q } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec
           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn' (Tbase τm)) ..))
@@ -971,7 +963,7 @@ Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn' �
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v ; Q } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec
           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn' (Tbase τm)) ..))
@@ -987,7 +979,7 @@ Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec (Tbase τ)
           (λ a, .. (λ b,
@@ -1005,7 +997,7 @@ Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec (Tbase τ)
           (λ a, .. (λ b, ipost P (λ v, Q)) ..))) ..))
@@ -1020,7 +1012,7 @@ Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ {{ 'RET' v ; Q } }" :=
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec
           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn' (Tbase τm)) ..))
@@ -1039,7 +1031,7 @@ Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn' �
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec
           (type_nel.Tcons τ1 (.. (type_nel.Tcons τn' (Tbase τm)) ..))
@@ -1055,7 +1047,7 @@ Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ1 .. τn' τm {{ 'RET' v
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec (Tbase τ)
           (λ a, .. (λ b,
@@ -1073,7 +1065,7 @@ Notation "'∀∀' t1 .. tn ; '{{' ∀ x .. y ; P } } c a .. b ':' τ {{ 'RET' v
   : bi_scope.
 
 Notation "'∀∀' t1 .. tn ; '{{' P } } c a .. b ':' τ {{ 'RET' v ; Q '|' 'EXN' w ; S } }" :=
-  (□ iSpecPoly
+  (iSpecPoly
      (FAll (λ t1, .. (FAll (λ tn,
         FSpec (Tbase τ)
           (λ a, .. (λ b, ipostX P (λ v, Q) (λ w, S)) ..))) ..))

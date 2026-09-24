@@ -22,8 +22,8 @@ Section iteration_methods.
   Context {A : Type} `{Encode A, FinitelyObservable A}.
 
   Definition Iter_spec iter : iProp Σ :=
-    {{ ∀ Ψ E I;
-       {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ I Xs }}
+    □ {{ ∀ Ψ E I;
+       □ {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ I Xs }}
        f X : A @ E <| Ψ |>
        {{ RET (_ : unit); I (Xs ++ [X]) }} ∗
        I [] }}
@@ -182,7 +182,7 @@ Section verification.
     Definition env : env := (* stdlib_env *) [].
 
     Definition invert_spec invert : iProp Σ :=
-      {{ Iter_spec iter }}
+      □ {{ Iter_spec iter }}
       invert iter : val
       {{ RET k; isSeq ⊥ k [] }}.
 
@@ -323,7 +323,7 @@ Section verification.
 
       (* [let yield x = ...] *)
       iApply (imp_ELet_var (λ v,
-                {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ iterView γ Xs }}
+                □ {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ iterView γ Xs }}
                 v X : A @ ⊤ <| ψ_yield yl (iterView γ) |>
                 {{ RET (_ : unit); iterView γ (Xs ++ [X]) }})%I).
       { iApply (imp_EAnon_pers τ[A]). simpl.

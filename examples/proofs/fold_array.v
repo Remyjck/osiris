@@ -51,12 +51,12 @@ Section verification.
      the postcondition is [λ i, ⌜i = gaus_summation n⌝]. *)
 
   Definition sum_spec sum : iProp Σ :=
-    {{ ⌜0 ≤ n ≤ max_array_length⌝ }}
+    □ {{ ⌜0 ≤ n ≤ max_array_length⌝ }}
     sum n : Z
     {{ RET i; ⌜i = gauss_summation n⌝ }}.
 
   Definition add_spec add : iProp Σ :=
-    {{ True }} add i j : Z Z {{ RET n; ⌜(n = i + j)%Z⌝ }}.
+    □ {{ True }} add i j : Z Z {{ RET n; ⌜(n = i + j)%Z⌝ }}.
 
   Definition esum := EAnonFun __sum.
 

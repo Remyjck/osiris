@@ -59,13 +59,13 @@ Section reasoning_rules.
   Definition reset_f := (EAnonFun __reset).
 
   Definition reset_spec ℓ reset : iProp Σ :=
-    {{ ∀ (Ψ : iEff Σ) (Φ : val → iProp Σ);
+    □ {{ ∀ (Ψ : iEff Σ) (Φ : val → iProp Σ);
        iSpec τ[unit] f (λ _ m, EWP m <| SHIFT ℓ Ψ Φ |> {{ Φ }}) }}
     reset f : val @ ⊤ <| Ψ |>
     {{ RET w; Φ w }}.
 
   Definition shift_spec ℓ shift : iProp Σ :=
-    {{ ∀ (Ψ : iEff Σ) (Φ Q : val → iProp Σ); is_shift Ψ Φ Q f }}
+    □ {{ ∀ (Ψ : iEff Σ) (Φ Q : val → iProp Σ); is_shift Ψ Φ Q f }}
     shift f : val @ ⊤ <| SHIFT ℓ Ψ Φ |>
     {{ RET w; Q w }}.
 

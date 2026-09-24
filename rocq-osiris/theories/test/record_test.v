@@ -25,7 +25,7 @@ Section verification.
      discarded share needs no splitting: the resource is duplicable there
      ([ownBlock_discarded_dup]). *)
   Definition length_spec length : iProp Σ :=
-    {{ ∀ qp t (x y : Z); ▷ ownBlock (τ:=τ[Z; Z]) r (DfracOwn qp) t (x, y) }}
+    □ {{ ∀ qp t (x y : Z); ▷ ownBlock (τ:=τ[Z; Z]) r (DfracOwn qp) t (x, y) }}
     length r : record
     {{ RET (i : Z); ⌜i = (x*x + y*y)%Z⌝ ∗
          ownBlock (τ:=τ[Z;Z]) r (DfracOwn qp) t (x, y) }}.
@@ -49,7 +49,7 @@ Section verification.
   Qed.
 
   Definition update_x_spec update_x : iProp Σ :=
-    {{ ∀ t (x0 y : Z); ▷ ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x0, y) }}
+    □ {{ ∀ t (x0 y : Z); ▷ ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x0, y) }}
     update_x r x : record Z
     {{ RET (_ : unit); ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x, y) }}.
 
@@ -195,12 +195,12 @@ Section encoded_fields.
   (* -------------------------------------------------------------------------- *)
 
   Definition point_length_spec length : iProp Σ :=
-    {{ ∀ qp (p : point); ▷ r ⤇{#qp} p }}
+    □ {{ ∀ qp (p : point); ▷ r ⤇{#qp} p }}
     length r : record
     {{ RET (i : Z); ⌜i = (p.(x) * p.(x) + p.(y) * p.(y))%Z⌝ ∗ r ⤇{#qp} p }}.
 
   Definition point_update_x_spec update_x : iProp Σ :=
-    {{ ∀ (p : point); ▷ r ⤇ p }}
+    □ {{ ∀ (p : point); ▷ r ⤇ p }}
     update_x r x : record Z
     {{ RET (_ : unit); r ⤇ {| x := x; y:=p.(y) |} }}.
 

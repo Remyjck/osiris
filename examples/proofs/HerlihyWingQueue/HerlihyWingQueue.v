@@ -108,7 +108,7 @@ Hypothesis Hmax3 : 3 ≤ max_array_length.
 (** ** [create] *)
 
 Definition create_spec create : iProp Σ :=
-  {{ ⌜0 < cap ≤ max_array_length⌝ }}
+  □ {{ ⌜0 < cap ≤ max_array_length⌝ }}
   create cap : Z
   {{ RET (q : queue); ∃ γ, is_queue γ cap q ∗ queue_content γ [] ∗
                              enqueue_permit γ (Z.to_nat cap) }}.

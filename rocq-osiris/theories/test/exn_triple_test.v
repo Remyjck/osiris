@@ -6,7 +6,7 @@ Section test_exn_triples.
   Context `{!osirisGS Σ}.
 
   Definition raise_spec_untyped c : iProp Σ :=
-    {{ True }}
+    □ {{ True }}
     c a : Z
     {{ RET (n : Z) ; ⌜n = a⌝ | EXN (w : exn) ; ⌜w = #0%Z⌝ }}.
 
@@ -19,12 +19,12 @@ Section test_exn_triples.
                    end }.
 
   Definition raise_spec_typed c : iProp Σ :=
-    {{ True }}
+    □ {{ True }}
     c a : Z
     {{ RET (n : Z) ; ⌜n = a⌝ | EXN (e : myexn) ; ⌜e = Overflow⌝ }}.
 
   Definition raise_spec_typed_E c E Ψ : iProp Σ :=
-    {{ ∀ (k : Z) ; ⌜k = 0⌝ }}
+    □ {{ ∀ (k : Z) ; ⌜k = 0⌝ }}
     c a : Z @ E <| Ψ |>
     {{ RET (n : Z) ; ⌜n = (a + k)%Z⌝ | EXN (e : myexn) ; ⌜e = Underflow⌝ }}.
 

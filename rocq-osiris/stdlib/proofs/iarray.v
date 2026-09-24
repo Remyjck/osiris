@@ -32,7 +32,7 @@ Section freeze_iarray.
   Context `{!osirisGS Σ}.
 
   Definition freeze_array_spec freeze : iProp Σ :=
-    {{ ∀ `(Encode A) (xs : list A); a ↦∗ xs }}
+    □ {{ ∀ `(Encode A) (xs : list A); a ↦∗ xs }}
     freeze a : array
     {{ RET (a' : iarray); a' ↦□∗ xs ∗ blockTag a' (DfracOwn 1) Immut }}.
 
@@ -69,11 +69,11 @@ Section init_proof.
   Context `{!osirisGS Σ}.
 
   Definition init_spec init : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
+    □ {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
        ⌜0 ≤ n ≤ max_array_length⌝ ∗
        (* [f] is a function [Z → A], such that [f i] preserves
           an invariant [I] over the results of all calls to [f i] so far. *)
-       {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
+       □ {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
        f i : Z
        {{ RET x; I (xs ++ singleton x) }} ∗
        I [] }}
@@ -207,8 +207,7 @@ Section module_proof.
     iApply imp_externals_freeze. iIntros (unfreeze) "#Hunfreeze".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_init; iModIntro.
-      ltac2:(solve_in_env ()). ltac2:(solve_in_env ()). iFrame "#". }
+    { iApply imp_init; solve_env. }
     iIntros (init) "#Hinit".
 
     iApply (imp_sitems_let (A:=val)).
@@ -220,7 +219,7 @@ Section module_proof.
     iIntros (sub) "Hsub".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_iter; (iFrame "#"; auto). }
+    { iApply imp_iter; solve_env. }
     iIntros (iter) "#Hiter".
 
     iApply (imp_sitems_let (A:=val)).
@@ -236,7 +235,7 @@ Section module_proof.
     iIntros (map2) "Hmap2".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_iteri; (iFrame "#"; auto). }
+    { iApply imp_iteri; solve_env. }
     iIntros (iteri) "#Hiteri".
 
     iApply (imp_sitems_let (A:=val)).
@@ -260,7 +259,7 @@ Section module_proof.
     iIntros (of_array) "Hof_array".
 
     iApply (imp_sitems_let (A:=val)).
-    { iApply imp_fold_left; (iFrame "#"; auto). }
+    { iApply imp_fold_left; solve_env. }
     iIntros (fold_left) "#Hfold_left".
 
     iApply (imp_sitems_let (A:=val)).

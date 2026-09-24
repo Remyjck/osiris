@@ -44,19 +44,19 @@ Definition locked (γ : gname) : iProp Σ := token γ.
 (* [create ()] allocates [Atomic.make false] and exposes the lock.  The
    caller may initialise it with any [▷R] to receive [is_lock γ r R]. *)
 Definition create_spec create : iProp Σ :=
-  {{ True }}
+  □ {{ True }}
   create u : unit
   {{ RET (r : record); ∀ (R : iProp Σ), ▷R ={⊤}=∗ ∃ γ, is_lock γ r R }}.
 
 (* Acquiring the lock transfers ownership of [locked γ] and [▷R]. *)
 Definition acquire_spec acquire : iProp Σ :=
-  {{ ∀ γ (R : iProp Σ); is_lock γ r R }}
+  □ {{ ∀ γ (R : iProp Σ); is_lock γ r R }}
   acquire r : record
   {{ RET (_ : unit); locked γ ∗ ▷R }}.
 
 (* Releasing requires the holder to give back [locked γ] and [▷R]. *)
 Definition release_spec release : iProp Σ :=
-  {{ ∀ γ (R : iProp Σ); is_lock γ r R ∗ locked γ ∗ ▷R }}
+  □ {{ ∀ γ (R : iProp Σ); is_lock γ r R ∗ locked γ ∗ ▷R }}
   release r : record
   {{ RET (_ : unit); True }}.
 

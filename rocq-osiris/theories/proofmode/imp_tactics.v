@@ -1028,9 +1028,9 @@ Section TacticTests.
        which contains [sub] *)
 
   Definition add_spec add : iProp Σ :=
-    {{ True }} add (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i + j)%Z⌝ }}.
+    □ {{ True }} add (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i + j)%Z⌝ }}.
   Definition sub_spec sub : iProp Σ :=
-    {{ True }} sub (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i - j)%Z⌝ }}.
+    □ {{ True }} sub (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i - j)%Z⌝ }}.
   Definition a_spec a : iProp Σ := □ ⌜a > 2⌝.
 
   Definition module3_spec η := context [var_spec "sub" sub_spec] {["sub"]} η.

@@ -483,7 +483,7 @@ Hypothesis Hmax2 : (2 ≤ max_array_length)%Z.
    - [V'] is [V] extended with a mapping of [x] to [v]. *)
 
 Definition make_spec make : iProp Σ :=
-  {{ ∀ D R V; UF D R V }}
+  □ {{ ∀ D R V; UF D R V }}
   make v : val
   {{ RET (x : elem); UF (D ∪ {[x]}) R V.[x -/R/> v] ∗ ⌜(x ∉ D) ∧ R x = x⌝ }}.
 
@@ -960,7 +960,7 @@ Proof.
 Qed.
 
 Definition find_spec find : iProp Σ :=
-  {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
   find e : elem
   {{ RET (x : elem); ⌜x = R e⌝ ∗ UF D R V }}.
 
@@ -995,7 +995,7 @@ Qed.
    data structure is left untouched. *)
 
 Definition is_representative_spec is_representative : iProp Σ :=
-  {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
   is_representative e : elem
   {{ RET (b : bool); ⌜b = bool_decide (R e = e)⌝ ∗ UF D R V }}.
 
@@ -1047,7 +1047,7 @@ Qed.
 (* -------------------------------------------------------------------------- *)
 
 Definition get_spec get : iProp Σ :=
-  {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
   get e : elem
   {{ RET (x : val); ⌜x = V e⌝ ∗ UF D R V }}.
 
@@ -1092,7 +1092,7 @@ Qed.
 (* -------------------------------------------------------------------------- *)
 
 Definition set_spec set : iProp Σ :=
-  {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
   set e v : elem val
   {{ RET (x : unit); UF D R V.[ e -/R/> v] }}.
 
@@ -1136,7 +1136,7 @@ Qed.
 (* -------------------------------------------------------------------------- *)
 
 Definition union_spec union : iProp Σ :=
-  {{ ∀ D R V; ⌜x ∈ D⌝ ∗ ⌜y ∈ D⌝ ∗ UF D R V }}
+  □ {{ ∀ D R V; ⌜x ∈ D⌝ ∗ ⌜y ∈ D⌝ ∗ UF D R V }}
   union x y : elem elem
   {{ RET z; UF D R.[y -/R/> z].[x -/R/> z] V.[y -/R/> (V z)].[x -/R/> (V z)] ∗
               ⌜z = R x ∨ z = R y⌝ }}.

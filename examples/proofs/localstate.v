@@ -118,12 +118,12 @@ Section verification.
   Qed.
 
   Definition main_spec `{Encode A} (spec : A → iProp Σ) main : iProp Σ :=
-    {{ ∀ (init : state) rl wl St; St init }}
+    □ {{ ∀ (init : state) rl wl St; St init }}
     main t : unit @ ⊤ <| STATE rl wl St |>
     {{ RET v; spec v }}.
 
   Definition run_spec run : iProp Σ :=
-    {{ ∀ `(Encode A) (spec : A → iProp Σ);
+    □ {{ ∀ `(Encode A) (spec : A → iProp Σ);
        main_spec spec main }}
     run init main : state val
     {{ RET (v : state * A); spec (snd v) }}.
@@ -276,7 +276,7 @@ Section verification.
 
     (* [let get () = perform Get] *)
     iApply (imp_sitems_let (λ v,
-              {{ ∀ St x; St x }}
+              □ {{ ∀ St x; St x }}
               v u : unit @ ⊤ <| STATE rl wl St |>
               {{ RET X; ⌜X = x⌝ }})%I).
     { iApply (imp_EAnon_pers τ[unit]).
@@ -296,7 +296,7 @@ Section verification.
 
     (* [let set y = perform (Set y)] *)
     iApply (imp_sitems_let (λ v,
-              {{ ∀ St x; St x }}
+              □ {{ ∀ St x; St x }}
               v y : Z @ ⊤ <| STATE rl wl St |>
               {{ RET (_ : unit); St y }})%I).
     { iApply (imp_EAnon_pers τ[Z]).

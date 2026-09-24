@@ -66,7 +66,7 @@ Section ExternalsDef.
   Definition Externals__addint : val := VEta2 EIntAdd.
 
   Lemma add_spec :
-    ⊢ {{ True }} Externals__addint i j : Z Z {{ RET (n : Z); ⌜(n = i + j)%Z⌝ }}.
+    ⊢ □ {{ True }} Externals__addint i j : Z Z {{ RET (n : Z); ⌜(n = i + j)%Z⌝ }}.
   Proof.
     iModIntro.
     rewrite iSpec_equation_2.
@@ -85,7 +85,7 @@ Section ExternalsDef.
   Definition Externals__subint : val := VEta2 EIntSub.
 
   Lemma sub_spec :
-    ⊢ {{ True }} Externals__subint i j : Z Z {{ RET (n : Z); ⌜(n = i - j)%Z⌝ }}.
+    ⊢ □ {{ True }} Externals__subint i j : Z Z {{ RET (n : Z); ⌜(n = i - j)%Z⌝ }}.
   Proof.
     iModIntro.
     rewrite iSpec_equation_2.
@@ -180,7 +180,7 @@ Section ExternalsDef.
   Definition Externals__array_length_expr := EEta1 EArrayLength.
 
   Definition array_length_spec length : iProp Σ :=
-    {{ ∀ (ls : list loc); blockLocs a ls }}
+    □ {{ ∀ (ls : list loc); blockLocs a ls }}
     length a : array
     {{ RET n'; ⌜n' = list_z.length ls⌝ }}.
 
@@ -208,7 +208,7 @@ Section ExternalsDef.
   Definition Externals__array_get_expr : expr := EEta2 EArrayGet.
 
   Definition array_get_spec get : iProp Σ :=
-    {{ ∀ `(Encode A, Inhabited A) dq j (xs : list A);
+    □ {{ ∀ `(Encode A, Inhabited A) dq j (xs : list A);
        ▷ a ↦∗[j]{dq} xs ∗ ⌜j ≤ i < j + length xs⌝ }}
     get a i : array Z
     {{ RET (v : A); ⌜v = xs !!! (i - j)⌝ ∗ a ↦∗[j]{dq} xs }}.
@@ -238,7 +238,7 @@ Section ExternalsDef.
   Definition Externals__array_set_expr : expr := EEta3 EArraySet.
 
   Definition array_set_spec set : iProp Σ :=
-    ∀∀ `(Encode A, Inhabited A);
+    □ ∀∀ `(Encode A, Inhabited A);
     {{ ∀ j (xs : list A) Φ;
        ▷ a ↦∗[j] xs ∗ Φ x ∗ ⌜j ≤ i < j + length xs⌝ }}
     set a i x : array Z A
@@ -270,7 +270,7 @@ Section ExternalsDef.
   Definition Externals__array_make_expr : expr := EEta2 EArrayMake.
 
   Definition array_make_spec make : iProp Σ :=
-    ∀∀ `(Encode A);
+    □ ∀∀ `(Encode A);
     {{ ∀ Φ; ⌜0 ≤ n ≤ max_array_length⌝ ∗ Φ x }}
     make n x : Z A
     {{ RET a; ∃ x, Φ x ∗ a ↦∗ (replicate n x) }}.
@@ -299,7 +299,7 @@ Section ExternalsDef.
   Definition Externals__freeze_expr : expr := EEta1 EFreeze.
 
   Definition freeze_spec freeze : iProp Σ :=
-    {{ ∀ t; blockTag l (DfracOwn 1) t }}
+    □ {{ ∀ t; blockTag l (DfracOwn 1) t }}
     freeze l : array
     {{ RET l'; ⌜l' = l⌝ ∗ blockTag l (DfracOwn 1) Immut }}.
 

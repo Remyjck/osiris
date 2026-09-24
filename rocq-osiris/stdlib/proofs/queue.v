@@ -159,7 +159,7 @@ Section proofs.
      elements of that type. *)
 
   Definition create_spec create : iProp Σ :=
-    {{ ∀ A (HencA : Encode A); True }}
+    □ {{ ∀ A (HencA : Encode A); True }}
     create u : unit
     {{ RET q; Queue (@nil A) q }}.
 

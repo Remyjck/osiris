@@ -90,7 +90,7 @@ Context `{!osirisGS Σ}.
 (* The specification of our [find_first] function. *)
 
 Definition find_spec find : iProp Σ :=
-  {{ ∀ (φ : A -> Prop);
+  □ {{ ∀ (φ : A -> Prop);
      (* Assuming that [pred] is a pure function such that
         [pred x] reflects the pure proposition [φ x]*)
      ∀ `(Encode B), ⌜Spec τ[A] pred (λ x mx, pure mx (λ (P : Prop), P <-> φ x) (⊥ : B → Prop))⌝ }}

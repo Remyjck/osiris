@@ -410,7 +410,7 @@ End ipostA_lemmas.
 (* Ghost binders, one argument type. *)
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -427,7 +427,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -444,7 +444,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -461,7 +461,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -480,7 +480,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@
 (* Ghost binders, several argument types. *)
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -497,7 +497,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -514,7 +514,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -531,7 +531,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .
   : bi_scope.
 
 Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -550,7 +550,7 @@ Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .
 (* No ghost binders, one argument type. *)
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -567,7 +567,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -584,7 +584,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -600,7 +600,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β 
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tbase τ) c
+  (iSpec (type_nel.Tbase τ) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -618,7 +618,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β 
 (* No ghost binders, several argument types. *)
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -635,7 +635,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@'
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
@@ -652,7 +652,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@'
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
@@ -668,7 +668,7 @@ Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@'
   : bi_scope.
 
 Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v '}>>'" :=
-  (□ iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
      (λ a, .. (λ b,
         ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
                (TB:=TeleO)
