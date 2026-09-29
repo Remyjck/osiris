@@ -1123,7 +1123,7 @@ Section imp_rules_expr.
   Proof.
     iIntros "He P". simpl_eval.
     iApply (imp_bind with "[He]").
-    { iApply (imp_as_loc with "He"). }
+    { iApply (imp_as_field_loc with "He"). }
     iIntros (l) "HΦ1".
     iDestruct ("P" with "HΦ1") as "(%q & %a & Hl & P)".
     change (♯l) with l.
@@ -1156,7 +1156,7 @@ Section imp_rules_expr.
     iIntros "H1 H2 H3 P /=". simpl_eval.
     iApply (imp_bind_par (A1:=loc*A) with "[H1 H2] H3").
     { iApply (imp_par with "[H1] H2").
-      { iApply (imp_as_loc with "H1"). } }
+      { iApply (imp_as_field_loc with "H1"). } }
     iIntros ((l & x) y) "(H1 & H2) H3".
     iSpecialize ("P" with "H1 H2 H3").
     iNext. iDestruct "P" as "(%v & Hl & HΦ)".
@@ -1226,7 +1226,7 @@ Section imp_rules_expr.
   Proof.
     iIntros "Hl H1 H2 P". simpl_eval.
     iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_loc with "H1"). }
+    { iApply (imp_as_field_loc with "H1"). }
     { iApply (imp_as_int with "H2"). }
     iIntros (? i) "-> H2".
     iSpecialize ("P" with "H2").
@@ -1314,7 +1314,7 @@ Section imp_rules_expr.
     iIntros (Hp Hv) "Hl H1 Hproph Hcont". simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind with "[H1]").
-    { iApply (imp_as_loc with "H1"). }
+    { iApply (imp_as_field_loc with "H1"). }
     iIntros (l0) "->".
     rewrite /resolve.
     iApply (ewp_resolve with "Hproph"); first apply call_is_atomic_load.
@@ -1339,7 +1339,7 @@ Section imp_rules_expr.
     iIntros (Hp Hv) "Hl H1 H2 Hproph Hcont". simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_loc with "H1"). }
+    { iApply (imp_as_field_loc with "H1"). }
     { iApply (imp_as_int with "H2"). }
     iIntros (l0 i0) "-> ->".
     rewrite /resolve.
@@ -1365,7 +1365,7 @@ Section imp_rules_expr.
     iIntros (Hp Hv) "Hl H1 H2 Hproph Hcont". simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par with "[H1] H2").
-    { iApply (imp_as_loc with "H1"). }
+    { iApply (imp_as_field_loc with "H1"). }
     iIntros (l0 b0) "-> ->".
     rewrite /resolve.
     iApply (ewp_resolve with "Hproph"); first apply call_is_atomic_exchange.
@@ -1394,7 +1394,7 @@ Section imp_rules_expr.
     iIntros (Hp Hv) "Hl H1 H2 H3 Hproph Hcont". simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par (A1:=loc*A) with "[H1 H2] H3").
-    { iApply (imp_par with "[H1] H2"). { iApply (imp_as_loc with "H1"). } }
+    { iApply (imp_par with "[H1] H2"). { iApply (imp_as_field_loc with "H1"). } }
     iIntros ((l0 & s0) a0) "(-> & ->) ->".
     rewrite /resolve.
     iApply (ewp_resolve with "Hproph"); first apply call_is_atomic_cas.

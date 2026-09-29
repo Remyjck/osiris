@@ -36,8 +36,8 @@ Local Ltac erase_val_as v :=
   destruct v; simpl; repeat case_match;
     first [ apply EM_Crash | apply EM_Ret | apply EM_CrashL ].
 
-Lemma erase_val_as_loc {E} (fE : E → E) v :
-  erase_micro id fE (val_as_loc v) (val_as_loc (erase_val v)).
+Lemma erase_val_as_field_loc {E} (fE : E → E) v :
+  erase_micro id fE (val_as_field_loc v) (val_as_field_loc (erase_val v)).
 Proof. erase_val_as v. Qed.
 
 Lemma erase_val_as_int (v : val) :
@@ -99,10 +99,10 @@ Proof. destruct a; simpl; [ apply erase_lookup_path | done | done ]. Qed.
 
 (** ** Coercions of computations. *)
 
-Lemma erase_as_loc {E} (fE : E → E) m m' :
-  erase_micro erase_val fE m m' → erase_micro id fE (as_loc m) (as_loc m').
+Lemma erase_as_field_loc {E} (fE : E → E) m m' :
+  erase_micro erase_val fE m m' → erase_micro id fE (as_field_loc m) (as_field_loc m').
 Proof.
-  intros Hm. eapply erase_bind; [ done | ]. intros v. apply erase_val_as_loc.
+  intros Hm. eapply erase_bind; [ done | ]. intros v. apply erase_val_as_field_loc.
 Qed.
 
 Lemma erase_as_int m m' :
@@ -721,7 +721,7 @@ Proof.
   - exact (EM_Ret erase_env erase_val []).
   - eapply erase_bind; [ apply (erase_alloc VUnit) | ]. intros l.
     eapply erase_bind; [ apply IH | ]. intros η.
-    exact (EM_Ret erase_env erase_val ((c, VLoc l) :: η)).
+    exact (EM_Ret erase_env erase_val ((c, VFieldLoc l) :: η)).
 Qed.
 
 
@@ -774,7 +774,7 @@ Definition eval_resolved (η : env) (e : expr) (p : proph_id) (v : val) : microv
       | None => Crash
       end
   | EFieldLoad e1 =>
-      l ← as_loc (eval η e1) ;
+      l ← as_field_loc (eval η e1) ;
       resolve CLoad l p v
   | ERecordAccess e1 f =>
       r ← as_record (eval η e1) ;
@@ -785,13 +785,13 @@ Definition eval_resolved (η : env) (e : expr) (p : proph_id) (v : val) : microv
       end
   | EExchange e1 e2 =>
       '(l, w) ← pair_op LiberalStrategy.fun_app_order
-                  (as_loc (eval η e1)) (eval η e2) ;
+                  (as_field_loc (eval η e1)) (eval η e2) ;
       resolve CExchange (l, w) p v
   | ECAS e1 e2 e3 =>
-      '(l, seen, w) ← par (par (as_loc (eval η e1)) (eval η e2)) (eval η e3) ;
+      '(l, seen, w) ← par (par (as_field_loc (eval η e1)) (eval η e2)) (eval η e3) ;
       resolve CCAS (l, seen, w) p v
   | EFAA e1 e2 =>
-      '(l, i) ← par (as_loc (eval η e1)) (as_int (eval η e2)) ;
+      '(l, i) ← par (as_field_loc (eval η e1)) (as_int (eval η e2)) ;
       resolve CFAA (l, i) p v
   | _ =>
       w ← eval η e ;
@@ -924,7 +924,7 @@ Proof.
     intros η δ v;
     destruct v; simpl_eval_pat; try apply EM_Crash; try ee_ret;
     rewrite erase_lookup_path;
-    eapply erase_bind; [ apply erase_as_loc, erase_of_option | ]; intros l';
+    eapply erase_bind; [ apply erase_as_field_loc, erase_of_option | ]; intros l';
     ee_pair;
     case_match; [ | ee_ret ].
     fold erase_vals.
@@ -935,7 +935,7 @@ Proof.
     eapply erase_bind; [ apply erase_load_block | ]; intros [ t ls ]; ee_pair;
     eapply erase_bind; [ apply erase_loadfs | ]; intros vs; ee_pair.
     apply erase_eval_fpats; assumption.
-  - (* PInline: as for [PData], a prophecy crashes where [VUnit] throws. *)
+  - (* PTaggedRecord: as for [PData], a prophecy crashes where [VUnit] throws. *)
     intros η δ v;
     destruct v; simpl_eval_pat; try apply EM_CrashL; try ee_ret;
     case_match; [ apply IHp | ee_ret ].
@@ -1128,7 +1128,7 @@ Proof.
   - (* EXData *)
     simpl_eval;
     rewrite erase_lookup_path;
-    eapply erase_bind; [ apply erase_as_loc, erase_of_option | ]; intros l;
+    eapply erase_bind; [ apply erase_as_field_loc, erase_of_option | ]; intros l;
     ee_pair;
     eapply erase_bind; [ apply erase_evals; eapply list_all_proj_1, H | ]; intros vs; ee_pair; ee_ret.
   - (* ERecord *)
@@ -1349,21 +1349,21 @@ Proof.
     simpl_eval.
     split.
     + intros η.
-      eapply erase_bind; [ apply erase_as_loc, IHe0 | ]. intros l. ee_pair.
+      eapply erase_bind; [ apply erase_as_field_loc, IHe0 | ]. intros l. ee_pair.
       apply erase_load.
     + intros η p v. cbn beta iota delta [ eval_resolved ].
-      eapply erase_bind; [ apply erase_as_loc, IHe0 | ]. intros l. ee_pair.
+      eapply erase_bind; [ apply erase_as_field_loc, IHe0 | ]. intros l. ee_pair.
       apply erase_resolve_load.
   - (* EExchange *)
     simpl_eval.
     split.
     + intros η.
       eapply erase_bind;
-        [ apply erase_par; [ apply erase_as_loc, IHe0_1 | apply IHe0_2 ] | ].
+        [ apply erase_par; [ apply erase_as_field_loc, IHe0_1 | apply IHe0_2 ] | ].
       intros [ l w ]. ee_pair. apply erase_exchange.
     + intros η p v. cbn beta iota delta [ eval_resolved ].
       eapply erase_bind;
-        [ apply erase_pair_op; [ apply erase_as_loc, IHe0_1 | apply IHe0_2 ] | ].
+        [ apply erase_pair_op; [ apply erase_as_field_loc, IHe0_1 | apply IHe0_2 ] | ].
       intros [ l w ]. ee_pair. apply erase_resolve_exchange.
   - (* ECAS *)
     simpl_eval.
@@ -1371,13 +1371,13 @@ Proof.
     + intros η.
       eapply erase_bind;
         [ apply erase_par;
-            [ apply erase_par; [ apply erase_as_loc, IHe0_1 | apply IHe0_2 ]
+            [ apply erase_par; [ apply erase_as_field_loc, IHe0_1 | apply IHe0_2 ]
             | apply IHe0_3 ] | ].
       intros [ [ l seen ] w ]. ee_pair. apply erase_cas.
     + intros η p v. cbn beta iota delta [ eval_resolved ].
       eapply erase_bind;
         [ apply erase_par;
-            [ apply erase_par; [ apply erase_as_loc, IHe0_1 | apply IHe0_2 ]
+            [ apply erase_par; [ apply erase_as_field_loc, IHe0_1 | apply IHe0_2 ]
             | apply IHe0_3 ] | ].
       intros [ [ l seen ] w ]. ee_pair. apply erase_resolve_cas.
   - (* EFAA *)
@@ -1386,12 +1386,12 @@ Proof.
     + intros η.
       eapply erase_bind;
         [ apply erase_par;
-            [ apply erase_as_loc, IHe0_1 | apply erase_as_int, IHe0_2 ] | ].
+            [ apply erase_as_field_loc, IHe0_1 | apply erase_as_int, IHe0_2 ] | ].
       intros [ l i ]. ee_pair. apply erase_faa.
     + intros η p v. cbn beta iota delta [ eval_resolved ].
       eapply erase_bind;
         [ apply erase_par;
-            [ apply erase_as_loc, IHe0_1 | apply erase_as_int, IHe0_2 ] | ].
+            [ apply erase_as_field_loc, IHe0_1 | apply erase_as_int, IHe0_2 ] | ].
       intros [ l i ]. ee_pair. apply erase_resolve_faa.
   - (* ENewProph *)
     simpl_eval; apply erase_new_proph.

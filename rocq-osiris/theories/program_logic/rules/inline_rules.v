@@ -17,7 +17,7 @@ Section inline_record_reasoning.
 
   Local Instance notval_listval : NotVal (list val) := {}.
 
-  Local Instance encode_record c : Encode record := { encode' r := VInline c r }.
+  Local Instance encode_record c : Encode record := { encode' r := VTaggedRecord c r }.
 
   Lemma imp_EInline {τ : types} {ζ : exn → iProp Σ} (Φs : τ -#> iProp Σ) c t es :
     let encode_rec := encode_record c in
@@ -86,7 +86,7 @@ Section encoded_fields.
   Lemma imp_inline_record_as `{RecordRepr B τ t} `{Encode A} {η E Ψ}
       {ζ : exn → iProp Σ}
       c (mk : record → A) es (Φs : τ → iProp Σ) :
-    (∀ r : record, (#(mk r) : val) = VInline c r) →
+    (∀ r : record, (#(mk r) : val) = VTaggedRecord c r) →
     (τ_length τ ≤ max_array_length)%Z →
     impure E (evals η es) Ψ ζ Φs -∗
     impure E (eval η (EInline c t es)) Ψ ζ

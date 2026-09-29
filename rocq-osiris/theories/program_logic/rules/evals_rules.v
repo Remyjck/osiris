@@ -87,7 +87,7 @@ Section evals_rules.
     EWP eval η (EXData π es) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hlookup) "He Hk". simpl_eval.
-    rewrite Hlookup. unfold as_loc; simpl. rewrite !bind_ret.
+    rewrite Hlookup. unfold as_field_loc; simpl. rewrite !bind_ret.
     iApply (imp_bind with "He").
     rewrite bi_tforall_equiv.
     iIntros (xs) "HΦs".

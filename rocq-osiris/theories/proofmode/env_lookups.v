@@ -211,9 +211,9 @@ Section InEnv.
 
   Lemma in_env_here_inline {η} (c : data) (r : record) (mk : record → A) x y :
     (x =? y)%string = true →
-    (∀ r' : record, VInline c r' = #(mk r')) →
+    (∀ r' : record, VTaggedRecord c r' = #(mk r')) →
     Φ (mk r) -∗
-    in_env x Φ ((y, VInline c r) :: η).
+    in_env x Φ ((y, VTaggedRecord c r) :: η).
   Proof.
     iIntros (Heq Hmk) "HΦ".
     rewrite Hmk.
@@ -606,7 +606,7 @@ Ltac2 in_env_here () :=
 Ltac2 in_env_here_inline_tac () :=
   iApply in_env_here_inline;
   Control.focus 1 1 (fun _ => apply String.eqb_refl);
-  Control.focus 1 1 (fun _ => apply inline_encode).
+  Control.focus 1 1 (fun _ => apply tagged_encode).
 
 Ltac2 in_env_app_l () :=
   iApply in_env_app_l.

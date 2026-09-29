@@ -18,7 +18,7 @@ Record root `{Encode A} : Type := { rank : Z; value : A }.
    heap block holding the record's own fields (rank/value, or parent). *)
 
 (* Matching on a vertex's content is done directly on the loaded value
-   (a [VInline "Root"/"Link"] tag wrapping the record pointer): the
+   (a [VTaggedRecord "Root"/"Link"] tag wrapping the record pointer): the
    pattern rules read the record fields themselves, so no intermediate
    typed snapshot of the content is needed. *)
 
@@ -120,8 +120,8 @@ Definition rec_repr (lr : record) (lc : lcontent) : iProp Σ :=
 
 Definition content_of (lr : record) (lc : lcontent) : val :=
   match lc with
-  | LRoot _ => VInline "Root" lr
-  | LLink _ => VInline "Link" lr
+  | LRoot _ => VTaggedRecord "Root" lr
+  | LLink _ => VTaggedRecord "Link" lr
   end.
 
 (* [vertex x lr lc] is the full heap footprint of one vertex [x]: its
@@ -1230,7 +1230,7 @@ Proof.
     iDestruct "Hvx" as "[Hx _]".
     iApply (imp_ESeq with "[Hx]").
     { (* Goal:= [ x := Link { parent = y } ] *)
-      imp_store' (R x) $! (∃ (r : record), r ⤇ {| parent := R y |} ∗ R x ↦ VInline "Link" r)%I.
+      imp_store' (R x) $! (∃ (r : record), r ⤇ {| parent := R y |} ∗ R x ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->) /=".
       iExists r. iFrame. }
@@ -1259,7 +1259,7 @@ Proof.
    { (* Same record-block replacement, this time on [R y]'s side. *)
     iDestruct "Hvy" as "[Hy _]".
     iApply (imp_ESeq with "[Hy]").
-    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VInline "Link" r)%I.
+    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->)".
       simpl. iExists r. iFrame. }
@@ -1287,7 +1287,7 @@ Proof.
 
   iDestruct "Hvy" as "[Hy _]".
   iApply (imp_ESeq with "[Hy]").
-    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VInline "Link" r)%I.
+    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->)".
       simpl. iExists r. iFrame. }

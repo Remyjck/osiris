@@ -355,7 +355,7 @@ Ltac2 get_record_ownership (r : constr) : constr :=
    [k] on the continuation, with the matched environment substituted
    and the ownership back in the context under its original name. *)
 
-(* Solve a goal [v = VRecord ?r], [v = VTuple ?vs], [v = VInline s ?v'],
+(* Solve a goal [v = VRecord ?r], [v = VTuple ?vs], [v = VTaggedRecord s ?v'],
    ... where [v] may be an encoded value [# x]. *)
 Local Ltac2 solve_val_eq () :=
   solve [ ltac1:(first [ reflexivity
@@ -433,13 +433,13 @@ Ltac2 rec ipattern_match_aux () :=
             stop_here
               (fun _ => iApply ipat_PTuple' >
                           [ solve_val_eq () | ipattern_match_aux () ])
-        | PInline _ _ =>
+        | PTaggedRecord _ _ =>
             Control.plus
-              (fun _ => iApply ipat_PInline_eq >
+              (fun _ => iApply ipat_PTaggedRecord_eq >
                           [ solve_val_eq ()
                           | ipattern_match_aux () ])
               (fun _ => stop_here
-                  (fun _ => iApply ipat_PInline_neq > [ ltac1:(congruence) | () ]))
+                  (fun _ => iApply ipat_PTaggedRecord_neq > [ ltac1:(congruence) | () ]))
         | PRecord _ =>
             stop_here
               (fun _ => ipat_record_cps v (fun _ => ipattern_match_aux ()))

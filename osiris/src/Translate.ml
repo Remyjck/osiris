@@ -398,7 +398,7 @@ let rec translate_pat (pat: pattern) : pat =
       (* An inline-record constructor pattern has exactly one argument:
          a pattern for the record itself. *)
       match pats with
-      | [ p ] -> PInline (data, translate_pat p)
+      | [ p ] -> PTaggedRecord (data, translate_pat p)
       | _ -> assert false
     else
       let tuple = translate_pats pats in
@@ -850,7 +850,7 @@ and translate_primitive_application loc path p args =
   (* Atomic field locations. These primitives are recognized regardless of
      the path through which they are named, e.g. [Atomic.Loc.get] in the
      standard library or a local alias. Their first argument is an atomic
-     location, that is, a value of the form [VLoc l]. *)
+     location, that is, a value of the form [VFieldLoc l]. *)
   | _, "%atomic_load_loc", [e] ->
       EFieldLoad e
   | _, "%atomic_exchange_loc", [e1; e2] ->

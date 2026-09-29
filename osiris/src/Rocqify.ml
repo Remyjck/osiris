@@ -162,8 +162,8 @@ let rec pat (p : pat) =
   | PRecord fps ->
       c "PRecord" [ fpats fps ]
 
-  | PInline (d, p) ->
-      c "PInline" [ data d ; pat p ]
+  | PTaggedRecord (d, p) ->
+      c "PTaggedRecord" [ data d ; pat p ]
 
   | PInt i ->
       c "PInt" [ int i ]

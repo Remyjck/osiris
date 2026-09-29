@@ -1648,7 +1648,7 @@ Qed.
 
 Definition proph_root (pvs : list (val * val)) : bool :=
   match pvs with
-  | (VInline t _, _) :: _ => bool_decide (t = "Root")
+  | (VTaggedRecord t _, _) :: _ => bool_decide (t = "Root")
   | _ => false
   end.
 

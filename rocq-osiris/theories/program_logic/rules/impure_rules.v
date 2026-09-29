@@ -730,9 +730,9 @@ Section dynamic_checks.
     iApply (imp_ret with "HΦ"); first encode.
   Qed.
 
-  Lemma imp_as_loc (m : microvx) (Φ : locations.loc → iProp Σ) :
+  Lemma imp_as_field_loc (m : microvx) (Φ : locations.loc → iProp Σ) :
     EWP m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
-    EWP as_loc m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP as_field_loc m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hm".
     iApply (imp_bind with "Hm").

@@ -250,11 +250,11 @@ Qed.
 
 Definition phys_eq_val_store v1 v2 σ : option bool :=
   match v1, v2 with
-  | VLoc l1, VLoc l2 =>
+  | VFieldLoc l1, VFieldLoc l2 =>
       Some (locations.eqb l1 l2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
-  | VInline _ l1, VInline _ l2 =>
+  | VTaggedRecord _ l1, VTaggedRecord _ l2 =>
       match σ !! l1, σ !! l2 with
       | Some (Block Mut _), Some (Block _ _)
       | Some (Block _ _), Some (Block Mut _) => Some (locations.eqb l1 l2)

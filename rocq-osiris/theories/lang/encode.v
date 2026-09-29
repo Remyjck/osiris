@@ -536,10 +536,10 @@ Global Hint Resolve solve_encode_None solve_encode_Some : encode.
 (* This instance is needed, for instance, for memory locations. *)
 
 Global Instance Encode_loc : Encode loc :=
-  { encode' := λ l, VLoc l }.
+  { encode' := λ l, VFieldLoc l }.
 
 Lemma solve_encode_loc l :
-  VLoc l = #l.
+  VFieldLoc l = #l.
 Proof. solve_encode. Qed.
 
 Global Hint Resolve solve_encode_loc : encode.

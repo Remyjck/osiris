@@ -520,14 +520,14 @@ with imp_record0 (selpat : constr option) (reading : constr option) (a_opt : con
     | EInline ?c _ ?es =>
         let lemma :=
           match a_opt with
-          | Some b => '(imp_inline_record_as (B:=$b) $c (inline_apply (c:=$c)))
+          | Some b => '(imp_inline_record_as (B:=$b) $c (tagged_apply (c:=$c)))
           | None =>
               let τ := utypes_from_exprs es in
-              '(imp_inline_record_as (τ:=$τ) $c (inline_apply (c:=$c)))
+              '(imp_inline_record_as (τ:=$τ) $c (tagged_apply (c:=$c)))
           end
         in
         iApply $lemma >
-          [ ltac1:(intro; symmetry; apply inline_encode)
+          [ ltac1:(intro; symmetry; apply tagged_encode)
           | simpl; try ltac1:(lia)
           | step_elements () ]
     | _ =>

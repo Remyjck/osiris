@@ -275,7 +275,7 @@ Definition io_loc := 0%Z.
    the pair of arguments [(name, arg)] *)
 Definition clo_io_perform (name : string) : val :=
   (* closure with environment mapping [E] to [io_loc] *)
-  VClo [("E", VLoc (Loc io_loc))] $
+  VClo [("E", VFieldLoc (Loc io_loc))] $
     (* [λ x, perform (E (name, x))] *)
     AnonFun "x" (EPerform (EXData ["E"] [EString name; EPath ["x"]])).
 
@@ -316,7 +316,7 @@ Fixpoint string_of_pat (p : pat) : string :=
   | PData data list_pat => "PData(" ++ data ++ ", " ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PXData path list_pat => "PXData(" ++ String.concat "." path ++ ", " ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PRecord fs => "PRecord(" ++ String.concat "," (map (string_of_pair string_of_field string_of_pat) fs) ++ ")"
-  | PInline data pat => "PInline(" ++ data ++ ", " ++ string_of_pat pat ++ ")"
+  | PTaggedRecord data pat => "PTaggedRecord(" ++ data ++ ", " ++ string_of_pat pat ++ ")"
   | PArray list_pat => "PArray(" ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PInt Z => "PInt(" ++ string_of_Z Z ++ ")"
   | PChar char => "PChar(" ++ string_of_char char ++ ")"
@@ -487,13 +487,13 @@ Fixpoint string_of_val (v : val) : string :=
   | VTuple l => "VTuple(" ++ String.concat "; " (map string_of_val l) ++ ")"
   | VData data vs => "VData(" ++ data ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
   | VXData loc vs => "VXData(" ++ string_of_Z loc.(address) ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
-  | VLoc l   => "VLoc("   ++ string_of_Z l.(address) ++ ")"
+  | VFieldLoc l   => "VFieldLoc("   ++ string_of_Z l.(address) ++ ")"
   | VProph p => "VProph(" ++ string_of_Z p.(address) ++ ")"
   | VCont l  => "VCont("  ++ string_of_Z l.(address) ++ ")"
-  | VThread thread => "VLoc(" ++ string_of_Z thread.(tid) ++ ")"
+  | VThread thread => "VFieldLoc(" ++ string_of_Z thread.(tid) ++ ")"
   | VRecord l => "VRecord(" ++ string_of_Z l.(address) ++ ")"
   | VArray l => "VArray(" ++ string_of_Z l.(address) ++ ")"
-  | VInline c l => "VInline(" ++ c ++ ", " ++ string_of_Z l.(address) ++ ")"
+  | VTaggedRecord c l => "VTaggedRecord(" ++ c ++ ", " ++ string_of_Z l.(address) ++ ")"
   | VStruct fields => "VStruct(" ++ String.concat "; " (map (string_of_pair id string_of_val) fields) ++ ")"
   | VFunctor fields v l  => "VFunctor(Unsupported)"
   | VChar c => "VChar(" ++ string_of_char c ++ ")"

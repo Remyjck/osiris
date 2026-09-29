@@ -80,7 +80,7 @@ type pat =
   | PRecord of fpats
   (* An inline-record pattern: [C p] where [C] is an inline-record
      constructor and [p] matches the underlying record. *)
-  | PInline of data * pat
+  | PTaggedRecord of data * pat
   (* A literal integer pattern. *)
   | PInt of int
   (* A literal character pattern. *)

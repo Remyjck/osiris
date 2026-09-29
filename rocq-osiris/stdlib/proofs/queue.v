@@ -25,7 +25,7 @@ Section boilerplate.
   Global Instance encode_cell : Encode cell :=
     { encode' c := match c with
                    | Nil => VConstant "Nil"
-                   | Cons r => VInline "Cons" r
+                   | Cons r => VTaggedRecord "Cons" r
                    end }.
 
   Global Instance Constant_Nil : Constant "Nil" cell :=

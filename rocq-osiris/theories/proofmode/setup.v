@@ -20,14 +20,14 @@ Arguments discontinue _ _ _ k e /.
    This exposes a [bind] combinator and enables further simplifications. *)
 Arguments as_bool m /.
 Arguments as_int m /.
-Arguments as_loc E m /.
+Arguments as_field_loc E m /.
 Arguments as_record E m /.
 Arguments as_array E m /.
 Arguments as_struct E m /.
 Arguments lookup_name _ _/.
 
 Arguments val_as_bool !v /.
-Arguments val_as_loc _ !v /.
+Arguments val_as_field_loc _ !v /.
 Arguments val_as_cont _ !v /.
 Arguments val_as_int !v /.
 Arguments val_as_record _ !v /.

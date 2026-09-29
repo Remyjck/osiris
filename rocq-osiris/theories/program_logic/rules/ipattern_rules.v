@@ -198,19 +198,19 @@ Section ipattern.
   (* Rules for inline-record patterns: the constructor comparison is
      pure; the sub-pattern is matched against the underlying record. *)
 
-  Lemma ipat_PInline_eq η δ c p v l Φ ψ :
-    v = VInline c l →
+  Lemma ipat_PTaggedRecord_eq η δ c p v l Φ ψ :
+    v = VTaggedRecord c l →
     ipattern η δ p (VRecord l) Φ ψ -∗
-    ipattern η δ (PInline c p) v Φ ψ.
+    ipattern η δ (PTaggedRecord c p) v Φ ψ.
   Proof.
     iIntros (->) "Hp". rewrite /ipattern. simpl_eval_pat.
     rewrite String.eqb_refl. iApply "Hp".
   Qed.
 
-  Lemma ipat_PInline_neq η δ c c' p l Φ ψ :
+  Lemma ipat_PTaggedRecord_neq η δ c c' p l Φ ψ :
     c ≠ c' →
     ψ -∗
-    ipattern η δ (PInline c p) (VInline c' l) Φ ψ.
+    ipattern η δ (PTaggedRecord c p) (VTaggedRecord c' l) Φ ψ.
   Proof.
     iIntros (Hne) "Hψ". rewrite /ipattern. simpl_eval_pat.
     rewrite (proj2 (String.eqb_neq c c')); last assumption.

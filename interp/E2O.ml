@@ -93,7 +93,7 @@ let rec pat : E.pat -> O.pat = function
   | PData (d, ps)   -> PData (data d, pats ps)
   | PXData (ph, ps) -> PXData (path ph, pats ps)
   | PRecord fps     -> PRecord (fpats fps)
-  | PInline (d, p)  -> PInline (data d, pat p)
+  | PTaggedRecord (d, p)  -> PTaggedRecord (data d, pat p)
   | PArray _        -> PUnsupported
   | PInt i          -> PInt (z i)
   | PChar c         -> PChar (char c)

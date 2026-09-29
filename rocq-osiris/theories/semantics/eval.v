@@ -130,20 +130,20 @@ Definition as_bool (m : microvx) : micro bool exn :=
 
 (* ------------------------------------------------------------------------ *)
 
-(* [val_as_loc v] checks that the value [v] is a language-level location
+(* [val_as_field_loc v] checks that the value [v] is a language-level location
    value and returns its meta-level value. *)
 
-Definition val_as_loc {E} (v : val) : micro loc E :=
+Definition val_as_field_loc {E} (v : val) : micro loc E :=
   match v with
-  | VLoc l =>
+  | VFieldLoc l =>
       ret l
   | _ =>
       type_mismatch "location value expected"
   end.
 
-Definition as_loc {E} (m : micro val E) : micro loc E :=
+Definition as_field_loc {E} (m : micro val E) : micro loc E :=
   v ← m ;
-  val_as_loc v.
+  val_as_field_loc v.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -194,10 +194,10 @@ Definition as_array {E} (m : micro val E) : micro array E :=
 
 Definition val_as_record {E} (v : val) : micro record E :=
   match v with
-  | VRecord l =>
-      ret l
-  | VInline _ l =>
-      ret l
+  | VRecord r =>
+      ret r
+  | VTaggedRecord _ r =>
+      ret r
   | _ =>
       type_mismatch "location value expected"
   end.
@@ -587,7 +587,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       (* A data pattern for an extensible data type matches a data value, provided
          the data constructors correspond to the same location in the environment.
          If the data constructors do not match, a meta-level exception is raised. *)
-      l' ← as_loc (of_option (lookup_path η π)) ;
+      l' ← as_field_loc (of_option (lookup_path η π)) ;
       if (locations.eqb l l') then eval_pats η δ ps vs else throw ()
   | PRecord fps, VRecord l =>
       (* A record pattern matches a record value. The pattern may
@@ -596,7 +596,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       '(_, ls) ← load_block l ;
       vs ← loadfs ls fps ;
       eval_fpats η δ fps vs
-  | PInline c p, VInline c' l =>
+  | PTaggedRecord c p, VTaggedRecord c' l =>
       (* An inline-record pattern matches an inline-record value with the
          same constructor; the sub-pattern is matched against the record
          itself. A constructor mismatch is a match failure. *)
@@ -619,10 +619,10 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
   (* An inline-record constructor and an ordinary (or extensible) one can be
      constructors of the same sum type, so these four combinations are ordinary
      constructor mismatches. *)
-  | PData _ _, VInline _ _
-  | PXData _ _, VInline _ _
-  | PInline _ _, VData _ _
-  | PInline _ _, VXData _ _ =>
+  | PData _ _, VTaggedRecord _ _
+  | PXData _ _, VTaggedRecord _ _
+  | PTaggedRecord _ _, VData _ _
+  | PTaggedRecord _ _, VXData _ _ =>
       throw ()
   | PTuple _, _ =>
       type_mismatch "tuple expected"
@@ -632,7 +632,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       type_mismatch "extensible algebraic data expected"
   | PRecord _, _ =>
       type_mismatch "record expected"
-  | PInline _ _, _ =>
+  | PTaggedRecord _ _, _ =>
       type_mismatch "inline record expected"
   | PArray _, _ =>
       type_mismatch "array expected"
@@ -746,18 +746,16 @@ Definition call v1 v2 : microvx :=
 
 Definition phys_eq_val v1 v2 : micro bool exn :=
   match v1, v2 with
-  | VLoc l1, VLoc l2 =>
+  | VFieldLoc l1, VFieldLoc l2 =>
       ret (locations.eqb l1 l2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
-  | VInline _ l1, VInline _ l2 =>
+  | VTaggedRecord _ l1, VTaggedRecord _ l2 =>
       '((t1, _), (t2, _)) ← par (load_block l1) (load_block l2) ;
       match t1, t2 with
       | Mut, _ | _, Mut => ret (locations.eqb l1 l2)
       | _, _ => physical_equality_error "invalid or unsupported arguments"
       end
-  (* | VCont k1, VCont k2 => *)
-  (*     ret (locations.eqb k1 k2) *)
   | VData c1 [], VData c2 [] =>
       ret (c1 =? c2)
   | _, _ =>
@@ -997,7 +995,7 @@ Fixpoint eval_type_extensions (cs : list name) :=
   | c :: cs =>
       l ← alloc VUnit;
       η ← eval_type_extensions cs;
-      ret ((c, VLoc l) :: η)
+      ret ((c, VFieldLoc l) :: η)
   end.
 
 (* ------------------------------------------------------------------------ *)
@@ -1373,7 +1371,7 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       v ← evals η es ;
       ret (VData c v)
   | EXData π es =>
-      l ← as_loc (of_option (lookup_path η π)) ;
+      l ← as_field_loc (of_option (lookup_path η π)) ;
       v ← evals η es ;
       ret (VXData l v)
   | ERecord t es =>
@@ -1412,14 +1410,14 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       r ← as_record (eval η e) ;
       '(_, ls) ← load_block r ;
       match ls !! f with
-      | Some l => ret (VLoc l)
+      | Some l => ret (VFieldLoc l)
       | None => Crash
       end
   | EInline c t es =>
     vs ← evals η es ;
     ls ← allocn vs ;
     l ← alloc_block t ls ;
-    ret (VInline c l)
+    ret (VTaggedRecord c l)
   | EArrayLit es =>
       vs ← evals η es ;
       ls ← allocn vs ;
@@ -1578,16 +1576,16 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       | None => Crash
       end
   | EFieldLoad e =>
-      l ← as_loc (eval η e) ;
+      l ← as_field_loc (eval η e) ;
       load l
   | EExchange e1 e2 =>
-      '(l, v) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
+      '(l, v) ← pair_op Strat.fun_app_order (as_field_loc (eval η e1)) (eval η e2) ;
       exchange l v
   | ECAS e1 e2 e3 =>
-      '(l, seen, v) ← par (par (as_loc (eval η e1)) (eval η e2)) (eval η e3);
+      '(l, seen, v) ← par (par (as_field_loc (eval η e1)) (eval η e2)) (eval η e3);
       cas l seen v
   | EFAA e1 e2 =>
-      '(l, i) ← par (as_loc (eval η e1)) (as_int (eval η e2)) ;
+      '(l, i) ← par (as_field_loc (eval η e1)) (as_int (eval η e2)) ;
       faa l i
   | ENewProph =>
       p ← new_proph ;
@@ -1608,7 +1606,7 @@ Fixpoint pre_eval η e {struct e} : microvx :=
           | None => Crash
           end
       | EFieldLoad e1 =>
-          l ← as_loc (eval η e1) ;
+          l ← as_field_loc (eval η e1) ;
           resolve CLoad l p v
       | ERecordAccess e1 f =>
           (* A field read, e.g. [!r] or [r.f], is a single load once the
@@ -1620,13 +1618,13 @@ Fixpoint pre_eval η e {struct e} : microvx :=
           | None => Crash
           end
       | EExchange e1 e2 =>
-          '(l, w) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
+          '(l, w) ← pair_op Strat.fun_app_order (as_field_loc (eval η e1)) (eval η e2) ;
           resolve CExchange (l, w) p v
       | ECAS e1 e2 e3 =>
-          '(l, seen, w) ← par (par (as_loc (eval η e1)) (eval η e2)) (eval η e3) ;
+          '(l, seen, w) ← par (par (as_field_loc (eval η e1)) (eval η e2)) (eval η e3) ;
           resolve CCAS (l, seen, w) p v
       | EFAA e1 e2 =>
-          '(l, i) ← par (as_loc (eval η e1)) (as_int (eval η e2)) ;
+          '(l, i) ← par (as_field_loc (eval η e1)) (as_int (eval η e2)) ;
           resolve CFAA (l, i) p v
       | _ =>
           (* A non-atomic expression cannot be resolved at its own step:

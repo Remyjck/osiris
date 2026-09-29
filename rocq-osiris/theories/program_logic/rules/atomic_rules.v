@@ -137,7 +137,7 @@ Section imp_atomic_rules.
   Proof.
     iIntros "He Hload". simpl_eval.
     iApply (imp_bind with "[He]").
-    { iApply (imp_as_loc with "He"). }
+    { iApply (imp_as_field_loc with "He"). }
     iIntros (l) "HΦ1".
     iApply (imp_atomic' E1 E2).
     iMod ("Hload" with "HΦ1") as "(%dq & %a & Hl & Hload)".
@@ -158,7 +158,7 @@ Section imp_atomic_rules.
   Proof.
     iIntros "He1 He2 Hex". simpl_eval.
     iApply (imp_bind_par with "[He1] He2").
-    { iApply (imp_as_loc with "He1"). }
+    { iApply (imp_as_field_loc with "He1"). }
     iIntros (l x) "HΦ1 HΦ2 !>".
     iApply (imp_atomic' E1 E2).
     iMod ("Hex" with "HΦ1 HΦ2") as "(%a & Hl & Hex)".
@@ -178,7 +178,7 @@ Section imp_atomic_rules.
   Proof.
     iIntros "He1 He2 Hfaa". simpl_eval.
     iApply (imp_bind_par with "[He1] [He2]").
-    { iApply (imp_as_loc with "He1"). }
+    { iApply (imp_as_field_loc with "He1"). }
     { iApply (imp_as_int with "He2"). }
     iIntros (l i) "HΦ1 HΦ2 !>".
     iApply (imp_atomic' E1 E2).
@@ -202,7 +202,7 @@ Section imp_atomic_rules.
     simpl_eval.
     iApply (imp_bind_par (A1:=loc * A) with "[He1 He2] He3").
     { iApply (imp_par with "[He1] He2").
-      iApply (imp_as_loc with "He1"). }
+      iApply (imp_as_field_loc with "He1"). }
     iIntros ((l & seen) x) "(HΦ1 & HΦ2) HΦ3 !>".
     iApply (imp_atomic' E1 E2).
     iMod ("Hcas" with "HΦ1 HΦ2 HΦ3") as "(%v & Hl & Hcas)".
@@ -234,7 +234,7 @@ Section imp_atomic_rules.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par (A1:=loc * A) with "[He1 He2] He3").
     { iApply (imp_par with "[He1] He2").
-      iApply (imp_as_loc with "He1"). }
+      iApply (imp_as_field_loc with "He1"). }
     iIntros ((l & seen) x) "(HΦ1 & HΦ2) HΦ3 !>".
     rewrite /resolve.
     (* [resolve_atomic]: the resolution is still a single thread step, so
@@ -269,7 +269,7 @@ Section imp_atomic_rules.
     simpl_eval.
     rewrite (bind_proph_args Hp Hv).
     iApply (imp_bind_par with "[He1] He2").
-    { iApply (imp_as_loc with "He1"). }
+    { iApply (imp_as_field_loc with "He1"). }
     iIntros (l x) "HΦ1 HΦ2 !>".
     rewrite /resolve.
     iApply (imp_atomic' E1 E2).
@@ -283,7 +283,7 @@ Section imp_atomic_rules.
     iApply ("Hex" with "[//] Hp2 Hl").
   Qed.
 
-  (* The [VInline] variant of [imp_cas_atomic]; see [imp_stop_cas_inline].
+  (* The [VTaggedRecord] variant of [imp_cas_atomic]; see [imp_stop_cas_inline].
      The expected value [seen] must be an inline record, and the physical
      comparison is resolved by the [blockTag] fractions provided for the
      current and expected blocks. *)
@@ -296,9 +296,9 @@ Section imp_atomic_rules.
          ∀ l seen v',
          Φ1 l -∗ Φ2 seen -∗ Φ3 v' -∗
          ∃ c cs (r rs : record) dq1 dq2 t,
-           ⌜seen = VInline cs rs⌝ ∗
-           ▷ l ↦ₗ VInline c r ∗ ▷ blockTag r dq1 t ∗ ▷ blockTag rs dq2 Mut ∗
-           ▷ (l ↦ₗ (if locations.eqb r rs then v' else VInline c r) -∗
+           ⌜seen = VTaggedRecord cs rs⌝ ∗
+           ▷ l ↦ₗ VTaggedRecord c r ∗ ▷ blockTag r dq1 t ∗ ▷ blockTag rs dq2 Mut ∗
+           ▷ (l ↦ₗ (if locations.eqb r rs then v' else VTaggedRecord c r) -∗
               blockTag r dq1 t -∗ blockTag rs dq2 Mut -∗
               |={E2,E1}=> Φ (locations.eqb r rs))) -∗
     impure E1 (eval η (ECAS e1 e2 e3)) Ψ ζ Φ.
@@ -307,7 +307,7 @@ Section imp_atomic_rules.
     simpl_eval.
     iApply (imp_bind_par (A1:=loc * val) with "[He1 He2] He3").
     { iApply (imp_par with "[He1] He2").
-      iApply (imp_as_loc with "He1"). }
+      iApply (imp_as_field_loc with "He1"). }
     iIntros ((l & seen) x) "(HΦ1 & HΦ2) HΦ3 !>".
     iApply (imp_atomic' E1 E2).
     iMod ("Hcas" with "HΦ1 HΦ2 HΦ3")

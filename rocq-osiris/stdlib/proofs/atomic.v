@@ -21,20 +21,20 @@ Section atomic_proofs.
      at inline-record values. *)
 
   Definition compare_and_set_spec compare_and_set : iProp Σ :=
-  □ ∀∀ `(InlineEncode A);
+  □ ∀∀ `(TaggedEncode A);
   {{ ∀ E2 Φ;
      ▷ (|={⊤, E2}=>
         ∃ (a : A) dq1 dq2 t,
-          ▷ l ↦ₗ #a ∗ ▷ blockTag (inline_blk a) dq1 t ∗
-          ▷ blockTag (inline_blk seen) dq2 Mut ∗
-          ▷ (l ↦ₗ #(if locations.eqb (inline_blk a) (inline_blk seen) then
+          ▷ l ↦ₗ #a ∗ ▷ blockTag (tagged_blk a) dq1 t ∗
+          ▷ blockTag (tagged_blk seen) dq2 Mut ∗
+          ▷ (l ↦ₗ #(if locations.eqb (tagged_blk a) (tagged_blk seen) then
                       v'
                     else
                       a) -∗
-            blockTag (inline_blk a) dq1 t -∗
-            blockTag (inline_blk seen) dq2 Mut -∗
+            blockTag (tagged_blk a) dq1 t -∗
+            blockTag (tagged_blk seen) dq2 Mut -∗
             |={E2, ⊤}=>
-              Φ (locations.eqb (inline_blk a) (inline_blk seen)))) }}
+              Φ (locations.eqb (tagged_blk a) (tagged_blk seen)))) }}
   compare_and_set l seen v' : loc A A
   {{ RET b; Φ b }}.
 
@@ -43,11 +43,11 @@ Section atomic_proofs.
         {{ compare_and_set_spec }}.
   Proof.
     unfold compare_and_set_spec.
-    iApply imp_EAnon_poly.
+    iApply imp_EAnon_poly; simpl.
     iIntros "!>" (A HencA HinlA). simpl.
     iIntros (l seen v').
     iIntros (E2 Φ) "Hfupd".
-    iApply imp_please; iNext.
+    iApply imp_please; iNext. unfold deco.
     iApply (imp_cas_inline_atomic E2 ⊤ _ _ _ _
               (λ l0 : loc, ⌜l0 = l⌝)%I (λ s : val, ⌜s = #seen⌝)%I
               (λ w : val, ⌜w = #v'⌝)%I
@@ -60,15 +60,15 @@ Section atomic_proofs.
     iModIntro.
     iIntros (l0 s w) "-> -> ->".
     iDestruct "Hfupd" as (a dq1 dq2 t) "(Hl & Hr & Hrs & Hk)".
-    iExists (inline_tag a), (inline_tag seen),
-            (inline_blk a), (inline_blk seen), dq1, dq2, t.
-    iSplitR; first by rewrite (inline_encode_eq seen).
-    rewrite -(inline_encode_eq a).
+    iExists (tagged_tag a), (tagged_tag seen),
+            (tagged_blk a), (tagged_blk seen), dq1, dq2, t.
+    iSplitR; first by rewrite (tagged_encode_eq seen).
+    rewrite -(tagged_encode_eq a).
     iFrame "Hl Hr Hrs".
     iNext. iIntros "Hl Hr Hrs".
     (* The two shapes of the written value differ only by where the [if]
        sits, inside or outside the encoding. *)
-    destruct (locations.eqb (inline_blk a) (inline_blk seen));
+    destruct (locations.eqb (tagged_blk a) (tagged_blk seen));
       iApply ("Hk" with "Hl Hr Hrs").
   Qed.
 

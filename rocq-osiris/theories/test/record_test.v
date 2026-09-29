@@ -98,15 +98,15 @@ Section verification.
 
   Lemma match_inline_record_fields η r qp t (x y : Z) :
     ownBlock (τ:=τ[Z;Z]) r qp t (x, y) -∗
-    EWP eval (("v", VInline "Root" r) :: η)
+    EWP eval (("v", VTaggedRecord "Root" r) :: η)
         (EMatch (EVar "v")
-           [Branch (CVal (PInline "Root"
+           [Branch (CVal (PTaggedRecord "Root"
                             (PAlias (PRecord [(0%Z, PVar "a"); (1%Z, PVar "b")]) "w")))
                    (EIntAdd (EVar "a") (EVar "b"))])
         {{ (i : Z), ⌜i = (x + y)%Z⌝ ∗ ownBlock (τ:=τ[Z;Z]) r qp t (x, y) }}.
   Proof.
     iIntros "Hown".
-    iApply (imp_EMatch (A':=val) (λ v, ⌜v = VInline "Root" r⌝)%I with "[]").
+    iApply (imp_EMatch (A':=val) (λ v, ⌜v = VTaggedRecord "Root" r⌝)%I with "[]").
     { iApply imp_wand. imp_path. iIntros (?) "-> //". }
     iIntros (v) "-> !>".
     next_branch.

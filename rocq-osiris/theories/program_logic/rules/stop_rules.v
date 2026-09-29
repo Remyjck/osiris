@@ -257,12 +257,12 @@ Section imp_stop.
       destruct (#b); try (cbn in Hproj; discriminate Hproj).
       destruct v; try (cbn in Hproj; discriminate Hproj).
       cbn in Hproj. injection Hproj as <-. reflexivity. }
-    (* VLoc case *)
+    (* VFieldLoc case *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj).
       cbn in Hproj. injection Hproj as <-. reflexivity. }
     (* VRecord case: par creates Par constructor, which is never ret *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj). }
-    (* VInline case: par creates Par constructor, which is never ret *)
+    (* VTaggedRecord case: par creates Par constructor, which is never ret *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj). }
     (* VArray case: par creates Par constructor, which is never ret *)
     { destruct (#b); try (cbn in Hproj; discriminate Hproj). }
@@ -295,7 +295,7 @@ Section imp_stop.
       iApply ("Hwp" with "Hl").
   Qed.
 
-  (* CAS on inline-record values ([VInline]): physical equality compares the
+  (* CAS on inline-record values ([VTaggedRecord]): physical equality compares the
      underlying block locations, provided at least one of the two blocks is
      mutable. [PhysEqDec] is not applicable here, because deciding physical
      equality of blocks requires consulting the store. Instead, we require
@@ -303,16 +303,16 @@ Section imp_stop.
      of [seen] mutable; these resolve the comparison. *)
   Lemma imp_stop_cas_inline l (c cs : data) (r rs : record) (v' : val)
       dq1 dq2 t (k : _ → micro A X) :
-    ▷ l ↦ₗ VInline c r -∗
+    ▷ l ↦ₗ VTaggedRecord c r -∗
     ▷ blockTag r dq1 t -∗
     ▷ blockTag rs dq2 Mut -∗
     ▷ (
-        l ↦ₗ (if locations.eqb r rs then v' else VInline c r) -∗
+        l ↦ₗ (if locations.eqb r rs then v' else VTaggedRecord c r) -∗
         blockTag r dq1 t -∗
         blockTag rs dq2 Mut -∗
         EWP (continue k #(locations.eqb r rs)) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}
       ) -∗
-    EWP (Stop CCAS (l, VInline cs rs, v') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP (Stop CCAS (l, VTaggedRecord cs rs, v') k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl Hr Hrs Hwp".
     ewp_unfold_head; intro_state; ewp_mask_intro "Hmod".
@@ -324,7 +324,7 @@ Section imp_stop.
     iDestruct "Hrs" as (ls2) "Hrs".
     iDestruct (osiris_state_valid with "Hsi Hrs") as "%Hrs".
     destruct_subjective_step.
-    assert (Hpeq : phys_eq_val_store (VInline c r) (VInline cs rs) σ.(st_heap)
+    assert (Hpeq : phys_eq_val_store (VTaggedRecord c r) (VTaggedRecord cs rs) σ.(st_heap)
                      = Some (locations.eqb r rs)).
     { rewrite /phys_eq_val_store Hr Hrs. by destruct t. }
     rewrite /step_cas_1 /step_cas_2 Hvalid Hpeq.
@@ -915,17 +915,17 @@ Section imp_combinators.
     iApply ("HΦ" with "Hl").
   Qed.
 
-  (* The [VInline] variant of [imp_cas]; see [imp_stop_cas_inline]. *)
+  (* The [VTaggedRecord] variant of [imp_cas]; see [imp_stop_cas_inline]. *)
   Lemma imp_cas_inline {Φ : bool → iProp Σ} l (c cs : data) (r rs : record)
       (v' : val) dq1 dq2 t :
-    ▷ l ↦ₗ VInline c r -∗
+    ▷ l ↦ₗ VTaggedRecord c r -∗
     ▷ blockTag r dq1 t -∗
     ▷ blockTag rs dq2 Mut -∗
-    ▷ (l ↦ₗ (if locations.eqb r rs then v' else VInline c r) -∗
+    ▷ (l ↦ₗ (if locations.eqb r rs then v' else VTaggedRecord c r) -∗
        blockTag r dq1 t -∗
        blockTag rs dq2 Mut -∗
        Φ (locations.eqb r rs)) -∗
-    EWP (cas l (VInline cs rs) v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP (cas l (VTaggedRecord cs rs) v') @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hl Hr Hrs HΦ".
     iApply (imp_stop_cas_inline with "Hl Hr Hrs").
