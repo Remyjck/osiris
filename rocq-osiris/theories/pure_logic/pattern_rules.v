@@ -281,8 +281,8 @@ Section pattern_rules.
     destruct_string_eqb; solve [ eauto using pure_throw | tauto ].
   Qed.
 
-  Lemma pat_PData_neq_inline η δ c ps c' v l φ :
-    v = VInline c' l ->
+  Lemma pat_PData_neq_tagged η δ c ps c' v l φ :
+    v = VTaggedRecord c' l ->
     c ≠ c' →
     pattern η δ (PData c ps) v φ True.
       (* This form is useful when [c ≠ c'] is statically known. See
@@ -570,7 +570,7 @@ Section pattern_rules.
   Lemma pat_PConst_neq_inline η δ c c' l ψ :
     c <> c' ->
     ψ ->
-    pattern η δ (PConstant c) (VInline c' l) (λ _, False) ψ.
+    pattern η δ (PConstant c) (VTaggedRecord c' l) (λ _, False) ψ.
   Proof.
     intros Hneq Hψ.
     unfold pattern. simpl_eval_pat.

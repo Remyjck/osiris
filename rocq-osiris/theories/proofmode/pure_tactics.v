@@ -637,7 +637,7 @@ Local Ltac2 rec pattern_match_aux () :=
           Control.plus
             (fun _ => eapply pat_PData_neq > [ ltac1:(congruence) ])
             (fun _ => Control.plus
-              (fun _ => eapply pat_PData_neq_inline > [ ltac1:(congruence) ])
+              (fun _ => eapply pat_PData_neq_tagged > [ ltac1:(congruence) ])
               (fun _ => eapply pat_pCons > [ solve [ ltac1:(encode) ]
                                            | continue_matching () ]))
       | PXData _ _ =>
