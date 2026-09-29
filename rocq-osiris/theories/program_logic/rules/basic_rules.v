@@ -283,7 +283,7 @@ Section ewp_pure.
       exists a. auto.
     - iIntros "%He".
       iPureIntro.
-      destruct He as (c & -> & Hc). unfold observe, observe_encode. exact Hc.
+      destruct He as (c & -> & Hc). exists c. auto.
   Qed.
 
 End ewp_pure.

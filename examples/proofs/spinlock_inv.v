@@ -40,16 +40,22 @@ Definition locked (γ : gname) : iProp Σ := token γ.
 
 (* [create ()] allocates [ref false] and exposes the lock.  The caller
    may initialise it with any [▷R] to receive [is_lock γ l R]. *)
-Definition create_spec (u : unit) (m : microvx) : iProp Σ :=
-  EWP m {{ (l : loc), ∀ (R : iProp Σ), ▷R ={⊤}=∗ ∃ γ, is_lock γ l R }}.
+Definition create_spec create : iProp Σ :=
+  {{ True }}
+  create u : unit
+  {{ RET (l : loc); ∀ (R : iProp Σ), ▷R ={⊤}=∗ ∃ γ, is_lock γ l R }}.
 
 (* Acquiring the lock transfers ownership of [locked γ] and [▷R]. *)
-Definition acquire_spec (l : loc) (m : microvx) : iProp Σ :=
-  ∀ γ (R : iProp Σ), is_lock γ l R -∗ EWP m {{ (_ : unit), locked γ ∗ ▷R }}.
+Definition acquire_spec acquire : iProp Σ :=
+  {{ ∀ γ (R : iProp Σ); is_lock γ l R }}
+  acquire l : loc
+  {{ RET (_ : unit); locked γ ∗ ▷R }}.
 
 (* Releasing requires the holder to give back [locked γ] and [▷R]. *)
-Definition release_spec (l : loc) (m : microvx) : iProp Σ :=
-  ∀ γ (R : iProp Σ), is_lock γ l R -∗ locked γ -∗ ▷R -∗ EWP m {{ (_ : unit), True }}.
+Definition release_spec release : iProp Σ :=
+  {{ ∀ γ (R : iProp Σ); is_lock γ l R ∗ locked γ ∗ ▷R }}
+  release l : loc
+  {{ RET (_ : unit); True }}.
 
 (* ------------------------------------------------------------------ *)
 (* Module-level theorem *)
@@ -57,9 +63,9 @@ Definition release_spec (l : loc) (m : microvx) : iProp Σ :=
 Lemma spinlock_inv_proof η :
   ⊢ EWP (eval_mexpr η __main)
     {{ context [
-         var_spec "create"  (λ create,  □ iSpec τ[unit] create create_spec);
-         var_spec "acquire" (λ acquire, □ iSpec τ[loc]  acquire acquire_spec);
-         var_spec "release" (λ release, □ iSpec τ[loc]  release release_spec)
+         var_spec "create"  create_spec;
+         var_spec "acquire" acquire_spec;
+         var_spec "release" release_spec
        ] {["create"; "acquire"; "release"]} }}.
 Proof.
   iApply imp_module.
@@ -67,9 +73,10 @@ Proof.
   (* ------------------------------------------------------------------ *)
   (* Subgoal: [let create () = ref false] *)
 
-  iApply (imp_sitems_let (λ create : val, □ iSpec τ[unit] create create_spec)%I).
-  { iApply (imp_EAnon_pers τ[unit]).
-    iIntros "!>" ([]).
+  iApply (imp_sitems_let create_spec).
+  { unfold create_spec.
+    iApply (imp_EAnon_pers τ[unit]).
+    iIntros "!>" ([]) "_".
     iApply imp_please; iNext.
     imp_match.
     (* After [ref false] we have [l ↦ #false]; use it to build the invariant. *)
@@ -89,11 +96,12 @@ Proof.
   (* ------------------------------------------------------------------ *)
   (* Subgoal: [let acquire lk = while !lk do () done; lk := true] *)
 
-  iApply (imp_sitems_let (λ acquire : val, □ iSpec τ[loc] acquire acquire_spec)%I).
-  { iApply (imp_EAnon_pers τ[loc]).
+  iApply (imp_sitems_let acquire_spec).
+  { unfold acquire_spec.
+    iApply (imp_EAnon_pers τ[loc]).
     (* After introducing [l : loc], the spec universally quantifies over [γ] and
        [R]; we introduce them here. *)
-    iIntros "!>" (l). unfold acquire_spec.
+    iIntros "!>" (l).
     iIntros (γ R) "#Hinv".
     iApply imp_please; iNext.
 
@@ -126,10 +134,11 @@ Proof.
 
   (* ------------------------------------------------------------------ *)
   (* Subgoal: [let release lk = lk := false] *)
-  iApply (imp_sitems_let (λ release : val, □ iSpec τ[loc] release release_spec)%I).
-  { iApply (imp_EAnon_pers τ[loc]).
+  iApply (imp_sitems_let release_spec).
+  { unfold release_spec.
+    iApply (imp_EAnon_pers τ[loc]).
     iIntros "!>" (l).
-    iIntros (γ R) "#Hinv Htok HR".
+    iIntros (γ R) "(#Hinv & Htok & HR)".
     iApply imp_please; iNext.
     (* Open invariant non-atomically: get [l ↦ #b] in hand, store [false],
        then close with [l ↦ #false ∗ token γ ∗ ▷R]. *)

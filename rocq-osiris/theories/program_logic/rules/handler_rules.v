@@ -107,7 +107,7 @@ Section handler_specifications.
   (* Top-level definition for [deep_handler] *)
   Definition deep_handler_spec := deep_handler_spec_aux.(unseal).
 
-  Definition may_resume o k E Ψ ζ (Φ : A' → iProp Σ) : iProp Σ :=
+  Definition may_resume o k E Ψ (ζ : exn → iProp Σ) (Φ : A' → iProp Σ) : iProp Σ :=
     EWP (resume k o) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
 
   Lemma deep_handler_spec_unfold {E} Ψ ζ Φ Ψ' ζ' Φ' η bs :
@@ -473,7 +473,7 @@ Section handler_proof.
 
     { (* [StepHandleThrow] *)
       simpl_wrap_eval_branches.
-      iPoseProof (invert_imp_throw with "Hwp") as ">Hζ".
+      iPoseProof (invert_imp_throw with "Hwp") as ">(%b & -> & Hζ)".
       iFrame.
       iDestruct "Hdh" as "[_ [Hdh _]]"; iSpecialize ("Hdh" with "Hζ").
       ewp_mask_intro "Hmod"; ewp_mask_elim. done. }

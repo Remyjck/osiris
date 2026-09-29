@@ -37,7 +37,8 @@ Definition is_Ret_proj {A X} (m : micro A X) :=
 Section imp_stop.
   Context `{!osirisGS Σ}.
   Context {A X : Type} `{Hobs : Observe Encoded A}.
-  Context {E : coPset} {Ψ : iEff Σ} {ζ : X → iProp Σ} {Φ : Encoded → iProp Σ}.
+  Context {Bx : Type} `{HobsB : Observe Bx X}.
+  Context {E : coPset} {Ψ : iEff Σ} {ζ : Bx → iProp Σ} {Φ : Encoded → iProp Σ}.
   Implicit Type m : micro A X.
   (* ------------------------------------------------------------------------ *)
   (* [CFlip]. *)
@@ -471,14 +472,16 @@ Section imp_stop_concurrent.
   Context `{!osirisGS Σ}.
 
   Context {A X : Type} `{Hobs : Observe Encoded A}.
-  Context {E : coPset} {Ψ : iEff Σ} {ζ : X → iProp Σ} {Φ : Encoded → iProp Σ}.
+  Context {Bx : Type} `{HobsB : Observe Bx X}.
+  Context {E : coPset} {Ψ : iEff Σ} {ζ : Bx → iProp Σ} {Φ : Encoded → iProp Σ}.
 
   Implicit Type m : micro A X.
   (* When forking a thread, we must prove that the forked thread is
      safe, and that the parent thread is safe.
      We learn that the forked thread has an address ι' and is initially alive *)
-  Definition isThread `{Observe B val} (ι : thread) ζ Φ : iProp Σ :=
-    valid_thread ι (ilift ζ (ireturns Φ)).
+  Definition isThread `{Observe B val} `{Observe Bμ exn}
+    (ι : thread) (ζ : Bμ → iProp Σ) (Φ : B → iProp Σ) : iProp Σ :=
+    valid_thread ι (ilift (ireturns ζ) (ireturns Φ)).
 
   (* [joinable ι φ] allows one to join on [ι] and to recover the non-necessarily
      persistent postcondition [φ] (after opening and closing an invariant) *)
@@ -486,11 +489,13 @@ Section imp_stop_concurrent.
   (* We need the implicit [Encode] to be outside of the existential,
      so that we know the return type when we join thread [ι]. *)
   Definition joinable B `{Observe B val} ι φ :=
-    (∃ ζ (Φ : B → iProp Σ),
-        isThread ι ζ Φ ∗ ∀ o, ilift ζ Φ o ={↑joinN}=∗ ▷ φ)%I.
+    (∃ Bμ (HencBμ : Encode Bμ) (ζ : Bμ → iProp Σ) (Φ : B → iProp Σ),
+        isThread ι ζ Φ ∗
+        ∀ o, ilift (ireturns ζ) (ireturns Φ) o ={↑joinN}=∗ ▷ φ)%I.
   (* ------------------------------------------------------------------------ *)
   (* [CFork]. *)
-  Lemma imp_stop_fork' `{Encode B} μ (φ : B → iProp Σ) v1 v2 (k : _ -> micro A X) :
+  Lemma imp_stop_fork' `{Encode B} `{HencBμ : Encode Bμ}
+    (μ : Bμ → iProp Σ) (φ : B → iProp Σ) v1 v2 (k : _ -> micro A X) :
     ▷ (∀ ι',
          isThread ι' μ φ -∗
          EWP call v1 v2 ⟨⟨ e, □ μ e ⟩⟩ {{ v, □ φ v }} ∗
@@ -509,19 +514,19 @@ Section imp_stop_concurrent.
     iDestruct ("Hfork" with "Hvalid'") as "[Hcall Hcontinue]".
     iFrame "#∗".
     iApply (ewp_mono with "Hcall").
-    iIntros ([|]) "/="; last iIntros "$".
-    iIntros "(%a' & -> & #Hφ)".
-    iModIntro. iExists a'. auto.
+    iIntros ([|]) "/="; iIntros "(%a' & -> & #Hφ)"; iModIntro;
+      iExists a'; iSplit; done.
   Qed.
 
   (* We do not expect that the forked thread needs to know its own postcondition. *)
-  Lemma imp_stop_fork `{Encode B} μ (φ : B → iProp Σ) v1 v2 (k : _ -> micro A X) :
+  Lemma imp_stop_fork `{Encode B} `{HencBμ : Encode Bμ}
+    (μ : Bμ → iProp Σ) (φ : B → iProp Σ) v1 v2 (k : _ -> micro A X) :
     ▷ (∀ ι', isThread ι' μ φ -∗ EWP (continue k (VThread ι')) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     ▷ (EWP call v1 v2 ⟨⟨ e, □ μ e ⟩⟩ {{ v, □ φ v }}) -∗
     EWP (Stop CFork (v1, v2) k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hcontinue Hfork".
-    iApply (imp_stop_fork' (B:=B)).
+    iApply (imp_stop_fork' (B:=B) (Bμ:=Bμ)).
     iIntros "!> %ι' #Hvalid".
     iSplitL "Hfork".
     - iApply "Hfork".
@@ -530,10 +535,11 @@ Section imp_stop_concurrent.
 
   (* ------------------------------------------------------------------------ *)
   (* [CJoin]. *)
-  Lemma imp_stop_join `{Observe B val} ι' (k : _ -> micro A X) φ μ :
+  Lemma imp_stop_join `{Observe B val} `{HencBμ : Encode Bμ}
+    ι' (k : _ -> micro A X) (φ : B → iProp Σ) (μ : Bμ → iProp Σ) :
     isThread ι' μ φ -∗
     ▷ (∀ x, □ φ x -∗ EWP continue k ♯x @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
-    ▷ (∀ e, □ μ e -∗ EWP discontinue k e @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
+    ▷ (∀ b, □ μ b -∗ EWP discontinue k ♯b @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (Stop CJoin ι' k) @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hι Hk".
@@ -545,11 +551,8 @@ Section imp_stop_concurrent.
     iFrame.
     iIntros "!> %o #Ho".
     ewp_mask_elim. rewrite /continue /discontinue.
-    destruct o; [ iDestruct "Hk" as "[Hk _]" | iDestruct "Hk" as "[_ Hdk]" ].
-    - iDestruct "Ho" as "(%v & -> & Hφ)".
-      iSpecialize ("Hk" $! v with "Hφ").
-      iApply "Hk".
-    - iApply ("Hdk" with "Ho").
+    destruct o; [ iDestruct "Hk" as "[Hk _]" | iDestruct "Hk" as "[_ Hk]" ];
+      iDestruct "Ho" as "(%v & -> & Hφ)"; iApply ("Hk" $! v with "Hφ").
   Qed.
 
 End imp_stop_concurrent.
@@ -753,12 +756,12 @@ Section imp_combinators.
       iApply "H".
       by iApply (big_sepLZ2_nil).
     - simpl.
-      iApply (imp_bind with "[H]").
+      iApply (imp_bind (A1:=loc) with "[H]").
       { set_postcondition (λ l, (l ↦ #x ∗ meta_token l ⊤) ∗ (▷^_ _))%I.
         iApply imp_alloc2'. iNext. iIntros (l) "$".
         iExact "H". }
       iIntros (l) "(Hl & H)".
-      iApply (imp_bind with "[H]").
+      iApply (imp_bind (A1:=list loc) with "[H]").
       {
         iApply "IHxs".
         iNext.
@@ -961,7 +964,7 @@ Section imp_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CPerform]. *)
   Lemma imp_perform `{Encode A} {Φ : A → iProp Σ} (v : val) :
-    Ψ allows perform v << (ilift ζ (ireturns Φ)) >> -∗
+    Ψ allows perform v << (ilift (ireturns ζ) (ireturns Φ)) >> -∗
     EWP perform v @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hallows".
@@ -1009,8 +1012,8 @@ Section imp_combinators.
   Proof.
     iIntros "Hwp".
     rewrite /wrap_eval_branches {2}seal_eq.
-    iApply (imp_bind with "[Hwp]").
-    { iApply (imp_bind with "[Hwp]").
+    iApply (imp_bind (A1:=code.outcome3 val exn) with "[Hwp]").
+    { iApply (imp_bind (A1:=loc) with "[Hwp]").
       iApply imp_wrap_deep. iIntros (l') "Hcont".
       iSpecialize ("Hwp" with "Hcont").
       iExact "Hwp".
@@ -1044,14 +1047,15 @@ Section polymorphic_combinators.
 
   Context `{!osirisGS Σ}.
   Context {E : coPset} {Ψ : iEff Σ}.
-  Context {X : Type} {ζ : X → iProp Σ}.
+  Context {X : Type} {Bx : Type} `{HobsB : Observe Bx X} {ζ : Bx → iProp Σ}.
 
   (* Ghost-based load_block: use [isBlockLocs] (persistent ghost entry) to load the block.
      Returns the tag [t] without requiring physical block ownership. *)
   Lemma imp_load_block_ghost' P (l : loc) ls :
     ▷ isBlockLocs l ls -∗
     ▷ P -∗
-    EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (_, ls'), ⌜ls'=ls⌝ ∗ P }}.
+    EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩
+      {{ ((_, ls') : mut_tag * list loc), ⌜ls'=ls⌝ ∗ P }}.
   Proof.
     iIntros "Hblock P".
     iApply (imp_stop_load_block_ghost with "Hblock").
@@ -1062,7 +1066,8 @@ Section polymorphic_combinators.
 
   Lemma imp_load_block_ghost (l : loc) ls :
     ▷ isBlockLocs l ls -∗
-    EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (t', ls'), ⌜ls' = ls⌝ }}.
+    EWP (load_block l) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩
+      {{ ((t', ls') : mut_tag * list loc), ⌜ls' = ls⌝ }}.
   Proof.
     iIntros "#Harr".
     iApply (imp_stop_load_block_ghost with "Harr").
@@ -1084,7 +1089,9 @@ Section imp_concurrent_combinators.
   (* ------------------------------------------------------------------------ *)
   (* [CFork]. *)
 
-  Lemma imp_fork {ζ} `{Encode B} {Φ : thread → iProp Σ} μ (φ : B → iProp Σ) v1 v2 :
+  Lemma imp_fork `{HencBz : Encode Bz} {ζ : Bz → iProp Σ}
+    `{Encode B} `{HencBμ : Encode Bμ} {Φ : thread → iProp Σ}
+    (μ : Bμ → iProp Σ) (φ : B → iProp Σ) v1 v2 :
     ▷ (∀ ι',
          isThread ι' μ φ -∗
          EWP call v1 v2 ⟨⟨ e, □ μ e ⟩⟩ {{ o, □ φ o }} ∗
@@ -1092,14 +1099,15 @@ Section imp_concurrent_combinators.
     EWP (fork v1 v2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "HΦ".
-    iApply (imp_stop_fork' (B:=B)).
+    iApply (imp_stop_fork' (B:=B) (Bμ:=Bμ)).
     iIntros "!>" (ι') "Hvalid"; iDestruct ("HΦ" with "Hvalid") as "[Hcall HΦ]"; iFrame.
     iApply ewp_ret.
     iExists ι'. auto.
   Qed.
 
   (* Rule for fork when the postcondition of the spawned thread is persistent *)
-  Lemma imp_fork_persistent {ζ} `{Encode B} {Φ : thread → iProp Σ} φ v1 v2 :
+  Lemma imp_fork_persistent `{HencBz : Encode Bz} {ζ : Bz → iProp Σ}
+    `{Encode B} {Φ : thread → iProp Σ} φ v1 v2 :
     ▷ (∀ ι',
           □ joinable B ι' φ -∗
           EWP call v1 v2 {{ (_ : B), □ φ }} ∗
@@ -1107,19 +1115,22 @@ Section imp_concurrent_combinators.
     EWP (fork v1 v2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "HΦ".
-    iApply (imp_fork (λ _, False)%I (λ (_ : B), φ)).
+    iApply (imp_fork (Bμ:=exn) (⊥ : exn → iProp Σ) (λ (_ : B), φ)).
     iIntros "!> %ι' #Hvalid".
     iDestruct ("HΦ" with "[]") as "(Hcall & $)".
-    { iExists _. iFrame "#".
+    { iExists exn, _, _, _. iFrame "#".
       iModIntro.
-      iIntros ([|]) "/="; [ auto | iIntros ([]) ]. }
+      iIntros ([|]) "/=".
+      - iIntros "(%b & _ & Hφ)". iModIntro. iNext. iApply "Hφ".
+      - iIntros "(%b & _ & [])". }
     iApply (ewp_mono with "Hcall").
-    iIntros ([|]); [ auto | iIntros ([]) ].
+    iIntros ([|]); [ auto | iIntros "(%b & _ & [])" ].
   Qed.
 
   (* Rule for fork when the postcondition of the spawned thread is a list of
   resources that other threads can recover when joining. *)
-  Lemma imp_fork_resourceful {ζ} `{Encode B} {Φ : thread → iProp Σ} φs v1 v2 :
+  Lemma imp_fork_resourceful `{HencBz : Encode Bz} {ζ : Bz → iProp Σ}
+    `{Encode B} {Φ : thread → iProp Σ} φs v1 v2 :
     ▷ (∀ ι',
           ([∗ list] φ ∈ φs, joinable B ι' φ) -∗
           EWP call v1 v2 {{ (_ : B), [∗] φs }} ∗
@@ -1153,27 +1164,33 @@ Section imp_concurrent_combinators.
     iMod "Hmod".
 
     (* Apply the basic rule for fork, recover [valid_thread] in the post *)
-    iApply (imp_fork (B:=B)).
+    iApply (imp_fork (B:=B) (Bμ:=exn)).
     iIntros "!> !> %ι' #Hvalid".
     iDestruct ("HΦ" $! ι' with "[Hescrow_elim]") as "(Hcall & $)".
 
     (* From the escrow elimination implication we prove the list of [joinable φ]s *)
-    iApply (big_sepL_mono_pers (isThread ι' ⊥ (λ (_ : B), φ)) with "[$]").
-    iIntros (k φ' Hk) "(#? & Helim)". iExists ⊥, _.
-    iSplit; auto. iIntros ([|]); [ auto | iIntros ([]) ].
+    iApply (big_sepL_mono_pers
+              (isThread ι' (⊥ : exn → iProp Σ) (λ (_ : B), φ)) with "[$]").
+    iIntros (k φ' Hk) "(#? & Helim)". iExists exn, _, ⊥, _.
+    iSplit; first auto.
+    iIntros ([|]).
+    - iIntros "(%v & _ & Hφ)". by iApply "Helim".
+    - iIntros "(%b & _ & [])".
 
-    iApply (ewp_mono with "Hcall").
-    iIntros ([|]); [ | iIntros ([]) ].
-    iIntros "(%v & Henc & Hφ)".
-    iFrame.
+    - iApply (ewp_mono with "Hcall").
+      iIntros ([|]); [ | iIntros "(%b & _ & [])" ].
+      iIntros "(%v & Henc & Hφ)".
+      iFrame.
   Qed.
 
   (* ------------------------------------------------------------------------ *)
   (* [CJoin]. *)
 
-  Lemma imp_join {ζ} `{Encode A} {Φ : A → iProp Σ} ι' μ φ :
+  Lemma imp_join `{HencBz : Encode Bz} {ζ : Bz → iProp Σ}
+    `{Encode A} `{HencBμ : Encode Bμ} {Φ : A → iProp Σ}
+    ι' (μ : Bμ → iProp Σ) φ :
     isThread ι' μ φ -∗
-    ▷ (∀ x, □ φ x -∗ Φ x) ∧ ▷ (∀ e, □ μ e -∗ ζ e) -∗
+    ▷ (∀ x, □ φ x -∗ Φ x) ∧ ▷ (∀ b, □ μ b -∗ ireturns ζ ♯b) -∗
     EWP (code.join ι') @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hvalid HΦ".
@@ -1181,34 +1198,38 @@ Section imp_concurrent_combinators.
     iSplit.
     - iIntros "!>" (x) "#Hφ". rewrite /continue /=.
       iApply (@imp_ret _ _ A val). reflexivity. iApply ("HΦ" with "Hφ").
-    - iIntros "!>" (e) "#Hμ". rewrite /discontinue /=.
+    - iIntros "!>" (b) "#Hμ". rewrite /discontinue /=.
       iSpecialize ("HΦ" with "Hμ").
-      iApply (@imp_throw Σ with "HΦ").
+      iApply ewp_throw. iApply "HΦ".
   Qed.
 
   (* Does not actually need to transfer resources, [φ] could be persistent. To
      be renamed when [joinable] subsumes [valid_thread], i.e. when it can talk
      about the outcome *)
-  Lemma imp_join_resourceful {ζ} `{Encode A} {Φ : A → iProp Σ} ι' φ :
+  Lemma imp_join_resourceful {ζ : exn → iProp Σ}
+    `{Encode A} {Φ : A → iProp Σ} ι' φ :
     ↑joinN ⊆ E →
     joinable A ι' φ -∗
-    ▷ (▷ φ -∗ (∀ x, Φ x) ∧ (∀ e, ζ e)) -∗
+    ▷ (▷ φ -∗ (∀ x, Φ x) ∧ (∀ e : exn, ζ e)) -∗
     EWP (code.join ι') @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "%Hmask (%μ & %φ' & Hthread & Hcont) Hφ".
+    iIntros "%Hmask (%Bμ & %HencBμ & %μ & %φ' & Hthread & Hcont) Hφ".
     iApply (imp_fupd E (code.join ι')).
     iApply (imp_fupd_exn E (code.join ι')).
     iApply (imp_join with "Hthread"). iSplit; iNext.
     - iIntros (x) "#Hφ'".
-      iSpecialize ("Hcont" $! (O2Ret x) with "Hφ'").
+      iSpecialize ("Hcont" $! (O2Ret ♯x) with "[]");
+        first (iExists x; iSplit; done).
       iMod (fupd_mask_subseteq (↑joinN)); first assumption.
       iMod "Hcont".
       (* TODO: There should be a more straighforward to introduce the masks. *)
       iApply fupd_wand_l. iFrame. iIntros "_".
       iDestruct ("Hφ" with "Hcont") as "[Hφ _]".
       iApply "Hφ".
-    - iIntros (x) "#Hφ'".
-      iSpecialize ("Hcont" $! (O2Throw x) with "Hφ'").
+    - iIntros (b) "#Hμ".
+      iSpecialize ("Hcont" $! (O2Throw ♯b) with "[]");
+        first (iExists b; iSplit; done).
+      iExists ♯b. iSplit; first (iPureIntro; apply solve_encode_val).
       iMod (fupd_mask_subseteq (↑joinN)); first assumption.
       iMod "Hcont".
       iApply fupd_wand_l. iFrame. iIntros "_".

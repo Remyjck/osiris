@@ -58,8 +58,8 @@ example where we want it to be anything else.
 For the non-atomic post-condition, we use an [option PROP], combined with a
 [-∗?]. This is to avoid introducing spurious [True -∗] into proofs that do not
 need a non-atomic post-condition (which is most of them). *)
-Definition atomic_ewp `{!osirisGS Σ} `{Observe A V} {X} {TA TB TP : tele}
-  (m: micro V X) (* computation *)
+Definition atomic_ewp `{!osirisGS Σ} `{Observe A V} {TA TB TP : tele}
+  (m: micro V exn) (* computation *)
   (E : coPset) (* *implementation* mask *)
   (α: TA → iProp Σ) (* atomic pre-condition *)
   (β: TA → TB → iProp Σ) (* atomic post-condition *)
@@ -263,8 +263,8 @@ Section lemmas.
   Implicit Types (α : TA → iProp) (β : TA → TB → iProp) (POST : TA → TB → TP → option iProp) (f : TA → TB → TP → A).
 
   (* Atomic triples imply sequential triples. *)
-  Lemma atomic_ewp_seq {X} e E α β POST f :
-    atomic_ewp (X:=X) e E α β POST f -∗
+  Lemma atomic_ewp_seq e E α β POST f :
+    atomic_ewp e E α β POST f -∗
     ∀ Φ, ∀.. x, α x -∗ (∀.. y, β x y -∗ ∀.. z, POST x y z -∗? Φ (f x y z)) -∗ EWP e {{ Φ }}.
   Proof.
     iIntros "Hwp" (Φ x) "Hα HΦ".
@@ -276,20 +276,20 @@ Section lemmas.
 
   (** This version matches the Texan triple, i.e., with a later in front of the
   [(∀.. y, β x y -∗ Φ (f x y))]. *)
-  Lemma atomic_ewp_seq_step {X} (e : micro V X) E α β POST f :
+  Lemma atomic_ewp_seq_step (e : micro V exn) E α β POST f :
     TCEq (is_ewp_case e) WPStep →
     atomic_ewp e E α β POST f -∗
     ∀ Φ, ∀.. x, α x -∗ ▷ (∀.. y, β x y -∗ ∀.. z, POST x y z -∗? Φ (f x y z)) -∗ EWP e {{ Φ }}.
   Proof.
     iIntros (?) "H"; iIntros (Φ x) "Hα HΦ".
-    iApply (imp_step_fupd ⊤ ⊤ _ _ (∀.. y : TB, _)
+    iApply (imp_step_fupd (B:=exn) ⊤ ⊤ _ _ (∀.. y : TB, _)
       with "[$HΦ //]"); first done.
     iApply (atomic_ewp_seq with "H Hα").
     iIntros "%y Hβ %z Hpost HΦ". iApply ("HΦ" with "Hβ Hpost").
   Qed.
 
   (* Sequential triples with the empty mask for a physically atomic [e] are atomic. *)
-  Lemma atomic_seq_ewp_atomic {X} (e : micro V X) E α β POST f
+  Lemma atomic_seq_ewp_atomic (e : micro V exn) E α β POST f
       `{!subjective_step.Atomic e}
       `{!TCEq (to_eff e) None}
       `{!TCEq (to_join e) None} :
@@ -304,7 +304,7 @@ Section lemmas.
 
   (** Sequential triples with a persistent precondition and no initial quantifier
   are atomic. *)
-  Lemma persistent_seq_ewp_atomic {X} (e : micro V X) E
+  Lemma persistent_seq_ewp_atomic (e : micro V exn) E
       (α : [tele] → iProp) (β : [tele] → TB → iProp)
       (POST : [tele] → TB → TP → option iProp) (f : [tele] → TB → TP → A)
       {HP : Persistent (α [tele_arg])} :
@@ -329,7 +329,7 @@ Section lemmas.
     iSplit; [by iIntros "$" | iApply "HΦ"].
   Qed.
 
-  Lemma atomic_ewp_mask_weaken {X} (e : micro V X) E1 E2 α β POST f :
+  Lemma atomic_ewp_mask_weaken (e : micro V exn) E1 E2 α β POST f :
     E1 ⊆ E2 → atomic_ewp e E1 α β POST f -∗ atomic_ewp e E2 α β POST f.
   Proof.
     iIntros (HE) "Hwp". iIntros (Φ) "AU". iApply "Hwp".
@@ -338,7 +338,7 @@ Section lemmas.
 
   (** We can open invariants around atomic triples.
       (Just for demonstration purposes; we always use [iInv] in proofs.) *)
-  Lemma atomic_ewp_inv {X} (e : micro V X) E α β POST f N I :
+  Lemma atomic_ewp_inv (e : micro V exn) E α β POST f N I :
     ↑N ⊆ E →
     atomic_ewp e (E ∖ ↑N) (λ.. x, ▷ I ∗ α x) (λ.. x y, ▷ I ∗ β x y) POST f -∗
     inv N I -∗ atomic_ewp e E α β POST f.

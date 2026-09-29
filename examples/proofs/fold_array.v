@@ -50,21 +50,25 @@ Section verification.
      the precondition is [0 ≤ n ≤ max_array_length]
      the postcondition is [λ i, ⌜i = gaus_summation n⌝]. *)
 
-  Definition sum_spec : Z → microvx → iProp Σ :=
-    λ n m,
-      (⌜0 ≤ n ≤ max_array_length⌝ -∗
-       EWP m {{ i, ⌜i = gauss_summation n⌝ }})%I.
+  Definition sum_spec sum : iProp Σ :=
+    {{ ⌜0 ≤ n ≤ max_array_length⌝ }}
+    sum n : Z
+    {{ RET i; ⌜i = gauss_summation n⌝ }}.
+
+  Definition add_spec add : iProp Σ :=
+    {{ True }} add i j : Z Z {{ RET n; ⌜(n = i + j)%Z⌝ }}.
 
   Definition esum := EAnonFun __sum.
 
   Lemma imp_sum η :
     in_env "Array" array_module_spec η -∗
-    in_env "+" (λ add, □ iSpec τ[Z;Z] add (λ i j m, EWP m {{ n, ⌜(n = i + j)%Z⌝ }})) η -∗
-    EWP (eval η esum) {{ sum, □ iSpec τ[Z] sum sum_spec }}.
+    in_env "+" add_spec η -∗
+    EWP (eval η esum) {{ sum_spec }}.
   Proof.
     iIntros "#Hmodule_spec #Hadd".
+    unfold esum, sum_spec.
     iApply imp_EAnon_pers.
-    iIntros "!>" (n Hpos).
+    iIntros "!>" (n) "%Hpos".
     iApply imp_please; iNext.
 
     (* let a = .. *)
@@ -88,13 +92,16 @@ Section verification.
     (* [Array.fold_left (+) 0 a] *)
     iIntros (a) "HownArr".
     imp_app τ[val;Z;array].
+    { (* Weaken the spec of [Array.fold_left] to one where the function is
+         known to be pure. *)
+      iIntros (fl) "#Hfl".
+      iPoseProof (fold_left_spec_pure_spec with "Hfl") as "#Hpure".
+      iApply ("Hpure" $! Z _ Z _). }
     iIntros "#Hadd_ Hm".
-    (* Weaken the spec of [Array.fold_left] to one where the function is
-       known to be pure. *)
-    iPoseProof (fold_left_spec_pure_spec with "Hm") as "Hm".
-
-    unfold fold_left_pure_spec.
-    iSpecialize ("Hm" $! Z with "HownArr Hadd_").
+    iSpecialize ("Hm" $! _ _ _ Z.add with "[$HownArr]").
+    { iModIntro.
+      iApply (iSpec_mono with "Hadd_").
+      iIntros (i j m') "Hm' _". by iApply "Hm'". }
     iApply (imp_wand with "Hm").
     iIntros (acc) "(-> & _)".
     iPureIntro.
@@ -105,8 +112,8 @@ Section verification.
 
   Lemma module_proof η :
     in_env "Array" array_module_spec η -∗
-    in_env "+" (λ add, □ iSpec τ[Z;Z] add (λ i j m, EWP m {{ n, ⌜(n = i + j)%Z⌝ }})) η -∗
-    EWP (eval_mexpr η __main) {{ context [ var_spec "sum" (λ sum, iSpec τ[Z] sum sum_spec) ] {[ "sum" ]} }}.
+    in_env "+" add_spec η -∗
+    EWP (eval_mexpr η __main) {{ context [ var_spec "sum" sum_spec ] {[ "sum" ]} }}.
   Proof.
     iIntros "#Hlookup #Hlookup'".
     iApply imp_module.

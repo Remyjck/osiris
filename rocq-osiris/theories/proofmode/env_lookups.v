@@ -840,8 +840,10 @@ Section TacticTests.
      - Module2 is in the environment and contains [Module3],
        which contains [sub] *)
 
-  Definition add_spec add : iProp Σ := □ iSpec τ[Z;Z] add (λ (i j : Z) m, EWP m {{ k, ⌜(k = i + j)%Z⌝ }})%I.
-  Definition sub_spec sub : iProp Σ := □ iSpec τ[Z;Z] sub (λ (i j : Z) m, EWP m {{ k, ⌜(k = i - j)%Z⌝ }})%I.
+  Definition add_spec add : iProp Σ :=
+    {{ True }} add (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i + j)%Z⌝ }}.
+  Definition sub_spec sub : iProp Σ :=
+    {{ True }} sub (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i - j)%Z⌝ }}.
   Definition a_spec a : iProp Σ := ∀ (A : Type), □ ⌜a > 2⌝.
 
   Definition module3_spec η := context [var_spec "sub" sub_spec] {["sub"]} η.
@@ -876,9 +878,10 @@ Section TacticTests.
       { imp_path. }
       { imp_path. }
       iIntros (??) "-> -> %m Hm !>".
-      iApply "Hm". }
+      by iApply "Hm". }
     { imp_path. }
     iIntros (??) "-> #%Ha %m Hm !>".
+    iSpecialize ("Hm" with "[//]").
     iApply (imp_wand with "Hm").
     iIntros (y ->). iPureIntro.
     specialize (Ha unit).

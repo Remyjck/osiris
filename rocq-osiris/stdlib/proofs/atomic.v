@@ -43,10 +43,9 @@ Section atomic_proofs.
         {{ compare_and_set_spec }}.
   Proof.
     unfold compare_and_set_spec.
-    iApply (imp_EAnon_poly_pers).
+    iApply imp_EAnon_poly.
     iIntros "!>" (A HencA HinlA). simpl.
     iIntros (l seen v').
-    unfold compare_and_set_spec.
     iIntros (E2 Φ) "Hfupd".
     iApply imp_please; iNext.
     iApply (imp_cas_inline_atomic E2 ⊤ _ _ _ _
@@ -82,9 +81,7 @@ Section atomic_proofs.
 
   Definition atomic_loc_module_spec : env → iProp Σ :=
     (context [
-         var_spec "compare_and_set"
-           (λ cas, □ ∀ A `(InlineEncode A),
-                     iSpec τ[loc; A; A] cas compare_and_set_spec)
+         var_spec "compare_and_set" compare_and_set_spec
       ] atomic_loc_module_dom)%I.
 
   Definition atomic_module_dom : gset var :=
@@ -113,9 +110,7 @@ Section atomic_proofs.
       iApply (imp_sitems_external (λ _, True)%I).
       { admit. }
       iIntros (exchange) "_".
-      iApply (imp_sitems_external
-                (λ cas, □ ∀ A `(InlineEncode A),
-                          iSpec τ[loc; A; A] cas compare_and_set_spec)%I).
+      iApply (imp_sitems_external compare_and_set_spec).
       { iApply imp_Loc_compare_and_set. }
       iIntros (cas) "#Hcas".
       iApply (imp_sitems_external (λ _, True)%I).
@@ -167,9 +162,7 @@ Section atomic_proofs.
      top-level alias such as [let cas = Atomic.Loc.compare_and_set]. *)
   Lemma atomic_cas_path_spec η :
     in_env "Atomic" atomic_module_spec η -∗
-    path_spec ["Atomic"; "Loc"; "compare_and_set"]
-      (λ cas, □ ∀ A `(InlineEncode A),
-                iSpec τ[loc; A; A] cas compare_and_set_spec)%I η.
+    path_spec ["Atomic"; "Loc"; "compare_and_set"] compare_and_set_spec η.
   Proof.
     iIntros "(%δA & %HA & #HAspec)".
     rewrite /atomic_module_spec /atomic_loc_module_spec /context /=.

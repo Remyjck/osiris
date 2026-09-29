@@ -10,8 +10,8 @@ Context `{!osirisGS Σ}.
 (* iApply-ing it will fail without providing much information if [R] or [v]
    depends on a variable [y] that was created after the creation of the evar, in
    which case, instantiate the evar with something like [λx, ∃y, ⌜x = y⌝ ∗ R] *)
-Lemma imp_ret_eq `{Encode A} {E} {Ψ} (v : A) :
-  ⊢ EWP (@Ret val E #v) <|Ψ|> {{ x, ⌜x = v⌝ }}.
+Lemma imp_ret_eq `{Encode A} {Ψ} (v : A) :
+  ⊢ EWP (@Ret val exn #v) <|Ψ|> {{ x, ⌜x = v⌝ }}.
 Proof.
   iApply imp_ret; auto.
 Qed.

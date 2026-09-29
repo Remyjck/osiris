@@ -19,7 +19,7 @@ Section inline_record_reasoning.
 
   Local Instance encode_record c : Encode record := { encode' r := VInline c r }.
 
-  Lemma imp_EInline {τ : types} {ζ} (Φs : τ -#> iProp Σ) c t es :
+  Lemma imp_EInline {τ : types} {ζ : exn → iProp Σ} (Φs : τ -#> iProp Σ) c t es :
     let encode_rec := encode_record c in
     τ_length τ ≤ max_array_length →
     impure E (evals η es) Ψ ζ Φs -∗
@@ -61,7 +61,8 @@ Section encoded_fields.
 
   (* As in [imp_record], [Φs] is uncurried so that an evar
      postcondition stays instantiable by [imp_evals_cons]. *)
-  Lemma imp_inline_record `{RecordRepr A τ t} {η E Ψ ζ} c es (Φs : τ → iProp Σ) :
+  Lemma imp_inline_record `{RecordRepr A τ t} {η E Ψ} {ζ : exn → iProp Σ}
+    c es (Φs : τ → iProp Σ) :
     let encode_rec := encode_record c in
     (τ_length τ ≤ max_array_length)%Z →
     impure E (evals η es) Ψ ζ Φs -∗
@@ -82,7 +83,8 @@ Section encoded_fields.
     iApply "Hr".
   Qed.
 
-  Lemma imp_inline_record_as `{RecordRepr B τ t} `{Encode A} {η E Ψ ζ}
+  Lemma imp_inline_record_as `{RecordRepr B τ t} `{Encode A} {η E Ψ}
+      {ζ : exn → iProp Σ}
       c (mk : record → A) es (Φs : τ → iProp Σ) :
     (∀ r : record, (#(mk r) : val) = VInline c r) →
     (τ_length τ ≤ max_array_length)%Z →

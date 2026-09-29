@@ -121,7 +121,8 @@ Section init_proof.
         iIntros "Hm". iApply ("Hm" with "[$HI]").
         iPureIntro; length; lia.
       - iIntros "HI Hm".
-        iApply ("Hm" with "[%//] HI"). }
+        iApply ("Hm" with "[HI]").
+        iSplitR; [ iPureIntro; length; lia | iExact "HI" ]. }
 
     iIntros (res) "(%x & HΦx & HownArr)".
 
@@ -154,9 +155,9 @@ Section init_proof.
         iApply ("Hm" with "[$HI]"); iPureIntro; length; lia. }
       iIntros "HI Hm".
       iDestruct "Hown" as "(%ls & #Harr & Htag & Hslice & %Hlenls)".
-      iSpecialize ("Hm" with "Hslice [HI] [%]").
-      { instantiate (1:=(λ y, I (xs ++ singleton y))). iFrame. }
-      { length; lia. }
+      iSpecialize ("Hm" with "[$Hslice HI]").
+      { instantiate (1:=(λ y, I (xs ++ singleton y))).
+        iFrame. iPureIntro; length; lia. }
       iApply (imp_wand with "Hm").
       iIntros (_) "(% & $ & Hslice)".
       rewrite Z.sub_0_r -app_assoc.
@@ -263,8 +264,8 @@ Section iter_proof.
       { (* unsafe_get a i *)
         imp_app τ[array;Z].
         iIntros "Hm".
-        iApply ("Hm" $! A with "Hslice [%]").
-        lia. }
+        iApply ("Hm" $! A with "[$Hslice]").
+        iPureIntro; lia. }
       iIntros "(-> & Hslice) Hm". rewrite Z.sub_0_r.
       apply prefix_snoc in Hprefix; try lia.
       iSpecialize ("Hm" with "[$HI //]").
@@ -368,8 +369,7 @@ Section map_spec.
         { imp_app τ[array; Z].
           (* continuation for unsafe_get *)
           iIntros "Hm".
-          iSpecialize ("Hm" $! A with "Hslice").
-          iApply "Hm".
+          iApply ("Hm" $! A with "[$Hslice]").
           iPureIntro; lia. }
         (* continuation for f *)
         iIntros "(%Hlookup & Hslice) Hm".
@@ -379,7 +379,8 @@ Section map_spec.
       (* continuation for make *)
       iIntros "($ & HΦy0) Hm".
       rewrite Hlenls.
-      iApply ("Hm" with "[%] HΦy0"); first lia. }
+      iApply ("Hm" with "[HΦy0]").
+      iSplitR; [ iPureIntro; lia | iExact "HΦy0" ]. }
 
     (* We have now allocated a new array, [res]. *)
 
@@ -414,8 +415,8 @@ Section map_spec.
         { imp_app τ[array;Z].
           (* continuation for unsafe_get on source array a *)
           iIntros "Hm".
-          iApply ("Hm" $! A with "HsliceSrc").
-          - iPureIntro; lia. }
+          iApply ("Hm" $! A with "[$HsliceSrc]").
+          iPureIntro; lia. }
         (* continuation for f *)
         iIntros "(%Hlookup & HsliceSrc) Hm /=".
         set_postcondition
@@ -429,8 +430,8 @@ Section map_spec.
       iIntros "($ & HsliceRes & HΦy & HΦs) Hm".
       iPoseProof (big_sepLZ2_length with "HΦs") as "%Hlenys".
       length in Hlenys. length_nonneg ys.
-      iSpecialize ("Hm" with "HsliceRes HΦy [%]").
-      { length. lia. }
+      iSpecialize ("Hm" with "[$HsliceRes HΦy]").
+      { iSplitL "HΦy"; [ iExact "HΦy" | iPureIntro; length; lia ]. }
       iApply (imp_wand with "Hm").
       iIntros ([]) "(% & HΦ & HsliceRes)".
       iExists (ys ++ singleton x0).
@@ -515,14 +516,15 @@ Section map_inplace_spec.
           imp_app τ[array;Z].
           (* continuation for unsafe_get *)
           iIntros "Hm".
-          iApply ("Hm" $! A with "Hslice").
+          iApply ("Hm" $! A with "[$Hslice]").
           iPureIntro; length; lia. }
         (* continuation for f *)
         iIntros "(-> & $) Hm". iFrame "HΦs".
         by iApply "Hm". }
       (* continuation for unsafe_set: all three args resolved *)
       iIntros "(Hslice & HΦy & HΦs) Hm".
-      iSpecialize ("Hm" with "Hslice HΦy [%]"); first (length; lia).
+      iSpecialize ("Hm" with "[$Hslice HΦy]").
+      { iSplitL "HΦy"; [ iExact "HΦy" | iPureIntro; length; lia ]. }
 
       iApply (imp_wand with "Hm [HΦs]").
       iIntros ([]) "(% & HΦ & Hslice)". rewrite Z.sub_0_r.
@@ -608,7 +610,7 @@ Section mapi_inplace_spec.
           imp_app τ[array;Z].
           (* continuation for unsafe_get *)
           iIntros "Hm".
-          iApply ("Hm" $! A with "Hslice").
+          iApply ("Hm" $! A with "[$Hslice]").
           iPureIntro; length; lia. }
         (* continuation for f: gets i and element *)
         iIntros "(-> & Hslice) Hm".
@@ -619,7 +621,8 @@ Section mapi_inplace_spec.
 
       (* continuation for unsafe_set: all three args resolved *)
       iIntros "(Hslice & HΦy & HΦs) Hm".
-      iSpecialize ("Hm" with "Hslice HΦy [%]"); first (length; lia).
+      iSpecialize ("Hm" with "[$Hslice HΦy]").
+      { iSplitL "HΦy"; [ iExact "HΦy" | iPureIntro; length; lia ]. }
       iApply (imp_wand with "Hm").
       iIntros ([]) "(%x0 & HΦ & Hslice)".
       iExists (ys ++ singleton x0).
@@ -651,21 +654,20 @@ Section map2_spec.
 
   (** [map2 f a b] applies function [f] to all elements of [a] and [b]
       pairwise, and builds an array with the results. *)
-  Definition map2_spec : val → array → array → microvx → iProp Σ :=
-    λ f a b m,
-      (∀ (A B C : Type) (_ : Encode A) (_ : Encode B) (_ : Encode C)
-         (_ : Inhabited A) (_ : Inhabited B)
-         dq1 dq2 (xs : list A) (ys : list B) (Φ : A → B → C → iProp Σ),
-         ⌜length xs = length ys⌝ -∗
-         a ↦∗{dq1} xs -∗
-         b ↦∗{dq2} ys -∗
-         □ iSpec τ[A; B] f (λ (x : A) (y : B) m, EWP m {{ (z : C), Φ x y z }}) -∗
-         EWP m {{ c, ∃ (zs : list C),
-                    ⌜length zs = length xs⌝ ∗
-                    c ↦∗ zs ∗
-                    a ↦∗{dq1} xs ∗
-                    b ↦∗{dq2} ys ∗
-                    [∗ listZ] t;z ∈ (zip xs ys); zs, Φ t.1 t.2 z }})%I.
+  Definition map2_spec map2 : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B) `(Encode C)
+         dq1 dq2 (xs : list A) (ys : list B) (Φ : A → B → C → iProp Σ);
+       ⌜length xs = length ys⌝ ∗
+       a ↦∗{dq1} xs ∗
+       b ↦∗{dq2} ys ∗
+       {{ True }} f x y : A B {{ RET (z : C); Φ x y z }} }}
+    map2 f a b : val array array
+    {{ RET c; ∃ (zs : list C),
+                ⌜length zs = length xs⌝ ∗
+                c ↦∗ zs ∗
+                a ↦∗{dq1} xs ∗
+                b ↦∗{dq2} ys ∗
+                [∗ listZ] t;z ∈ (zip xs ys); zs, Φ t.1 t.2 z }}.
 
 End map2_spec.
 
@@ -677,29 +679,28 @@ Section iteri_spec.
 
   (** [iteri f a] applies function [f] to the index and all elements of [a],
       in order. Like [iter] but [f] also receives the index. *)
-  Definition iteri_spec : val → array → microvx → iProp Σ :=
-    λ f a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A) dq (xs : list A) (I : list A → iProp Σ),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[Z; A] f (λ (i : Z) (x : A) m,
-                              ∀ (Xs : list A),
-                              ⌜Xs ++ singleton x `prefix_of` xs⌝ -∗
-                              ⌜length Xs = i⌝ -∗
-                              I Xs -∗
-                              EWP m {{ (_ : unit), I (Xs ++ singleton x) }}) -∗
-         I [] -∗
-         EWP m {{ (_ : unit), I xs ∗ a ↦∗{dq} xs }})%I.
+  Definition iteri_spec iteri : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : list A → iProp Σ);
+       a ↦∗{dq} xs ∗
+       {{ ∀ (Xs : list A);
+          ⌜Xs ++ singleton x `prefix_of` xs⌝ ∗ ⌜length Xs = i⌝ ∗ I Xs }}
+       f i x : Z A
+       {{ RET (); I (Xs ++ singleton x) }} ∗
+       I [] }}
+    iteri f a : val array
+    {{ RET (); I xs ∗ a ↦∗{dq} xs }}.
 
   Definition iteri := (EAnonFun __iteri).
 
   Lemma imp_iteri η :
     □ in_env "length" array_length_spec η -∗
     □ in_env "unsafe_get" array_get_spec η -∗
-    EWP (eval η iteri) {{ c, □ iSpec τ[val; array] c iteri_spec }}.
+    EWP (eval η iteri) {{ iteri_spec }}.
   Proof.
     iIntros "#Hlookup #Hlookup'".
+    unfold iteri, iteri_spec.
     iApply imp_EAnon_pers.
-    iIntros "!>" (f a A HencA HinhA dq xs I) "Hown #Hf HI".
+    iIntros "!>" (f a A HencA HinhA dq xs I) "(Hown & #Hf & HI)".
     iApply imp_please; iNext.
     iDestruct "Hown" as "(%ls & #Ha & Htag & Hslice_init & %Hlenls)".
     iPoseProof (isBlockLocs_length with "Ha") as "%Hboundxs".
@@ -723,8 +724,8 @@ Section iteri_spec.
       (* unsafe_get a i *)
       { imp_app τ[array;Z].
         iIntros "Hm".
-        iApply ("Hm" $! A with "Hslice [%]").
-        lia. }
+        iApply ("Hm" $! A with "[$Hslice]").
+        iPureIntro; lia. }
       iIntros "(%Hget & Hslice) Hm".
       assert (Xs ++ singleton x `prefix_of` xs).
       { destruct Hprefix as (xrest & ->); rewrite length_app in Hi'.
@@ -732,7 +733,7 @@ Section iteri_spec.
         apply singleton_prefix; first lia.
         rewrite Hget. lookup.
         by rewrite HlenXs Z.sub_diag. }
-      iSpecialize ("Hm" with "[//] [//] HI").
+      iSpecialize ("Hm" $! Xs with "[$HI //]").
 
       iApply (imp_wand with "Hm").
       iIntros ([]) "$". iFrame.
@@ -754,18 +755,16 @@ Section mapi_spec.
 
   (** [mapi f a] applies function [f] to the index and all elements of [a],
       and builds an array with the results. *)
-  Definition mapi_spec : val → array → microvx → iProp Σ :=
-    λ f a m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A)
-         dq (xs : list A) (Φ : Z → A → B → iProp Σ),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[Z; A] f (λ (i : Z) (x : A) m,
-                              ⌜0 ≤ i < length xs⌝ -∗
-                              EWP m {{ (y : B), Φ i x y }}) -∗
-         EWP m {{ b, ∃ (ys : list B),
-                    b ↦∗ ys ∗
-                    a ↦∗{dq} xs ∗
-                    [∗ listZ] i↦x;y ∈ xs;ys, Φ i x y }})%I.
+  Definition mapi_spec mapi : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B)
+         dq (xs : list A) (Φ : Z → A → B → iProp Σ);
+       a ↦∗{dq} xs ∗
+       {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (y : B); Φ i x y }} }}
+    mapi f a : val array
+    {{ RET b; ∃ (ys : list B),
+                b ↦∗ ys ∗
+                a ↦∗{dq} xs ∗
+                [∗ listZ] i↦x;y ∈ xs;ys, Φ i x y }}.
 
 End mapi_spec.
 
@@ -776,11 +775,11 @@ Section to_list_spec.
 
 
   (** [to_list a] returns a list containing the elements of [a]. *)
-  Definition to_list_spec : array → microvx → iProp Σ :=
-    λ a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A) dq (xs : list A),
-         a ↦∗{dq} xs -∗
-         EWP m {{ (ys : list A), ⌜ys = xs⌝ ∗ a ↦∗{dq} xs }})%I.
+  Definition to_list_spec to_list : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A);
+       a ↦∗{dq} xs }}
+    to_list a : array
+    {{ RET (ys : list A); ⌜ys = xs⌝ ∗ a ↦∗{dq} xs }}.
 
 End to_list_spec.
 
@@ -791,12 +790,11 @@ Section of_list_spec.
 
 
   (** [of_list l] returns a fresh array containing the elements of [l]. *)
-  Definition of_list_spec : val → microvx → iProp Σ :=
-    λ l m,
-      (∀ (A : Type) (_ : Encode A) (xs : list A),
-         ⌜l = #xs⌝ -∗
-         ⌜length xs ≤ max_array_length⌝ -∗
-         EWP m {{ a, a ↦∗ xs }})%I.
+  Definition of_list_spec of_list : iProp Σ :=
+    {{ ∀ `(Encode A) (xs : list A);
+       ⌜l = #xs⌝ ∗ ⌜length xs ≤ max_array_length⌝ }}
+    of_list l : val
+    {{ RET a; a ↦∗ xs }}.
 
 End of_list_spec.
 
@@ -808,18 +806,17 @@ Section equal_spec.
 
   (** [equal eq a b] tests whether [a] and [b] are element-wise equal,
       using [eq] to compare elements. *)
-  Definition equal_spec : val → array → array → microvx → iProp Σ :=
-    λ eq a b m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq1 dq2 (xs ys : list A) (P : A → A → Prop) (_ : ∀ x y, Decision (P x y)),
-         a ↦∗{dq1} xs -∗
-         b ↦∗{dq2} ys -∗
-         □ iSpec τ[A; A] eq (λ (x : A) (y : A) m,
-                               EWP m {{ (r : bool), ⌜r = bool_decide (P x y)⌝ }}) -∗
-         EWP m {{ (r : bool),
-                    a ↦∗{dq1} xs ∗
-                    b ↦∗{dq2} ys ∗
-                    ⌜r = true ↔ length xs = length ys ∧ Forall2 P xs ys⌝ }})%I.
+  Definition equal_spec equal : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A)
+         dq1 dq2 (xs ys : list A) (P : A → A → Prop) (_ : ∀ x y, Decision (P x y));
+       a ↦∗{dq1} xs ∗
+       b ↦∗{dq2} ys ∗
+       {{ True }} eq x y : A A {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+    equal eq a b : val array array
+    {{ RET (r : bool);
+         a ↦∗{dq1} xs ∗
+         b ↦∗{dq2} ys ∗
+         ⌜r = true ↔ length xs = length ys ∧ Forall2 P xs ys⌝ }}.
 
 End equal_spec.
 
@@ -831,19 +828,17 @@ Section compare_spec.
 
   (** [compare cmp a b] compares arrays lexicographically using [cmp]
       for elements. Returns an integer: negative, zero, or positive. *)
-  Definition compare_spec : val → array → array → microvx → iProp Σ :=
-    λ cmp a b m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq1 dq2 (xs ys : list A) (f : A → A → Z),
+  Definition compare_spec compare : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq1 dq2 (xs ys : list A) (f : A → A → Z);
+       a ↦∗{dq1} xs ∗
+       b ↦∗{dq2} ys ∗
+       {{ True }} cmp x y : A A {{ RET (c : Z); ⌜c = f x y⌝ }} }}
+    compare cmp a b : val array array
+    {{ RET (r : Z);
          a ↦∗{dq1} xs -∗
          b ↦∗{dq2} ys -∗
-         □ iSpec τ[A; A] cmp (λ (x : A) (y : A) m,
-                                EWP m {{ (c : Z), ⌜c = f x y⌝ }}) -∗
-         EWP m {{ (r : Z),
-                    a ↦∗{dq1} xs -∗
-                    b ↦∗{dq2} ys -∗
-                    ⌜(length xs ≠ length ys → r = if bool_decide (length xs < length ys) then -1 else 1) ∧
-                     (length xs = length ys → (r = 0 ↔ Forall2 (λ x y, f x y = 0) xs ys))⌝ }})%I.
+         ⌜(length xs ≠ length ys → r = if bool_decide (length xs < length ys) then -1 else 1) ∧
+          (length xs = length ys → (r = 0 ↔ Forall2 (λ x y, f x y = 0) xs ys))⌝ }}.
 
 End compare_spec.
 
@@ -902,9 +897,11 @@ Section fold_left_spec.
     EWP (eval η fold_left) {{ fold_left_spec }}.
   Proof.
     iIntros "#Hlookup #Hlookup'".
-    iApply imp_EAnon_poly_pers.
-    iIntros (A HencA) "!>".
-    iIntros (f x a B HencB HinhB dq xs I) "Hown #Hf HI".
+    unfold fold_left, fold_left_spec.
+    iApply imp_EAnon_poly.
+    iIntros "!>" (A HencA B HencB); simpl.
+    iIntros (f x a).
+    iIntros (HinhB dq xs I) "(Hown & #Hf & HI)".
     iApply imp_please; iNext.
 
     (* let r = ref x in ... *)
@@ -946,12 +943,12 @@ Section fold_left_spec.
           { (* unsafe_get a i *)
             imp_app τ[array;Z].
             iIntros "Hm".
-            iApply ("Hm" $! B with "Hslice [%]").
-            lia. }
+            iApply ("Hm" $! B with "[$Hslice]").
+            iPureIntro; lia. }
           (* continuation after getting the element *)
           iIntros "(-> & Hr) (-> & Hslice) Hm". rewrite Z.sub_0_r.
           apply prefix_snoc in Hprefix; last lia.
-          iSpecialize ("Hm" with "[//] HI").
+          iSpecialize ("Hm" $! Xs with "[$HI //]").
 
           iApply (imp_wand with "Hm").
           iIntros (acc'') "HI".
@@ -981,18 +978,17 @@ Section fold_left_map_spec.
 
   (** [fold_left_map f acc input_array] is like [fold_left] but also builds
       an output array from the second component of [f]'s return value. *)
-  Definition fold_left_map_spec : val → A → array → microvx → iProp Σ :=
-    λ f x input_array m,
-      (∀ `(Encode B, Inhabited B) `(Encode C)
-         dq (xs : list B) (Φ : A → B → A → C → iProp Σ),
-         input_array ↦∗{dq} xs -∗
-         □ iSpec τ[A; B] f (λ (acc : A) (b : B) m,
-                              EWP m {{ (p : τ[A; C]), Φ acc b p.1 p.2 }}) -∗
-         EWP m {{ ((y, output_array) : τ[A; array]),
-                    ∃ (ys : list C), ⌜length ys = length xs⌝ ∗
-                      input_array ↦∗{dq} xs ∗
-                      output_array ↦∗ ys ∗
-                      ⌜True⌝ (* TODO: characterize the final accumulator and output *) }})%I.
+  Definition fold_left_map_spec fold_left_map : iProp Σ :=
+    {{ ∀ `(Encode B, Inhabited B) `(Encode C)
+         dq (xs : list B) (Φ : A → B → A → C → iProp Σ);
+       input_array ↦∗{dq} xs ∗
+       {{ True }} f acc b : A B {{ RET (p : τ[A; C]); Φ acc b p.1 p.2 }} }}
+    fold_left_map f x input_array : val A array
+    {{ RET ((y, output_array) : τ[A; array]);
+         ∃ (ys : list C), ⌜length ys = length xs⌝ ∗
+           input_array ↦∗{dq} xs ∗
+           output_array ↦∗ ys ∗
+           ⌜True⌝ (* TODO: characterize the final accumulator and output *) }}.
 
 End fold_left_map_spec.
 
@@ -1004,18 +1000,15 @@ Section fold_right_spec.
 
 
   (** [fold_right f a init] computes [f a.(0) (f a.(1) (... (f a.(n-1) init) ...))]. *)
-  Definition fold_right_spec : val → array → B → microvx → iProp Σ :=
-    λ f a x m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq (xs : list A) (I : B → Z → iProp Σ),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A; B] f (λ (a : A) (b : B) m,
-                              ∀ i, ⌜0 ≤ i < length xs⌝ -∗
-                                   ⌜xs !!! i = a⌝ -∗
-                                   I b (i + 1) -∗
-                                   EWP m {{ (b' : B), I b' i }}) -∗
-         I x (length xs) -∗
-         EWP m {{ (r : B), I r 0 ∗ a ↦∗{dq} xs }})%I.
+  Definition fold_right_spec fold_right : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (I : B → Z → iProp Σ);
+       a ↦∗{dq} xs ∗
+       {{ ∀ i; ⌜0 ≤ i < length xs⌝ ∗ ⌜xs !!! i = y⌝ ∗ I b (i + 1) }}
+       f y b : A B
+       {{ RET (b' : B); I b' i }} ∗
+       I x (length xs) }}
+    fold_right f a x : val array B
+    {{ RET (r : B); I r 0 ∗ a ↦∗{dq} xs }}.
 
 End fold_right_spec.
 
@@ -1026,16 +1019,13 @@ Section exists_spec.
 
 
   (** [exists p a] checks if at least one element of [a] satisfies [p]. *)
-  Definition exists_spec : val → array → microvx → iProp Σ :=
-    λ p a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq (xs : list A) (P : A → Prop) (_ : ∀ x, Decision (P x)),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A] p (λ (x : A) m,
-                           EWP m {{ (b : bool), ⌜b = bool_decide (P x)⌝ }}) -∗
-         EWP m {{ (b : bool),
-                    a ↦∗{dq} xs ∗
-                    ⌜b = true ↔ Exists P xs⌝ }})%I.
+  Definition exists_spec exists_ : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+         (_ : ∀ x, Decision (P x));
+       a ↦∗{dq} xs ∗
+       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+    exists_ p a : val array
+    {{ RET (b : bool); a ↦∗{dq} xs ∗ ⌜b = true ↔ Exists P xs⌝ }}.
 
 End exists_spec.
 
@@ -1046,16 +1036,13 @@ Section for_all_spec.
 
 
   (** [for_all p a] checks if all elements of [a] satisfy the predicate [p]. *)
-  Definition for_all_spec : val → array → microvx → iProp Σ :=
-    λ p a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq (xs : list A) (P : A → Prop) (_ : ∀ x, Decision (P x)),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A] p (λ (x : A) m,
-                           EWP m {{ (b : bool), ⌜b = bool_decide (P x)⌝ }}) -∗
-         EWP m {{ (b : bool),
-                    a ↦∗{dq} xs ∗
-                    ⌜b = true ↔ Forall P xs⌝ }})%I.
+  Definition for_all_spec for_all : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+         (_ : ∀ x, Decision (P x));
+       a ↦∗{dq} xs ∗
+       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+    for_all p a : val array
+    {{ RET (b : bool); a ↦∗{dq} xs ∗ ⌜b = true ↔ Forall P xs⌝ }}.
 
 End for_all_spec.
 
@@ -1067,19 +1054,17 @@ Section for_all2_spec.
 
   (** [for_all2 p a b] checks if all corresponding elements of [a] and [b]
       satisfy the predicate [p]. Raises if the arrays have different lengths. *)
-  Definition for_all2_spec : val → array → array → microvx → iProp Σ :=
-    λ p a b m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A) (_ : Inhabited B)
-         dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop) (_ : ∀ x y, Decision (P x y)),
-         ⌜length xs = length ys⌝ -∗
-         a ↦∗{dq1} xs -∗
-         b ↦∗{dq2} ys -∗
-         □ iSpec τ[A; B] p (λ (x : A) (y : B) m,
-                              EWP m {{ (r : bool), ⌜r = bool_decide (P x y)⌝ }}) -∗
-         EWP m {{ (r : bool),
-                    a ↦∗{dq1} xs ∗
-                    b ↦∗{dq2} ys ∗
-                    ⌜r = true ↔ Forall2 P xs ys⌝ }})%I.
+  Definition for_all2_spec for_all2 : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+         dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop)
+         (_ : ∀ x y, Decision (P x y));
+       ⌜length xs = length ys⌝ ∗
+       a ↦∗{dq1} xs ∗
+       b ↦∗{dq2} ys ∗
+       {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+    for_all2 p a b : val array array
+    {{ RET (r : bool);
+         a ↦∗{dq1} xs ∗ b ↦∗{dq2} ys ∗ ⌜r = true ↔ Forall2 P xs ys⌝ }}.
 
 End for_all2_spec.
 
@@ -1091,19 +1076,19 @@ Section exists2_spec.
 
   (** [exists2 p a b] checks if there exist corresponding elements of [a]
       and [b] that satisfy [p]. Raises if the arrays have different lengths. *)
-  Definition exists2_spec : val → array → array → microvx → iProp Σ :=
-    λ p a b m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A) (_ : Inhabited B)
-         dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop) (_ : ∀ x y, Decision (P x y)),
-         ⌜length xs = length ys⌝ -∗
-         a ↦∗{dq1} xs -∗
-         b ↦∗{dq2} ys -∗
-         □ iSpec τ[A; B] p (λ (x : A) (y : B) m,
-                              EWP m {{ (r : bool), ⌜r = bool_decide (P x y)⌝ }}) -∗
-         EWP m {{ (r : bool),
-                    a ↦∗{dq1} xs ∗
-                    b ↦∗{dq2} ys ∗
-                    ⌜r = true ↔ Exists (λ p, P p.1 p.2) (zip xs ys)⌝ }})%I.
+  Definition exists2_spec exists2_ : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+         dq1 dq2 (xs : list A) (ys : list B) (P : A → B → Prop)
+         (_ : ∀ x y, Decision (P x y));
+       ⌜length xs = length ys⌝ ∗
+       a ↦∗{dq1} xs ∗
+       b ↦∗{dq2} ys ∗
+       {{ True }} p x y : A B {{ RET (r : bool); ⌜r = bool_decide (P x y)⌝ }} }}
+    exists2_ p a b : val array array
+    {{ RET (r : bool);
+         a ↦∗{dq1} xs ∗
+         b ↦∗{dq2} ys ∗
+         ⌜r = true ↔ Exists (λ q, P q.1 q.2) (zip xs ys)⌝ }}.
 
 End exists2_spec.
 
@@ -1119,19 +1104,18 @@ Section find_opt_spec.
 
   (** [find_opt p a] returns the first element of [a] that satisfies [p],
       or [None] if no such element exists. *)
-  Definition find_opt_spec : val → array → microvx → iProp Σ :=
-    λ p a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq (xs : list A) (P : A → Prop) (_ : ∀ x, Decision (P x)),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A] p (λ (x : A) m,
-                           EWP m {{ (b : bool), ⌜b = bool_decide (P x)⌝ }}) -∗
-         EWP m {{ (r : option A),
-                    a ↦∗{dq} xs ∗
-                    match r with
-                    | Some x => ⌜x ∈ xs ∧ P x⌝
-                    | None => ⌜Forall (λ x, ¬ P x) xs⌝
-                    end }})%I.
+  Definition find_opt_spec find_opt : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+         (_ : ∀ x, Decision (P x));
+       a ↦∗{dq} xs ∗
+       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+    find_opt p a : val array
+    {{ RET (r : option A);
+         a ↦∗{dq} xs ∗
+         match r with
+         | Some x => ⌜x ∈ xs ∧ P x⌝
+         | None => ⌜Forall (λ x, ¬ P x) xs⌝
+         end }}.
 
 End find_opt_spec.
 
@@ -1143,20 +1127,19 @@ Section find_index_spec.
 
   (** [find_index p a] returns the index of the first element that
       satisfies [p], or [None]. *)
-  Definition find_index_spec : val → array → microvx → iProp Σ :=
-    λ p a m,
-      (∀ (A : Type) (_ : Encode A) (_ : Inhabited A)
-         dq (xs : list A) (P : A → Prop) (_ : ∀ x, Decision (P x)),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A] p (λ (x : A) m,
-                           EWP m {{ (b : bool), ⌜b = bool_decide (P x)⌝ }}) -∗
-         EWP m {{ (r : option Z),
-                    a ↦∗{dq} xs ∗
-                    match r with
-                    | Some i => ⌜0 ≤ i < length xs ∧ P (xs !!! i) ∧
-                                  Forall (λ x, ¬ P x) (take i xs)⌝
-                    | None => ⌜Forall (λ x, ¬ P x) xs⌝
-                    end }})%I.
+  Definition find_index_spec find_index : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) dq (xs : list A) (P : A → Prop)
+         (_ : ∀ x, Decision (P x));
+       a ↦∗{dq} xs ∗
+       {{ True }} p x : A {{ RET (b : bool); ⌜b = bool_decide (P x)⌝ }} }}
+    find_index p a : val array
+    {{ RET (r : option Z);
+         a ↦∗{dq} xs ∗
+         match r with
+         | Some i => ⌜0 ≤ i < length xs ∧ P (xs !!! i) ∧
+                       Forall (λ x, ¬ P x) (take i xs)⌝
+         | None => ⌜Forall (λ x, ¬ P x) xs⌝
+         end }}.
 
 End find_index_spec.
 
@@ -1168,19 +1151,17 @@ Section find_map_spec.
 
   (** [find_map f a] applies [f] to each element and returns the first
       [Some] result, or [None] if [f] returns [None] on all elements. *)
-  Definition find_map_spec : val → array → microvx → iProp Σ :=
-    λ f a m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A)
-         dq (xs : list A) (g : A → option B),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[A] f (λ (x : A) m,
-                           EWP m {{ (r : option B), ⌜r = g x⌝ }}) -∗
-         EWP m {{ (r : option B),
-                    a ↦∗{dq} xs ∗
-                    match r with
-                    | Some y => ⌜∃ x, x ∈ xs ∧ g x = Some y⌝
-                    | None => ⌜Forall (λ x, g x = None) xs⌝
-                    end }})%I.
+  Definition find_map_spec find_map : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : A → option B);
+       a ↦∗{dq} xs ∗
+       {{ True }} f x : A {{ RET (r : option B); ⌜r = g x⌝ }} }}
+    find_map f a : val array
+    {{ RET (r : option B);
+         a ↦∗{dq} xs ∗
+         match r with
+         | Some y => ⌜∃ x, x ∈ xs ∧ g x = Some y⌝
+         | None => ⌜Forall (λ x, g x = None) xs⌝
+         end }}.
 
 End find_map_spec.
 
@@ -1192,20 +1173,17 @@ Section find_mapi_spec.
 
   (** [find_mapi f a] applies [f] to the index and each element and returns
       the first [Some] result, or [None]. *)
-  Definition find_mapi_spec : val → array → microvx → iProp Σ :=
-    λ f a m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A)
-         dq (xs : list A) (g : Z → A → option B),
-         a ↦∗{dq} xs -∗
-         □ iSpec τ[Z; A] f (λ (i : Z) (x : A) m,
-                              ⌜0 ≤ i < length xs⌝ -∗
-                              EWP m {{ (r : option B), ⌜r = g i x⌝ }}) -∗
-         EWP m {{ (r : option B),
-                    a ↦∗{dq} xs ∗
-                    match r with
-                    | Some y => ⌜∃ i, 0 ≤ i < length xs ∧ g i (xs !!! i) = Some y⌝
-                    | None => ⌜∀ i, 0 ≤ i < length xs → g i (xs !!! i) = None⌝
-                    end }})%I.
+  Definition find_mapi_spec find_mapi : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B) dq (xs : list A) (g : Z → A → option B);
+       a ↦∗{dq} xs ∗
+       {{ ⌜0 ≤ i < length xs⌝ }} f i x : Z A {{ RET (r : option B); ⌜r = g i x⌝ }} }}
+    find_mapi f a : val array
+    {{ RET (r : option B);
+         a ↦∗{dq} xs ∗
+         match r with
+         | Some y => ⌜∃ i, 0 ≤ i < length xs ∧ g i (xs !!! i) = Some y⌝
+         | None => ⌜∀ i, 0 ≤ i < length xs → g i (xs !!! i) = None⌝
+         end }}.
 
 End find_mapi_spec.
 
@@ -1216,15 +1194,12 @@ Section split_spec.
 
 
   (** [split x] takes an array of pairs and returns a pair of arrays. *)
-  Definition split_spec : array → microvx → iProp Σ :=
-    λ a m,
-      (∀ (A B : Type) `(Encode A) `(Encode B) (_ : Inhabited (A * B))
-         dq (ps : list (A * B)),
-         a ↦∗{dq} ps -∗
-         EWP m {{ ((b1, b2) : τ[array;array]),
-                    a ↦∗{dq} ps ∗
-                    b1 ↦∗ (fst <$> ps) ∗
-                    b2 ↦∗ (snd <$> ps) }})%I.
+  Definition split_spec split : iProp Σ :=
+    {{ ∀ `(Encode A) `(Encode B) (_ : Inhabited (A * B)) dq (ps : list (A * B));
+       a ↦∗{dq} ps }}
+    split a : array
+    {{ RET ((b1, b2) : τ[array;array]);
+         a ↦∗{dq} ps ∗ b1 ↦∗ (fst <$> ps) ∗ b2 ↦∗ (snd <$> ps) }}.
 
 End split_spec.
 
@@ -1236,17 +1211,12 @@ Section combine_spec.
 
   (** [combine a b] takes two arrays and returns an array of pairs.
       Raises if the arrays have different lengths. *)
-  Definition combine_spec : array → array → microvx → iProp Σ :=
-    λ a b m,
-      (∀ (A B : Type) (_ : Encode A) (_ : Encode B) (_ : Inhabited A) (_ : Inhabited B)
-         dq1 dq2 (xs : list A) (ys : list B),
-         ⌜length xs = length ys⌝ -∗
-         a ↦∗{dq1} xs -∗
-         b ↦∗{dq2} ys -∗
-         EWP m {{ r,
-                    a ↦∗{dq1} xs -∗
-                    b ↦∗{dq2} ys -∗
-                    r ↦∗ (zip xs ys) }})%I.
+  Definition combine_spec combine : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) `(Encode B, Inhabited B)
+         dq1 dq2 (xs : list A) (ys : list B);
+       ⌜length xs = length ys⌝ ∗ a ↦∗{dq1} xs ∗ b ↦∗{dq2} ys }}
+    combine a b : array array
+    {{ RET r; a ↦∗{dq1} xs -∗ b ↦∗{dq2} ys -∗ r ↦∗ (zip xs ys) }}.
 
 End combine_spec.
 
@@ -1335,8 +1305,8 @@ Section module_proof.
     (context [
          var_spec "init" init_spec;
          var_spec "iter" iter_spec;
-         var_spec "iteri" (λ iteri, □ iSpec τ[val;array] iteri iteri_spec);
-         var_spec "fold_left" (λ fold_left, □ ∀ A (HencA : Encode A), iSpec τ[val;A;array] fold_left (fold_left_spec A));
+         var_spec "iteri" iteri_spec;
+         var_spec "fold_left" fold_left_spec;
          var_spec "map" map_spec;
          var_spec "map_inplace" map_inplace_spec;
          var_spec "mapi_inplace" mapi_inplace_spec

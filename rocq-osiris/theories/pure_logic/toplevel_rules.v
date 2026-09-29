@@ -59,7 +59,7 @@ Lemma structs_cons_unary ηδ item items (φ : envs -> Prop) :
 Proof.
   unfold struct_items, struct_item. intros.
   simpl_eval_sitems.
-  apply pure_bind_unary.
+  apply (pure_bind_unary (A':=envs) (A:=envs)).
   eapply pure_mono; eauto. intros [??]. auto.
 Qed.
 
@@ -183,7 +183,7 @@ Proof.
   eapply pure_bind.
   { unfold as_struct.
     eapply pure_bind; eauto.
-    intros η' Hφ'. eapply pure_ret; eauto. }
+    intros η' Hφ'. eapply (pure_ret (A:=env)); eauto. }
   intros η' Hφ'. eapply pure_ret; eauto. encode.
 Qed.
 
@@ -198,7 +198,7 @@ Proof.
   eapply pure_bind.
   { unfold as_struct.
     eapply pure_bind; eauto.
-    intros η' Hφ'. eapply pure_ret; eauto. }
+    intros η' Hφ'. eapply (pure_ret (A:=env)); eauto. }
   intros η' Hφ'. eapply pure_ret; eauto. encode.
 Qed.
 

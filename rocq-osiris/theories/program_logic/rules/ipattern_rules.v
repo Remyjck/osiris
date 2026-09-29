@@ -40,8 +40,9 @@ Section ipattern.
 
   (* A two-channel consequence rule for [impure]. *)
 
-  Lemma imp_wand2 {V X A} `{Observe A V} (m : micro V X)
-      (ζ ζ' : X → iProp Σ) (Φ Φ' : A → iProp Σ) :
+  Lemma imp_wand2 {V X A} `{Observe A V} {B} `{HobsB : Observe B X}
+      (m : micro V X)
+      (ζ ζ' : B → iProp Σ) (Φ Φ' : A → iProp Σ) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
     (∀ a, Φ a -∗ Φ' a) ∧ (∀ e, ζ e -∗ ζ' e) -∗
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ' }}.
@@ -218,7 +219,7 @@ Section ipattern.
 
   (* Reading all the fields of a block. *)
 
-  Lemma imp_loadn {X} (ζ : X → iProp Σ) (dq : dfrac) ls (vs : list val) :
+  Lemma imp_loadn {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) :
     ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
     EWP (loadn ls) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),
         ⌜vs' = vs⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦{dq} v }}.
@@ -238,7 +239,7 @@ Section ipattern.
       iFrame.
   Qed.
 
-  Lemma imp_loadfs {X} (ζ : X → iProp Σ) (dq : dfrac) ls (vs : list val) fps :
+  Lemma imp_loadfs {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) fps :
     Forall (λ fp, valid fp.1 ls) fps →
     ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
     EWP (loadfs ls fps) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),

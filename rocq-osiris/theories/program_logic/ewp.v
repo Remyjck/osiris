@@ -4,6 +4,7 @@ From iris.algebra Require Import gmap_view dfrac gset auth excl ofe.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
 
+From osiris Require Import base.
 From osiris.lang Require Import thread_ids syntax locations encode.
 From osiris.semantics Require Import semantics.
 Require Import subjective_step.
@@ -645,8 +646,9 @@ End ewp_properties.
 (* ========================================================================== *)
 
 Definition impure {A V X} `{osirisGS Σ} `{Observe A V}
-  (E : coPset) (m : micro V X) (Ψ : iEff Σ) (ζ : X → iProp Σ) (Φ : A → iProp Σ) : iProp Σ :=
-  ewp_def E m Ψ (ilift ζ (ireturns Φ)).
+  (E : coPset) (m : micro V X) (Ψ : iEff Σ) :
+  ∀ {B} `{Observe B X}, (B → iProp Σ) → (A → iProp Σ) → iProp Σ :=
+  λ B _ ζ Φ, ewp_def E m Ψ (ilift (ireturns ζ) (ireturns Φ)).
 
 (* ========================================================================== *)
 
@@ -688,25 +690,25 @@ Notation "'EWP' e @ E <| Ψ '|>' ⟨⟨ ζ ⟩⟩ {{ Φ } }" :=
 (* Notations without exceptional postcondition (uses ⊥) *)
 
 Notation "'EWP' e {{ Φ } }" :=
-  (impure ⊤ e%E ⊥ ⊥ Φ%I)
+  (impure ⊤ e%E ⊥ (⊥ : exn → iProp _) Φ%I)
     (at level 0, e, Φ at level 200,
       format "'[' 'EWP'  e  '/' '[ ' {{  Φ  } } ']' ']'")
     : bi_scope.
 
 Notation "'EWP' e @ E {{ Φ } }" :=
-  (impure E e%E ⊥ ⊥ Φ%I)
+  (impure E e%E ⊥ (⊥ : exn → iProp _) Φ%I)
     (at level 0, e, Φ at level 200,
       format "'[' 'EWP'  e  '/' '[ ' @  E  {{  Φ  } } ']' ']'")
     : bi_scope.
 
 Notation "'EWP' e <| Ψ '|>' {{ Φ } }" :=
-  (impure ⊤ e%E Ψ%I ⊥ Φ%I)
+  (impure ⊤ e%E Ψ%I (⊥ : exn → iProp _) Φ%I)
     (at level 0, e, Ψ, Φ at level 200,
       format "'[hv' 'EWP'  e  '/' <| Ψ '|>'  {{  '[' Φ  ']' } } ']'")
     : bi_scope.
 
 Notation "'EWP' e @ E <| Ψ |> {{ Φ } }" :=
-  (impure E e%E Ψ%I ⊥ Φ%I)
+  (impure E e%E Ψ%I (⊥ : exn → iProp _) Φ%I)
     (at level 0, e, Ψ, Φ at level 200,
       format "'[' 'EWP'  e  '/' '[ ' @  E  <|  Ψ  '|>'  {{  Φ  } } ']' ']'")
     : bi_scope.
@@ -813,25 +815,25 @@ Notation "'EWP' e @ E <| Ψ '|>' ⟨⟨ w , R ⟩⟩ {{ v , Q } }" :=
    [⟨⟨ w, ⊥ w ⟩⟩]), and printing picks the most recently declared match. *)
 
 Notation "'EWP' e {{ v , Q } }" :=
-  (impure ⊤ e%E ⊥ ⊥ (λ v, Q%I))
+  (impure ⊤ e%E ⊥ (⊥ : exn → iProp _) (λ v, Q%I))
     (at level 0, e, Q at level 200, v at level 200 as pattern,
       format "'[hv' 'EWP'  e  '/' {{  '[' v ,  '/' Q  ']' } } ']'")
     : bi_scope.
 
 Notation "'EWP' e @ E {{ v , Q } }" :=
-  (impure E e%E ⊥ ⊥ (λ v, Q%I))
+  (impure E e%E ⊥ (⊥ : exn → iProp _) (λ v, Q%I))
     (at level 0, e, Q at level 200, v at level 200 as pattern,
       format "'[hv' 'EWP'  e  '/' @  E  '/' {{  '[' v ,  '/' Q  ']' } } ']'")
     : bi_scope.
 
 Notation "'EWP' e <| Ψ '|>' {{ v , Q } }" :=
-  (impure ⊤ e%E Ψ%I ⊥ (λ v, Q%I))
+  (impure ⊤ e%E Ψ%I (⊥ : exn → iProp _) (λ v, Q%I))
     (at level 0, e, Ψ, Q at level 200, v at level 200 as pattern,
       format "'[hv' 'EWP'  e  '/' <|  Ψ  |>  '/' {{  '[' v ,  '/' Q  ']' } } ']'")
     : bi_scope.
 
 Notation "'EWP' e @ E <| Ψ '|>' {{ v , Q } }" :=
-  (impure E e%E Ψ%I ⊥ (λ v, Q%I))
+  (impure E e%E Ψ%I (⊥ : exn → iProp _) (λ v, Q%I))
     (at level 0, e, Ψ, Q at level 200, v at level 200 as pattern,
       format "'[hv' 'EWP'  e  '/' @  E  <|  Ψ  |>  '/' {{  '[' v ,  '/' Q  ']' } } ']'")
     : bi_scope.

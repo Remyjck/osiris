@@ -57,6 +57,8 @@ Section ExternalsDef.
 
   Context `{!osirisGS Σ}.
 
+  Implicit Types ζ : exn → iProp Σ.
+
   (* ------------------------------------------------------------------------ *)
   (* Content of Externals used in [stdlib/int.ml]. *)
 
@@ -64,13 +66,14 @@ Section ExternalsDef.
   Definition Externals__addint : val := VEta2 EIntAdd.
 
   Lemma add_spec :
-    ⊢ iSpec τ[Z;Z] Externals__addint (λ i j (m : microvx), EWP m {{ (n : Z), ⌜(n = i + j)%Z⌝ }}).
+    ⊢ {{ True }} Externals__addint i j : Z Z {{ RET (n : Z); ⌜(n = i + j)%Z⌝ }}.
   Proof.
+    iModIntro.
     rewrite iSpec_equation_2.
     iIntros (i).
     iApply imp_please. iNext.
     iApply imp_EAnon.
-    iIntros (j). iApply imp_please. iNext.
+    iIntros (j). iIntros "_". iApply imp_please. iNext.
     iApply imp_EIntAdd.
     - instantiate (1:=(λ n', ⌜n' = i⌝)%I).
       iApply imp_EPath; auto.
@@ -82,13 +85,14 @@ Section ExternalsDef.
   Definition Externals__subint : val := VEta2 EIntSub.
 
   Lemma sub_spec :
-    ⊢ iSpec τ[Z;Z] Externals__subint (λ i j (m : microvx), EWP m {{ (n : Z), ⌜(n = i - j)%Z⌝ }}).
+    ⊢ {{ True }} Externals__subint i j : Z Z {{ RET (n : Z); ⌜(n = i - j)%Z⌝ }}.
   Proof.
+    iModIntro.
     rewrite iSpec_equation_2.
     iIntros (i).
     iApply imp_please. iNext.
     iApply imp_EAnon.
-    iIntros (j). iApply imp_please. iNext.
+    iIntros (j). iIntros "_". iApply imp_please. iNext.
     iApply imp_EIntSub.
     - instantiate (1:=(λ n', ⌜n' = i⌝)%I).
       iApply imp_EPath; auto.
@@ -176,11 +180,13 @@ Section ExternalsDef.
   Definition Externals__array_length_expr := EEta1 EArrayLength.
 
   Definition array_length_spec length : iProp Σ :=
-    iSpec τ[array] length (λ a m, ∀ (ls : list loc), isBlockLocs a ls -∗ EWP m {{ n', ⌜n' = list_z.length ls⌝ }})%I.
+    {{ ∀ (ls : list loc); isBlockLocs a ls }}
+    length a : array
+    {{ RET n'; ⌜n' = list_z.length ls⌝ }}.
 
   Lemma imp_externals_length {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ length,
-       □ array_length_spec length -∗
+       array_length_spec length -∗
        EWP eval_sitems (x ~> length;
                      η, x ~> length;
                      δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
@@ -202,16 +208,14 @@ Section ExternalsDef.
   Definition Externals__array_get_expr : expr := EEta2 EArrayGet.
 
   Definition array_get_spec get : iProp Σ :=
-    iSpec τ[array;Z] get
-      (λ a i m,
-         ∀ (A : Type) (_ : Encode A) (_ : Inhabited A) dq j (xs : list A),
-         ▷ a ↦∗[j]{dq} xs -∗
-         ⌜j ≤ i < j + length xs⌝ -∗
-         EWP m {{ (v : A), ⌜v = xs !!! (i - j)⌝ ∗ a ↦∗[j]{dq} xs }})%I.
+    {{ ∀ `(Encode A, Inhabited A) dq j (xs : list A);
+       ▷ a ↦∗[j]{dq} xs ∗ ⌜j ≤ i < j + length xs⌝ }}
+    get a i : array Z
+    {{ RET (v : A); ⌜v = xs !!! (i - j)⌝ ∗ a ↦∗[j]{dq} xs }}.
 
   Lemma imp_externals_get {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ get,
-       □ array_get_spec get -∗
+       array_get_spec get -∗
        EWP eval_sitems (x ~> get;
                      η, x ~> get;
                      δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
@@ -221,7 +225,7 @@ Section ExternalsDef.
     iApply (imp_sitems_external with "[] Hsitems").
     iApply imp_wand_exn.
     - iApply (imp_EAnon_pers).
-      iIntros "!>" (a i A HencA HinhA dq j xs) "Hslice %Hbounds".
+      iIntros "!>" (a i A HencA HinhA dq j xs) "(Hslice & %Hbounds)".
       iApply imp_please; iNext.
       iApply (imp_EArrayGet' with "[%] Hslice"); try imp_path.
       assumption.
@@ -234,18 +238,15 @@ Section ExternalsDef.
   Definition Externals__array_set_expr : expr := EEta3 EArraySet.
 
   Definition array_set_spec set : iProp Σ :=
-    ∀ `(Encode A, Inhabited A),
-    iSpec τ[array;Z;A] set
-      (λ a i x m,
-         ∀ j (xs : list A) Φ,
-         ▷ a ↦∗[j] xs -∗
-         Φ x -∗
-         ⌜j ≤ i < j + length xs⌝ -∗
-         EWP m {{ (_ : unit), ∃ x, Φ x ∗ a ↦∗[j] (<[i - j:=x]> xs) }})%I.
+    ∀∀ `(Encode A, Inhabited A);
+    {{ ∀ j (xs : list A) Φ;
+       ▷ a ↦∗[j] xs ∗ Φ x ∗ ⌜j ≤ i < j + length xs⌝ }}
+    set a i x : array Z A
+    {{ RET (_ : unit); ∃ x, Φ x ∗ a ↦∗[j] (<[i - j:=x]> xs) }}.
 
   Lemma imp_externals_set {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ set,
-       □ array_set_spec set -∗
+       array_set_spec set -∗
        EWP eval_sitems (x ~> set;
                      η, x ~> set;
                      δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
@@ -254,8 +255,9 @@ Section ExternalsDef.
     iIntros "Hsitems".
     iApply (imp_sitems_external with "[] Hsitems").
     iApply imp_wand_exn.
-    - iApply imp_EAnon_poly_inh_pers.
-      iIntros (A ??) "!> %a %i %y %j %xs %Φ Hslice HΦ %Hbounds".
+    - iApply imp_EAnon_poly.
+      iIntros "!>" (A HencA HinhA); simpl.
+      iIntros "%a %i %y %j %xs %Φ (Hslice & HΦ & %Hbounds)".
       iApply imp_please; iNext.
       iApply (imp_EArraySet' with "[%] Hslice"); try imp_path.
       assumption.
@@ -268,16 +270,14 @@ Section ExternalsDef.
   Definition Externals__array_make_expr : expr := EEta2 EArrayMake.
 
   Definition array_make_spec make : iProp Σ :=
-    ∀ `(Encode A),
-    iSpec τ[Z; A] make
-      (λ n x m,
-           ∀ Φ, ⌜0 ≤ n ≤ max_array_length⌝ -∗
-                Φ x -∗
-                EWP m {{ a, ∃ x, Φ x ∗ a ↦∗ (replicate n x) }}).
+    ∀∀ `(Encode A);
+    {{ ∀ Φ; ⌜0 ≤ n ≤ max_array_length⌝ ∗ Φ x }}
+    make n x : Z A
+    {{ RET a; ∃ x, Φ x ∗ a ↦∗ (replicate n x) }}.
 
   Lemma imp_externals_make {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ make,
-       □ array_make_spec make -∗
+       array_make_spec make -∗
        EWP eval_sitems (x ~> make;
                         η, x ~> make;
                         δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗
@@ -286,8 +286,9 @@ Section ExternalsDef.
     iIntros "Hsitems".
     iApply (imp_sitems_external with "[] Hsitems").
     iApply imp_wand_exn.
-    - iApply imp_EAnon_poly_pers.
-      iIntros (A HencA) "!> %n %y %Φ %hbound HΦ".
+    - iApply imp_EAnon_poly.
+      iIntros "!>" (A HencA); simpl.
+      iIntros "%n %y %Φ (%hbound & HΦ)".
       iApply imp_please; iNext.
       iApply imp_EArrayMake; try imp_path.
       + iPureIntro; assumption.
@@ -298,14 +299,13 @@ Section ExternalsDef.
   Definition Externals__freeze_expr : expr := EEta1 EFreeze.
 
   Definition freeze_spec freeze : iProp Σ :=
-    iSpec τ[array] freeze
-      (λ l m, ∀ t,
-         isBlock l (DfracOwn 1) t -∗
-         EWP m {{ l', ⌜l' = l⌝ ∗ isBlock l (DfracOwn 1) Immut }})%I.
+    {{ ∀ t; isBlock l (DfracOwn 1) t }}
+    freeze l : array
+    {{ RET l'; ⌜l' = l⌝ ∗ isBlock l (DfracOwn 1) Immut }}.
 
   Lemma imp_externals_freeze {E Ψ ζ} (sitems : list sitem) (x : var) (Q : envs → iProp Σ) (η δ : env) :
     (∀ freeze,
-       □ freeze_spec freeze -∗
+       freeze_spec freeze -∗
        EWP eval_sitems (x ~> freeze;
                         η, x ~> freeze;
                         δ) sitems @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Q }}) -∗

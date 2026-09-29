@@ -156,6 +156,8 @@ Section array_reasoning.
   Global Instance notval_block : NotVal (mut_tag * list loc) := {}.
   Global Instance notval_listloc : NotVal (list loc) := {}.
 
+  Implicit Types ζ : exn → iProp Σ.
+
   (** General [as_array] rule.  Given that the postcondition of [m] implies
       [isBlockLocs a ls] for some [a] and [ls], the [load_block] step is
       discharged automatically and [Φ ls] is delivered. *)
@@ -178,12 +180,12 @@ Section array_reasoning.
     iIntros "[%Hleneq %Hlenbound] He". simpl_eval.
     iApply (imp_bind (A1:=list A) with "He").
     iIntros (xs) "HΦs".
-    iApply imp_bind.
+    iApply (imp_bind (A1:=list loc)).
     { iApply imp_allocn. iIntros "!>" (ls) "Hls". iExact "Hls". }
     iIntros (arr) "Hls".
     iPoseProof (big_sepLZ2_length with "Hls") as "%Hlenls".
     iPoseProof (big_sepLZ2_length with "HΦs") as "%Hlenxs".
-    iApply imp_bind.
+    iApply (imp_bind (A1:=loc)).
     { iApply (imp_alloc_block Mut arr with "[]").
       iPureIntro. rewrite Hlenls Hlenxs Hleneq. apply Hlenbound. }
     iIntros (a) "(Ha & #Harr)".

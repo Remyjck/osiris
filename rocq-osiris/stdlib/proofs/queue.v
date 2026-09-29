@@ -154,19 +154,14 @@ Section proofs.
 
   Context `{!osirisGS Σ}.
 
-  (* We specify functions in the following way:
-     [iSpec τ[...] f f_spec] says that [f] is a function with arguments
-     of type [...] and with specification [f_spec].
-
-     [f_spec] should have type [... → microvx → iProp Σ], where
-     [m : microvx] is the call-site of the function to the arguments. *)
-
   (* For create, we have one argument of type [unit], and the
      specification is for any type, we get [q] an empty queue with
      elements of that type. *)
 
-  Definition create_spec (u : unit) (m : microvx) : iProp Σ :=
-    ∀ A (HencA : Encode A), EWP m {{ q, Queue (@nil A) q }}.
+  Definition create_spec create : iProp Σ :=
+    {{ ∀ A (HencA : Encode A); True }}
+    create u : unit
+    {{ RET q; Queue (@nil A) q }}.
 
   Definition create := (EAnonFun __create).
 
@@ -176,13 +171,14 @@ Section proofs.
   Hypothesis max_fields : 3 ≤ max_array_length.
 
   Lemma imp_create η :
-    ⊢ EWP (eval η create) {{ f, □ iSpec τ[unit] f create_spec }}.
+    ⊢ EWP (eval η create) {{ create_spec }}.
   Proof.
     (* [imp_EAnon_pers] is the lemma for proving that a function
        persistently satisfies its specification. *)
+    unfold create, create_spec.
     iApply imp_EAnon_pers.
-    iIntros "!> /=". unfold create_spec.
-    iIntros ([] A HencA).
+    iIntros "!> /=".
+    iIntros ([] A HencA) "_".
     iApply imp_please; iNext.
 
     (* The [()] argument binding acts as a match on the first argument *)
@@ -231,7 +227,7 @@ Section module_proof.
 
   Definition queue_module_spec : env → iProp Σ :=
     (context [
-       var_spec "create" (λ create, □ iSpec τ[unit] create create_spec)
+       var_spec "create" create_spec
      ]
      queue_module_dom)%I.
 

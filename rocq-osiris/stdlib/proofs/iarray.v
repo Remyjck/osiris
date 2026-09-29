@@ -31,18 +31,16 @@ Section freeze_iarray.
 
   Context `{!osirisGS Σ}.
 
-  Definition freeze_array_spec freeze :=
-    iSpec τ[array] freeze
-      (λ (a : array) m,
-         ∀ `(Encode A) (xs : list A),
-         a ↦∗ xs -∗
-         EWP m {{ (a' : iarray), a' ↦□∗ xs ∗ isBlock a' (DfracOwn 1) Immut  }})%I.
+  Definition freeze_array_spec freeze : iProp Σ :=
+    {{ ∀ `(Encode A) (xs : list A); a ↦∗ xs }}
+    freeze a : array
+    {{ RET (a' : iarray); a' ↦□∗ xs ∗ isBlock a' (DfracOwn 1) Immut }}.
 
   Lemma imp_freeze_array freeze :
     freeze_spec freeze -∗
     freeze_array_spec freeze.
   Proof.
-    iIntros "Hspec".
+    iIntros "#Hspec !>".
     iApply (iSpec_mono with "Hspec").
     iIntros (b m) "Hm %A %HencA %xs Hown".
     (* Unfold ownArray: extracts isBlockLocs, isBlock (DfracOwn 1 Mut), isSlice, length-eq *)
@@ -70,32 +68,34 @@ Section init_proof.
 
   Context `{!osirisGS Σ}.
 
-  Definition init_spec : Z → val → microvx → iProp Σ :=
-    λ n f m,
-      (∀ (A : Type) `(Encode A, Inhabited A) (I : list A → iProp Σ),
-         ⌜0 ≤ n ≤ max_array_length⌝ ∗
-         (* [f] is a function [Z → A], such that [f i] preserves
-            an invariant [I] over the results of all calls to [f i] so far. *)
-         □ iSpec τ[Z] f (λ i m, ∀ xs, ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs -∗
-                                      EWP m {{ x, I (xs ++ singleton x) }}) ∗
-         (* Calling [init f n] returns an array [a] such that [ownArray a xs],
-            and such that [Φ i] holds for the [i]'th element of xs. *)
-         I [] -∗
-         EWP m {{ a, ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦□∗ xs ∗ isBlock a (DfracOwn 1) Immut ∗ I xs }})%I.
+  Definition init_spec init : iProp Σ :=
+    {{ ∀ `(Encode A, Inhabited A) (I : list A → iProp Σ);
+       ⌜0 ≤ n ≤ max_array_length⌝ ∗
+       (* [f] is a function [Z → A], such that [f i] preserves
+          an invariant [I] over the results of all calls to [f i] so far. *)
+       {{ ∀ xs; ⌜0 ≤ i < n⌝ ∗ ⌜length xs = i⌝ ∗ I xs }}
+       f i : Z
+       {{ RET x; I (xs ++ singleton x) }} ∗
+       I [] }}
+    (* Calling [init f n] returns an array [a] such that [ownArray a xs],
+       and such that [Φ i] holds for the [i]'th element of xs. *)
+    init n f : Z val
+    {{ RET a; ∃ (xs : list A), ⌜length xs = n⌝ ∗ a ↦□∗ xs ∗
+                isBlock a (DfracOwn 1) Immut ∗ I xs }}.
 
   Definition init := (EAnonFun __init).
 
   Lemma imp_init η :
     □ in_env "Array" array_module_spec η -∗
     □ in_env "unsafe_of_array" freeze_spec η -∗
-    EWP (eval η init) {{ c, □ iSpec τ[Z; val] c init_spec }}.
+    EWP (eval η init) {{ init_spec }}.
   Proof.
     iIntros "#Hlookup1 #Hlookup2".
+    unfold init, init_spec.
     iApply imp_EAnon_pers.
     iIntros "!> /=".
     iIntros (n f).
     change (VInt (int.repr n)) with #n.
-    unfold init_spec.
     iIntros (A HencA HinhA I) "(%Hbounds & #Hf & HI)".
     iApply imp_please; iNext.
     iPoseProof (in_env_mono with "Hlookup2 []") as "Hlookup2'".
@@ -181,7 +181,7 @@ Section module_proof.
     Persistent (in_env name Φ η).
   Proof. intros. apply _. Qed.
 
-  Lemma imp_mpath (Φ : env → iProp Σ) p η E Ψ ζ :
+  Lemma imp_mpath (Φ : env → iProp Σ) p η E Ψ (ζ : exn → iProp Σ) :
     path_spec p Φ η -∗
     impure E (eval_mexpr η (MPath p)) Ψ ζ Φ.
   Proof.

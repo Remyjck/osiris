@@ -24,17 +24,18 @@ Section verification.
      does that through [AsFractional]; hence the [DfracOwn]. Reading at a
      discarded share needs no splitting: the resource is duplicable there
      ([ownBlock_discarded_dup]). *)
-  Definition length_spec r (m : microvx) : iProp Σ :=
-    ∀ qp t (x y : Z),
-      ▷ ownBlock (τ:=τ[Z; Z]) r (DfracOwn qp) t (x, y) -∗
-      EWP m {{ (i : Z), ⌜i = (x*x + y*y)%Z⌝ ∗
-                 ownBlock (τ:=τ[Z;Z]) r (DfracOwn qp) t (x, y) }}.
+  Definition length_spec length : iProp Σ :=
+    {{ ∀ qp t (x y : Z); ▷ ownBlock (τ:=τ[Z; Z]) r (DfracOwn qp) t (x, y) }}
+    length r : record
+    {{ RET (i : Z); ⌜i = (x*x + y*y)%Z⌝ ∗
+         ownBlock (τ:=τ[Z;Z]) r (DfracOwn qp) t (x, y) }}.
 
   Definition elength := EAnonFun __fun0.
 
   Lemma imp_length η :
-    ⊢ EWP (eval η elength) {{ length, □ iSpec τ[record] length length_spec }}.
+    ⊢ EWP (eval η elength) {{ length_spec }}.
   Proof.
+    unfold length_spec.
     iApply imp_EAnon_pers.
     iIntros "!>" (r qp t x y) "Hown".
 
@@ -47,16 +48,17 @@ Section verification.
      [ split; simpl; lia | imp_path ]).
   Qed.
 
-  Definition update_x_spec r x (m : microvx) : iProp Σ :=
-    ∀ t (x0 y : Z),
-      ▷ ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x0, y) -∗
-      EWP m {{ (_ : unit), ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x, y) }}.
+  Definition update_x_spec update_x : iProp Σ :=
+    {{ ∀ t (x0 y : Z); ▷ ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x0, y) }}
+    update_x r x : record Z
+    {{ RET (_ : unit); ownBlock (τ:=τ[Z;Z]) r (DfracOwn 1) t (x, y) }}.
 
   Definition eupdate_x := EAnonFun __fun2.
 
   Lemma imp_update_x η :
-    ⊢ EWP (eval η eupdate_x) {{ update_x, □ iSpec τ[record; Z] update_x update_x_spec }}.
+    ⊢ EWP (eval η eupdate_x) {{ update_x_spec }}.
   Proof.
+    unfold update_x_spec.
     iApply imp_EAnon_pers.
     iIntros "!>" (r x t x0 y) "Hown".
     iApply imp_please; iNext.
@@ -145,8 +147,8 @@ Section verification.
     2 ≤ max_array_length →
     ⊢ EWP (eval_mexpr η __main)
       {{ context
-           [ var_spec "length" (λ length, iSpec τ[record] length length_spec);
-             var_spec "update_x" (λ update, iSpec τ[record;Z] update update_x_spec) ]
+           [ var_spec "length" length_spec;
+             var_spec "update_x" update_x_spec ]
            {[ "vec"; "length"; "update_x" ]} }}.
   Proof.
     intros Hmax_array.
@@ -192,19 +194,20 @@ Section encoded_fields.
 
   (* -------------------------------------------------------------------------- *)
 
-  Definition point_length_spec r (m : microvx) : iProp Σ :=
-    ∀ qp (p : point),
-      ▷ r ⤇{#qp} p -∗
-      EWP m {{ (i : Z), ⌜i = (p.(x) * p.(x) + p.(y) * p.(y))%Z⌝ ∗ r ⤇{#qp} p }}.
+  Definition point_length_spec length : iProp Σ :=
+    {{ ∀ qp (p : point); ▷ r ⤇{#qp} p }}
+    length r : record
+    {{ RET (i : Z); ⌜i = (p.(x) * p.(x) + p.(y) * p.(y))%Z⌝ ∗ r ⤇{#qp} p }}.
 
-  Definition point_update_x_spec r x (m : microvx) : iProp Σ :=
-    ∀ (p : point),
-      ▷ r ⤇ p -∗
-      EWP m {{ (_ : unit), r ⤇ {| x := x; y:=p.(y) |} }}.
+  Definition point_update_x_spec update_x : iProp Σ :=
+    {{ ∀ (p : point); ▷ r ⤇ p }}
+    update_x r x : record Z
+    {{ RET (_ : unit); r ⤇ {| x := x; y:=p.(y) |} }}.
 
   Lemma imp_point_length η :
-    ⊢ EWP (eval η elength) {{ length, □ iSpec τ[record] length point_length_spec }}.
+    ⊢ EWP (eval η elength) {{ point_length_spec }}.
   Proof.
+    unfold point_length_spec.
     iApply imp_EAnon_pers.
     iIntros "!>" (r qp p) "Hown".
 
@@ -215,8 +218,9 @@ Section encoded_fields.
   Qed.
 
   Lemma imp_point_update_x η :
-    ⊢ EWP (eval η eupdate_x) {{ update_x, □ iSpec τ[record; Z] update_x point_update_x_spec }}.
+    ⊢ EWP (eval η eupdate_x) {{ point_update_x_spec }}.
   Proof.
+    unfold point_update_x_spec.
     iApply imp_EAnon_pers.
     iIntros "!>" (r x p) "Hown".
     iApply imp_please; iNext.
@@ -233,8 +237,8 @@ Section encoded_fields.
   Lemma point_module_proof η :
     ⊢ EWP (eval_mexpr η __main)
       {{ context
-           [ var_spec "length" (λ length, iSpec τ[record] length point_length_spec);
-             var_spec "update_x" (λ update, iSpec τ[record;Z] update point_update_x_spec) ]
+           [ var_spec "length" point_length_spec;
+             var_spec "update_x" point_update_x_spec ]
            {[ "vec"; "length"; "update_x" ]} }}.
   Proof.
     iApply imp_module.

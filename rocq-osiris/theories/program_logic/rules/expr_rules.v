@@ -14,6 +14,7 @@ Section imp_rules_expr.
   Context `{!osirisGS Σ}.
   Context {E : coPset} {Ψ : iEff Σ}.
   Context {A : Type} `{EncA : Encode A} {Φ : A → iProp Σ}.
+  Implicit Types ζ : exn → iProp Σ.
 
   (* -------------------------------------------------------------------------- *)
   (* Lemmas about [expr]s *)
@@ -80,6 +81,7 @@ Section imp_rules_expr.
 
   Context `{!osirisGS Σ}.
   Context {E : coPset} {Ψ : iEff Σ}.
+  Implicit Types ζ μ : exn → iProp Σ.
 
   Lemma imp_EUnit {Φ ζ} η :
     Φ tt -∗
@@ -986,8 +988,8 @@ Section imp_rules_expr.
   Proof.
     iIntros "H". simpl_eval.
     iApply (imp_bind with "H").
-    iIntros (ex) "Hζ". change (♯ex) with ex.
-    iApply (imp_throw with "Hζ").
+    iIntros (ex) "Hζ".
+    by iApply (imp_throw _ ex with "Hζ").
   Qed.
 
   (** * EWhile : expr → expr → expr *)
@@ -1481,7 +1483,7 @@ Section imp_rules_expr.
 
   Lemma imp_EPerform `{Encode A, Encode B} {Φ : A → iProp Σ} {ζ} (Φ1 : B → iProp Σ) η e :
     EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
-    (∀ x, Φ1 x -∗ Ψ allows perform #x << ilift ζ (ireturns Φ) >>) -∗
+    (∀ x, Φ1 x -∗ Ψ allows perform #x << ilift (ireturns ζ) (ireturns Φ) >>) -∗
     EWP eval η (EPerform e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "He Hv". simpl_eval.
@@ -1557,7 +1559,7 @@ Section imp_rules_expr.
     iApply (imp_bind_par (A1:=val) (A2:=B) with "H1 H2").
     iIntros (f x) "Hf Hx !>".
     rewrite /continue /=.
-    iApply (imp_fork (B:=A)).
+    iApply (imp_fork (B:=A) (Bμ:=exn)).
     iIntros "!> %ι' #Hthread". iFrame "#".
     iApply ("Hcall" with "Hthread Hf Hx").
   Qed.
@@ -1591,7 +1593,7 @@ Section imp_rules_expr.
     iApply (imp_bind_par with "H1 H2").
     iIntros (f x) "Hf Hx !>".
     rewrite /continue /=.
-    iApply (imp_fork (B:=B)).
+    iApply (imp_fork (B:=B) (Bμ:=exn)).
     iIntros "!> %ι' #Hthread".
     iSplitL.
     + iSpecialize ("Hcall" with "Hf Hx").
@@ -1599,8 +1601,8 @@ Section imp_rules_expr.
       instantiate (1 := (λ _, False)%I).
       iIntros (? []).
     + iFrame "#".
-      iIntros "!>" ([|]); [ | iIntros ([]) ].
-      iIntros "Hφ !> !>".
+      iIntros "!>" ([|]); [ | iIntros "(% & _ & [])" ].
+      iIntros "(% & _ & Hφ) !> !>".
       iApply "Hφ".
   Qed.
 
@@ -1702,11 +1704,15 @@ Section imp_rules_expr.
     iApply (imp_bind with "[Hid]").
     { iApply (imp_as_thread with "Hid"). }
     iIntros (ι') "Hthread".
-    iApply (imp_join with "Hthread Hjoined").
+    iApply (imp_join with "Hthread [Hjoined]").
+    iSplit; first by iDestruct "Hjoined" as "[$ _]".
+    iDestruct "Hjoined" as "[_ Hjoined]".
+    iIntros "!>" (b) "#Hμ". iExists b.
+    iSplit; first done. by iApply "Hjoined".
   Qed.
 
   Lemma imp_EJoin `{Encode A} {ζ} e η (φ : A → iProp Σ) Φ :
-    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ ι, isThread ι ⊥ φ }} -∗
+    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ ι, isThread ι (⊥ : exn → iProp Σ) φ }} -∗
     ▷ (∀ x, □ φ x -∗ Φ x) -∗
     EWP eval η (EJoin e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
@@ -1728,7 +1734,7 @@ Section imp_rules_expr.
     iApply (imp_bind with "[Hid]").
     { iApply (imp_as_thread with "Hid"). }
     iIntros (ι') "Hjoinable".
-    iDestruct "Hjoinable" as "(% & % & HThread & Hjoinable)".
+    iDestruct "Hjoinable" as "(% & % & % & % & HThread & Hjoinable)".
     iApply (imp_fupd E (join ι')).
     iApply (imp_fupd_exn E (join ι')).
     iApply (imp_join with "[$]").
@@ -1736,14 +1742,17 @@ Section imp_rules_expr.
     - iIntros (x) "#Hφ".
       iDestruct "Hjoined" as "[P _]".
       iApply "P".
-      iSpecialize ("Hjoinable" $! (O2Ret x) with "Hφ").
+      iSpecialize ("Hjoinable" $! (O2Ret ♯x) with "[]").
+      { iExists x. iSplit; [ done | iApply "Hφ" ]. }
       iMod (fupd_mask_subseteq (↑joinN) Hmask) as "O".
       iMod "Hjoinable".
       by iMod "O".
-    - iIntros (ex) "#Hμ".
+    - iIntros (b) "#Hμ".
       iDestruct "Hjoined" as "[_ P]".
+      iExists (♯b). iSplit; first (iPureIntro; apply solve_encode_val).
       iApply "P".
-      iSpecialize ("Hjoinable" $! (O2Throw ex) with "Hμ").
+      iSpecialize ("Hjoinable" $! (O2Throw ♯b) with "[]").
+      { iExists b. iSplit; [ done | iApply "Hμ" ]. }
       iMod (fupd_mask_subseteq (↑joinN) Hmask) as "O".
       iMod "Hjoinable".
       by iMod "O".

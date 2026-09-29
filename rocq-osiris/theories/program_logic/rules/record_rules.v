@@ -163,6 +163,7 @@ Section records_reasoning.
   Context `{!osirisGS Σ}.
 
   Context {η : env} {E : coPset} {Ψ : iEff Σ}.
+  Implicit Types ζ : exn → iProp Σ.
 
   Lemma imp_as_record {ζ} {Φ : record → iProp Σ} (m : microvx) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
@@ -185,7 +186,7 @@ Section records_reasoning.
     iIntros "%Hlength Hes". simpl_eval.
     iApply (imp_bind with "Hes").
     iIntros (xs) "HΦs".
-    iApply imp_bind.
+    iApply (imp_bind (A1:=list loc)).
     { simpl.
       replace (to_vals xs) with
       (@observe (list val) (list val) (@observe_list val Encode_val) (to_vals xs)).
@@ -437,7 +438,8 @@ Section encoded_fields.
      curried evar the premise reads [tapp ?Φs], whose unfolding on
      records of three or more fields contains nested pair matches that
      unification cannot solve. *)
-  Lemma imp_record `{RecordRepr A τ t} {η E Ψ ζ} es (Φs : τ → iProp Σ) :
+  Lemma imp_record `{RecordRepr A τ t} {η E Ψ} {ζ : exn → iProp Σ}
+    es (Φs : τ → iProp Σ) :
     (τ_length τ ≤ max_array_length)%Z →
     impure E (evals η es) Ψ ζ Φs -∗
     impure E (eval η (ERecord t es)) Ψ ζ
@@ -459,7 +461,7 @@ Section encoded_fields.
 
   (* Note the [dq]: reading a field needs no more than a discarded share,
      so this rule now covers immutable records shared persistently. *)
-  Lemma imp_record_access `{RecordRepr A τ t} {η E Ψ ζ} f (r : record) (dq : dfrac) (a : A) (e : expr) :
+  Lemma imp_record_access `{RecordRepr A τ t} {η E Ψ} {ζ : exn → iProp Σ} f (r : record) (dq : dfrac) (a : A) (e : expr) :
     valid_field f τ →
     ▷ ownRecord r dq a -∗
     impure E (eval η e) Ψ ζ (λ r', ⌜r' = r⌝) -∗

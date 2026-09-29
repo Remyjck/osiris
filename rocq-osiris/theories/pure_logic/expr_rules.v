@@ -84,11 +84,11 @@ Lemma pure_eval_app_seq `{Encode A} `{Encode C}
 Proof.
   intros He1. simpl_eval.
   eapply pure_bind.
-  eapply (pure_par_seq (A1:=val) (A2:=A)).
+  eapply (pure_par_seq (A1:=val) (A2:=A) (B1:=C)).
   { instantiate (1:= λ '(f, arg), { call f #arg ensures ψ raises ζ }).
     apply He1. }
   intros [??] Hcall. apply Hcall.
-  Unshelve. all: eauto with pure. exact _.
+  Unshelve. all: eauto with pure.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -204,9 +204,10 @@ Lemma pure_eval_xconstant `{Encode A} `{Encode C} {φ : A → Prop} {p} l (a : A
 Proof.
   intros Henc Hpath Hφ. simpl_eval.
   eapply pure_bind.
-  { rewrite Hpath. eapply pure_ret. encode. apply eq_refl. }
+  { rewrite Hpath. eapply (pure_ret (A:=loc)). encode. apply eq_refl. }
   intros ? <-.
-  eapply (pure_bind (A1:=list val)). { eapply pure_ret. encode. apply eq_refl. }
+  eapply (pure_bind (A1:=list val)).
+  { eapply (pure_ret (A:=list val)). encode. apply eq_refl. }
   intros ? <-.
   eapply pure_ret. simpl. apply Henc.
   apply Hφ.
@@ -220,7 +221,7 @@ Lemma pure_eval_xdata `{XDC : XData l τ A} `{Encode C} {φ : A → Prop} {p} (�
 Proof.
   intros Hpath Hes Hφ. simpl_eval.
   eapply pure_bind.
-  { rewrite Hpath. eapply pure_ret. encode. apply eq_refl. }
+  { rewrite Hpath. eapply (pure_ret (A:=loc)). encode. apply eq_refl. }
   intros ? <-.
   eapply pure_bind. { apply Hes. }
   intros xs Hφs.
@@ -918,7 +919,7 @@ Proof.
   do 2 eapply pure_bind_unary.
   eapply pure_par.
   - exact He1.
-  - eapply pure_ret; [ encode | apply eq_refl ].
+  - eapply (pure_ret (A:=env)); [ encode | apply eq_refl ].
   - intros a1 ? Hφ1 <-.
     simpl. apply pure_irrefutably_extend.
     apply pat_PVar. simpl.
@@ -946,7 +947,8 @@ Lemma pure_eval_let_pair `{Encode A1, Encode A2} `{Encode X} `{Encode C} (φ_pai
 Proof.
   intros He1 He2 Hpat. simpl_eval.
   do 2 eapply pure_bind_unary.
-  eapply pure_par. apply He1. eapply pure_ret; [ encode | apply eq_refl ].
+  eapply pure_par. apply He1.
+  eapply (pure_ret (A:=env)); [ encode | apply eq_refl ].
   intros (a1, a2) ? Hpair <-.
   simpl. apply pure_irrefutably_extend.
   eapply pure_ret_mono.

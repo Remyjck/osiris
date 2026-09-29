@@ -37,7 +37,7 @@ Section proph.
   (* ------------------------------------------------------------------------ *)
   (** ** Allocation. *)
 
-  Lemma ewp_new_proph `{Observe A V} E Ψ (ζ : X → iProp Σ) (Φ : A → _) u
+  Lemma ewp_new_proph `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _) u
     (k : outcome2 loc exn → micro V X) :
     ▷ (∀ (p : loc) (pvs : list (val * val)),
          proph p pvs -∗
@@ -84,7 +84,7 @@ Section proph.
     (∀ σ σ' m', step (σ, stop c x) (σ', m') →
       (∃ w, m' = Ret w) ∨ (∃ e, m' = Throw e) ∨ m' = Crash).
 
-  Lemma ewp_resolve `{Observe A V} E Ψ (ζ : X → iProp Σ) (Φ : A → _) {Y}
+  Lemma ewp_resolve `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _) {Y}
     (c : code Y val exn) x (p : loc) (v : val)
     (pvs : list (val * val)) (k : outcome2 val exn → micro V X) :
     call_is_atomic c x →
@@ -125,7 +125,7 @@ Section proph.
         iModIntro. iNext. iMod "Hwp" as "[Hwp $]".
         iApply fupd_ewp.
         iEval (rewrite (ewp_unfold (throw e)) /ewp_pre /=) in "Hwp".
-        by iMod "Hwp".
+        iMod "Hwp" as "(%b & -> & Hwp)". iModIntro. iExact "Hwp".
       + (* the call crashed *)
         iMod ("Hwp" $! σ' Crash None with "[%]") as "Hwp";
           first by apply BaseS.
@@ -210,7 +210,7 @@ Section proph.
      the rule is that the prediction's head is the value that was
      computed. *)
 
-  Lemma ewp_resolve_return `{Observe A V} E Ψ (ζ : X → iProp Σ) (Φ : A → _)
+  Lemma ewp_resolve_return `{Observe A V} `{HobsB : Observe B X} E Ψ (ζ : B → iProp Σ) (Φ : A → _)
     (w : val) (p : loc)
     (v : val) (pvs : list (val * val)) (k : outcome2 val exn → micro V X) :
     proph p pvs -∗

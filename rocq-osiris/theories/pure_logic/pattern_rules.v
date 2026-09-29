@@ -170,7 +170,8 @@ Section pattern_rules.
   Qed.
 
   Lemma pure_orelse `{Observe A V} `{Observe B1 E1, Observe B2 E2}
-  (m1 : micro V E1) (m2 : micro V E2) (φ : A → Prop) Ψ1 Ψ2 :
+  (m1 : micro V E1) (m2 : micro V E2) (φ : A → Prop)
+  (Ψ1 : B1 → Prop) (Ψ2 : B2 → Prop) :
     pure m1 φ Ψ1 →
     (∀ e, Ψ1 e → pure m2 φ Ψ2) →
     pure (orelse m1 m2) φ Ψ2.

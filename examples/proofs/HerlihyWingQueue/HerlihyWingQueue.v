@@ -107,19 +107,20 @@ Hypothesis Hmax3 : 3 ≤ max_array_length.
 (* ---------------------------------------------------------------------- *)
 (** ** [create] *)
 
-Definition create_spec (cap : Z) (m : microvx) : iProp Σ :=
-  ⌜0 < cap ≤ max_array_length⌝ -∗
-  EWP m {{ (q : queue), ∃ γ, is_queue γ cap q ∗ queue_content γ [] ∗
+Definition create_spec create : iProp Σ :=
+  {{ ⌜0 < cap ≤ max_array_length⌝ }}
+  create cap : Z
+  {{ RET (q : queue); ∃ γ, is_queue γ cap q ∗ queue_content γ [] ∗
                              enqueue_permit γ (Z.to_nat cap) }}.
 
 Lemma create_proof η :
   path_spec ["Array"; "init"] init_spec' η -∗
-  EWP (eval η (EAnonFun __create)) {{ c, □ iSpec τ[Z] c create_spec }}.
+  EWP (eval η (EAnonFun __create)) {{ create_spec }}.
 Proof.
   iIntros "#HArray".
+  unfold create_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (cap).
-  unfold create_spec.
   iIntros "%Hcap".
   iApply imp_please; iNext.
 
@@ -1601,7 +1602,7 @@ Theorem HerlihyWingQueue_module_proof η :
   in_env "Array" array_module_spec η -∗
   EWP (eval_mexpr η __main)
     {{ context [
-         var_spec "create"  (λ create,  □ iSpec τ[Z] create create_spec);
+         var_spec "create"  create_spec;
          var_spec "enqueue" (λ enqueue, □ iSpec τ[queue; val] enqueue enqueue_spec);
          var_spec "dequeue" (λ dequeue, □ iSpec τ[queue] dequeue dequeue_spec)
        ] HerlihyWingQueue_names }}.
@@ -1610,7 +1611,7 @@ Proof.
   iApply imp_module.
 
   (* [let create capacity = ...]: the one item that needs [Array.init]. *)
-  iApply (imp_sitems_let (λ create : val, □ iSpec τ[Z] create create_spec)%I).
+  iApply (imp_sitems_let create_spec).
   { iApply create_proof.
     ltac2:(solve_path_spec ()). iIntros (init) "Hinit".
     iApply (init_spec_spec' with "Hinit"). }

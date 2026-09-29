@@ -82,6 +82,7 @@ Global Instance observe_encode `{Encode A} :
 Class NotVal (A : Type) : Prop := {}.
 Global Hint Mode NotVal + : typeclass_instances.
 Global Instance notval_bool : NotVal bool := {}.
+Global Instance notval_void : NotVal void := {}.
 Global Instance notval_unit : NotVal () := {}.
 Global Instance notval_env : NotVal env := {}.
 Global Instance notval_int : NotVal int := {}.
@@ -135,6 +136,13 @@ Section lift_specs.
 
   Definition ireturns {V} `{Observe A V} (Φ : A → iProp Σ) : V → iProp Σ :=
     λ v, (∃ a : A, ⌜v = ♯ a⌝ ∗ Φ a)%I.
+
+  Lemma ireturns_mono {V} `{Observe A V} (Φ Φ' : A → iProp Σ) v :
+    (∀ a, Φ a ⊢ Φ' a) → ireturns Φ v ⊢ ireturns Φ' v.
+  Proof.
+    intros HΦ. apply bi.exist_mono => a.
+    apply bi.sep_mono; [ done | apply HΦ ].
+  Qed.
 
 End lift_specs.
 

@@ -317,7 +317,8 @@ Section imp_eval.
     (∀ v, call c1 v = call c2 v) →
     iSpec τ c1 P ⊣⊢ iSpec τ c2 P.
   Proof.
-    intros Hcall. destruct τ as [X|X ? τ']; simp iSpec; by setoid_rewrite Hcall.
+    intros Hcall. destruct τ as [X|X ? τ']; simp iSpec;
+      apply bi.forall_proper => x; by rewrite Hcall.
   Qed.
 
   (* [iSpec_letrec] is the Löb induction principle for a recursive closure.

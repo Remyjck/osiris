@@ -150,7 +150,7 @@ Qed.
 Lemma cas_proof η :
   in_env "Atomic" atomic_module_spec η -∗
   EWP (eval η (EPath ["Atomic"; "Loc"; "compare_and_set"]))
-    {{ cas, □ ∀ `(InlineEncode A), iSpec τ[loc; A; A] cas compare_and_set_spec }}.
+    {{ cas, compare_and_set_spec cas }}.
 Proof.
   iIntros "HAtomic".
   iDestruct (atomic_cas_path_spec with "HAtomic") as (cas Hcas) "#Hspec".
@@ -203,9 +203,10 @@ Qed.
    As it stands, this specification is too strong and not provable,
    as we may overflow and return an identifier which is not fresh. *)
 
-Definition fresh_spec (γ : uf_names) (u : unit) (m : microvx) : iProp Σ :=
-  is_uf γ -∗
-  EWP m {{ (i : Z), i ↪[γ.(uf_ids)] () ∗ ⌜representable i⌝ }}.
+Definition fresh_spec (γ : uf_names) fresh : iProp Σ :=
+  {{ is_uf γ }}
+  fresh u : unit
+  {{ RET (i : Z); i ↪[γ.(uf_ids)] () ∗ ⌜representable i⌝ }}.
 
 (* ------------------------------------------------------------------------ *)
 (* Verification of [make]. *)
@@ -240,7 +241,7 @@ Hypothesis Hmax1 : (1 ≤ max_array_length)%Z.
 Hypothesis Hmax2 : (2 ≤ max_array_length)%Z.
 
 Lemma make_proof γ η :
-  path_spec ["G"; "fresh"] (λ fresh, □ iSpec τ[unit] fresh (fresh_spec γ))%I η -∗
+  path_spec ["G"; "fresh"] (fresh_spec γ)%I η -∗
   EWP (eval η (EAnonFun __make)) {{ c, □ iSpec τ[val] c (make_spec γ) }}.
 Proof.
   iIntros "#HG".
@@ -833,7 +834,7 @@ Lemma set_proof γ η :
       (λ set, □ iSpec τ[elem; content] set (set_content_spec γ)) η -∗
   ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
   in_env "cas"
-    (λ cas, □ ∀ `(InlineEncode A), iSpec τ[loc; A; A] cas compare_and_set_spec) η -∗
+    compare_and_set_spec η -∗
   □ fun_spec.predicate_over_function_body τ[elem; content] (set_content_spec γ) η
       (EAnonFun (AnonFun "x" (EAnonFun __set_fun))).
 Proof.
@@ -1002,7 +1003,7 @@ Lemma update_proof γ η :
       (λ update, □ iSpec τ[elem; val] update (update_aux_spec γ)) η -∗
   ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
   in_env "cas"
-    (λ cas, □ ∀ `(InlineEncode A), iSpec τ[loc; A; A] cas compare_and_set_spec) η -∗
+    compare_and_set_spec η -∗
   □ fun_spec.predicate_over_function_body τ[elem; val] (update_aux_spec γ) η
       (EAnonFun (AnonFun "x" (EAnonFun __update_fun))).
 Proof.
@@ -1223,7 +1224,7 @@ Lemma union_proof γ η :
       (λ union, □ iSpec τ[elem; elem] union (union_aux_spec γ)) η -∗
   ▷ in_env "findc" (λ findc, □ iSpec τ[elem] findc (find_aux_spec γ)) η -∗
   in_env "cas"
-    (λ cas, □ ∀ `(InlineEncode A), iSpec τ[loc; A; A] cas compare_and_set_spec) η -∗
+    compare_and_set_spec η -∗
   □ fun_spec.predicate_over_function_body τ[elem; elem] (union_aux_spec γ) η
       (EAnonFun (AnonFun "x" (EAnonFun __union_fun))).
 Proof.
@@ -1826,7 +1827,7 @@ Qed.
 Lemma G_module_proof γ (η : env) :
   ⊢ EWP (eval_mexpr η MUnsupported)
     {{ (δ : env),
-         in_env "fresh" (λ fresh, □ iSpec τ[unit] fresh (fresh_spec γ)) δ }}.
+         in_env "fresh" (fresh_spec γ) δ }}.
 Proof.
 Admitted.
 
@@ -1887,9 +1888,7 @@ Proof.
   iApply imp_module.
 
   (* [let cas = Atomic.Loc.compare_and_set] *)
-  iApply (imp_sitems_let
-            (λ cas : val,
-               □ ∀ `(InlineEncode A), iSpec τ[loc; A; A] cas compare_and_set_spec)%I).
+  iApply (imp_sitems_let compare_and_set_spec).
   { iApply cas_proof. iFrame "#". }
   iIntros (cas) "#Hcas".
 
@@ -1910,7 +1909,7 @@ Proof.
 
   iApply (imp_sitems_module
             (λ δ : env,
-               in_env "fresh" (λ fresh, □ iSpec τ[unit] fresh (fresh_spec γ)) δ)%I).
+               in_env "fresh" (fresh_spec γ) δ)%I).
   { iApply G_module_proof. }
   iIntros (δG) "HG".
   iDestruct "HG" as (fresh) "[%Hfresh #Hfresh]".

@@ -21,16 +21,14 @@ Section iteration_methods.
   Context `{!osirisGS Σ}.
   Context {A : Type} `{Encode A, FinitelyObservable A}.
 
-  Definition Iter_spec : val → microvx → iProp Σ :=
-    λ f m,
-      (∀ Ψ E I,
-        □ iSpec τ[A] f (λ (X : A) m,
-            ∀ (Xs : list A),
-              ⌜permitted (Xs ++ [X])⌝ -∗
-              I Xs -∗
-              EWP m @ E <| Ψ |> {{ (_ : unit), I (Xs ++ [X]) }}) -∗
-        I [] -∗
-        EWP m @ E <|Ψ|> {{ (_ : unit), ∃ Xs, I Xs ∗ ⌜complete Xs⌝ }})%I.
+  Definition Iter_spec iter : iProp Σ :=
+    {{ ∀ Ψ E I;
+       {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ I Xs }}
+       f X : A @ E <| Ψ |>
+       {{ RET (_ : unit); I (Xs ++ [X]) }} ∗
+       I [] }}
+    iter f : val @ E <| Ψ |>
+    {{ RET (_ : unit); ∃ Xs, I Xs ∗ ⌜complete Xs⌝ }}.
 
 End iteration_methods.
 
@@ -183,10 +181,10 @@ Section verification.
 
     Definition env : env := (* stdlib_env *) [].
 
-    Definition invert_spec : val → microvx → iProp Σ :=
-      λ (iter : val) m,
-      (iSpec τ[val] iter (Iter_spec) -∗
-       EWP m {{ k, isSeq ⊥ k [] }})%I.
+    Definition invert_spec invert : iProp Σ :=
+      {{ Iter_spec iter }}
+      invert iter : val
+      {{ RET k; isSeq ⊥ k [] }}.
 
   End specification.
 
@@ -304,8 +302,9 @@ Section verification.
         xctor_encode := λ a, eq_refl }.
 
     Lemma ewp_invert η :
-      ⊢ EWP (eval η invert) {{ c, □ iSpec τ[val] c invert_spec }}.
+      ⊢ EWP (eval η invert) {{ invert_spec }}.
     Proof.
+      unfold invert_spec.
       iApply (imp_EAnon_pers τ[val]); simpl.
       iIntros "!>" (iter) "Hiter". iApply imp_please; iNext.
 
@@ -323,14 +322,12 @@ Section verification.
       iIntros (?) "(%yl & -> & Hyl)".
 
       (* [let yield x = ...] *)
-      iApply (imp_ELet_var (λ v, □ iSpec τ[A] v (λ (X : A) m,
-                                        ∀ (Xs : list A),
-                                          ⌜permitted (Xs ++ [X])⌝ -∗
-                                          iterView γ Xs -∗
-                                          EWP m <| ψ_yield yl (iterView γ) |>
-                                          {{ (_ : unit), iterView γ (Xs ++ [X]) }}))%I).
+      iApply (imp_ELet_var (λ v,
+                {{ ∀ (Xs : list A); ⌜permitted (Xs ++ [X])⌝ ∗ iterView γ Xs }}
+                v X : A @ ⊤ <| ψ_yield yl (iterView γ) |>
+                {{ RET (_ : unit); iterView γ (Xs ++ [X]) }})%I).
       { iApply (imp_EAnon_pers τ[A]). simpl.
-        iIntros "!>" (X Xs) "Hiter Hpermitted".
+        iIntros "!>" (X Xs) "(Hiter & Hpermitted)".
         iApply imp_please; iNext.
         iApply (imp_EPerform (H0:=encode_effect A yl)).
         { set_postcondition (λ (a : effect), ⌜a = Yield X⌝)%I.
@@ -361,9 +358,9 @@ Section verification.
       (* [match_with iter yield { ...] *)
       iApply (imp_EHandler (A' := unit) with "[Hiter HiterView]").
       { imp_app τ[val] with "[Hiter]".
-        iIntros "Hiter".
-        rewrite /Iter_spec /tapp.
-        iApply ("Hiter" with "yield_spec HiterView"). }
+        { iApply "Hiter". }
+        iIntros "Hm".
+        iApply ("Hm" with "[$yield_spec $HiterView]"). }
 
       iApply (yield_handler_correct yl with "HhandlerView").
       reflexivity.
