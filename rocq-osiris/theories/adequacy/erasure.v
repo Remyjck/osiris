@@ -100,60 +100,22 @@ Fixpoint erase_expr (e : expr) : expr :=
       EBoolConj (erase_expr e1) (erase_expr e2)
   | EBoolDisj e1 e2 =>
       EBoolDisj (erase_expr e1) (erase_expr e2)
-  | EBoolNeg e =>
-      EBoolNeg (erase_expr e)
+  | EUnOp op e =>
+      EUnOp op (erase_expr e)
+  | EBinOp op e1 e2 =>
+      EBinOp op (erase_expr e1) (erase_expr e2)
   | EInt i =>
       EInt i
   | EMaxInt =>
       EMaxInt
   | EMinInt =>
       EMinInt
-  | EIntNeg e =>
-      EIntNeg (erase_expr e)
-  | EIntAdd e1 e2 =>
-      EIntAdd (erase_expr e1) (erase_expr e2)
-  | EIntSub e1 e2 =>
-      EIntSub (erase_expr e1) (erase_expr e2)
-  | EIntMul e1 e2 =>
-      EIntMul (erase_expr e1) (erase_expr e2)
-  | EIntDiv e1 e2 =>
-      EIntDiv (erase_expr e1) (erase_expr e2)
-  | EIntMod e1 e2 =>
-      EIntMod (erase_expr e1) (erase_expr e2)
-  | EIntLand e1 e2 =>
-      EIntLand (erase_expr e1) (erase_expr e2)
-  | EIntLor e1 e2 =>
-      EIntLor (erase_expr e1) (erase_expr e2)
-  | EIntLxor e1 e2 =>
-      EIntLxor (erase_expr e1) (erase_expr e2)
-  | EIntLnot e =>
-      EIntLnot (erase_expr e)
-  | EIntLsl e1 e2 =>
-      EIntLsl (erase_expr e1) (erase_expr e2)
-  | EIntLsr e1 e2 =>
-      EIntLsr (erase_expr e1) (erase_expr e2)
-  | EIntAsr e1 e2 =>
-      EIntAsr (erase_expr e1) (erase_expr e2)
   | EFloat f =>
       EFloat f
   | EChar c =>
       EChar c
   | EString s =>
       EString s
-  | EOpPhysEq e1 e2 =>
-      EOpPhysEq (erase_expr e1) (erase_expr e2)
-  | EOpEq e1 e2 =>
-      EOpEq (erase_expr e1) (erase_expr e2)
-  | EOpNe e1 e2 =>
-      EOpNe (erase_expr e1) (erase_expr e2)
-  | EOpLt e1 e2 =>
-      EOpLt (erase_expr e1) (erase_expr e2)
-  | EOpLe e1 e2 =>
-      EOpLe (erase_expr e1) (erase_expr e2)
-  | EOpGt e1 e2 =>
-      EOpGt (erase_expr e1) (erase_expr e2)
-  | EOpGe e1 e2 =>
-      EOpGe (erase_expr e1) (erase_expr e2)
   | ELet bs e =>
       ELet (erase_bindings bs) (erase_expr e)
   | ELetRec rbs e =>

@@ -267,6 +267,22 @@ Definition check_div_by_zero i : micro unit exn :=
   else
     ret ().
 
+(* [as_ints v1 v2 f] checks that both values are language-level integers and
+   passes their meta-level values to [f]. *)
+
+Definition as_ints {A} (v1 v2 : val) (f : int → int → micro A exn) : micro A exn :=
+  i1 ← val_as_int v1 ;
+  i2 ← val_as_int v2 ;
+  f i1 i2.
+
+(* On two integer values the coercions vanish. [simpl] does not perform this
+   reduction on its own, so proofs about the integer operators rewrite with
+   this equation instead. *)
+
+Lemma as_ints_VInt {A} (i1 i2 : int) (f : int → int → micro A exn) :
+  as_ints (VInt i1) (VInt i2) f = f i1 i2.
+Proof. reflexivity. Qed.
+
 (* ------------------------------------------------------------------------ *)
 
 (* [val_as_struct v] checks that the value [v] is a value of the form
@@ -839,6 +855,75 @@ Definition ge_val v1 v2 : micro bool exn :=
 
 (* ------------------------------------------------------------------------ *)
 
+(* The interpretation of primitive operators. *)
+
+(* [eval_un_op op v] applies the unary operator [op] to the value [v]. *)
+
+Definition eval_un_op (op : un_op) (v : val) : microvx :=
+  match op with
+  | UNeg =>
+      i ← val_as_int v ;
+      ret (VInt (int.neg i))
+  | ULnot =>
+      i ← val_as_int v ;
+      ret (VInt (int.lnot i))
+  | UNot =>
+      b ← val_as_bool v ;
+      ret (VBool (negb b))
+  end.
+
+(* [eval_bin_op op v1 v2] applies the binary operator [op] to the values [v1]
+   and [v2]. Both operands have already been evaluated by the time this
+   function is reached: see the [EBinOp] case of [eval]. *)
+
+Definition eval_bin_op (op : bin_op) (v1 v2 : val) : microvx :=
+  match op with
+  | BAdd =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.add i1 i2))
+  | BSub =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.sub i1 i2))
+  | BMul =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.mul i1 i2))
+  | BDiv =>
+      (* Signed division is used. *)
+      as_ints v1 v2 $ λ i1 i2,
+      '() ← check_div_by_zero i2 ;
+      ret (VInt (int.divs i1 i2))
+  | BMod =>
+      (* Signed remainder is used. *)
+      as_ints v1 v2 $ λ i1 i2,
+      '() ← check_div_by_zero i2 ;
+      ret (VInt (int.mods i1 i2))
+  | BLand =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.land i1 i2))
+  | BLor =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.lor i1 i2))
+  | BLxor =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.lxor i1 i2))
+  | BLsl =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.lsl i1 i2)))
+  | BLsr =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.lsr i1 i2)))
+  | BAsr =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.asr i1 i2)))
+  | BPhysEq =>
+      b ← phys_eq_val v1 v2 ; ret (VBool b)
+  | BEq =>
+      b ← eq_val v1 v2 ; ret (VBool b)
+  | BNe =>
+      b ← ne_val v1 v2 ; ret (VBool b)
+  | BLt =>
+      b ← lt_val v1 v2 ; ret (VBool b)
+  | BLe =>
+      b ← le_val v1 v2 ; ret (VBool b)
+  | BGt =>
+      b ← gt_val v1 v2 ; ret (VBool b)
+  | BGe =>
+      b ← ge_val v1 v2 ; ret (VBool b)
+  end.
+
+(* ------------------------------------------------------------------------ *)
+
 (* The evaluation of a list of structure items involves two environments [η]
    and [δ]. The environment [η] contains the bindings that are currently in
    scope: it is used when a name must be looked up. The environment [δ]
@@ -1389,85 +1474,19 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       ret (VInt (int.repr int.max_signed))
   | EMinInt =>
       ret (VInt (int.repr int.min_signed))
-  | EIntNeg e =>
-      i ← as_int (eval η e) ;
-      ret (VInt (int.neg i))
-  | EIntAdd e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.add i1 i2))
-  | EIntSub e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.sub i1 i2))
-  | EIntMul e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.mul i1 i2))
-  | EIntDiv e1 e2 =>
-      (* Signed division is used. *)
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      '() ← check_div_by_zero i2 ;
-      ret (VInt (int.divs i1 i2))
-  | EIntMod e1 e2 =>
-      (* Signed remainder is used. *)
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      '() ← check_div_by_zero i2 ;
-      ret (VInt (int.mods i1 i2))
-  | EIntLand e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.land i1 i2))
-  | EIntLor e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.lor i1 i2))
-  | EIntLxor e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.lxor i1 i2))
-  | EIntLnot e =>
-      i ← as_int (eval η e) ;
-      ret (VInt (int.lnot i))
-  | EIntLsl e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.lsl i1 i2)))
-  | EIntLsr e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.lsr i1 i2)))
-  | EIntAsr e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.asr i1 i2)))
+  | EUnOp op e =>
+      v ← eval η e ;
+      eval_un_op op v
+  | EBinOp op e1 e2 =>
+      (* The two operands are evaluated in parallel; the operator itself is
+         then carried out by [eval_bin_op]. *)
+      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
+      eval_bin_op op v1 v2
   | EFloat f =>
       ret (VFloat f)
-  | EOpPhysEq e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← phys_eq_val v1 v2 ;
-      ret (VBool b)
-  | EOpEq e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← eq_val v1 v2 ;
-      ret (VBool b)
-  | EOpNe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← ne_val v1 v2 ;
-      ret (VBool b)
-  | EOpLt e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← lt_val v1 v2 ;
-      ret (VBool b)
-  | EOpLe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← le_val v1 v2 ;
-      ret (VBool b)
-  | EOpGt e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← gt_val v1 v2 ;
-      ret (VBool b)
-  | EOpGe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← ge_val v1 v2 ;
-      ret (VBool b)
   | EBoolDisj e1 e2 =>
       b1 ← as_bool (eval η e1) ;
       if (b1 : bool) then ret VTrue else eval η e2
-  | EBoolNeg e =>
-      b ← as_bool (eval η e) ;
-      ret (VBool (negb b))
   | ELet bs e =>
       (* This is evaluated like a [match] construct with one branch. *)
       δ ← eval_bindings η bs ;

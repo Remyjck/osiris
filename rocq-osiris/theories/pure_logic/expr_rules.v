@@ -331,8 +331,9 @@ Lemma pure_eval_negb `{Encode C} η e (φ ψ : bool → Prop) :
   pure (eval η (EBoolNeg e)) ψ (⊥ : C → Prop).
 Proof.
   intros He Hp. simpl_eval.
-  eapply pure_bind_as_bool; eauto.
-  intros b Hb; eapply pure_ret; eauto with pure.
+  eapply pure_bind; [ exact He | ]. intros b Hb.
+  (* [val_as_bool] on a Boolean value reduces away, once [b] is known. *)
+  destruct b; eapply pure_ret; eauto with pure.
 Qed.
 
 Lemma pure_eval_not `{Encode C} η e (φ ψ : bool → Prop) :
@@ -341,8 +342,8 @@ Lemma pure_eval_not `{Encode C} η e (φ ψ : bool → Prop) :
   pure (eval η (EBoolNeg e)) ψ (⊥ : C → Prop).
 Proof.
   intros He Hp. simpl_eval.
-  eapply pure_bind. by eapply pure_as_bool.
-  intros. eapply pure_ret; eauto.
+  eapply pure_bind; [ exact He | ]. intros b Hb.
+  destruct b; eapply pure_ret; eauto.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -427,6 +428,65 @@ Proof.
   { by eapply pure_ret. }
 Qed.
 
+(* [EBinOp op e1 e2] evaluates its two operands in parallel, then hands the
+   resulting values to [eval_bin_op op]. The integer operators all share the
+   [as_ints] prefix, so they share this rule: the caller supplies the tail [f]
+   and discharges the first premise by [reflexivity]. *)
+
+Lemma pure_eval_bin_op `{Encode A1, Encode A2, Encode A} `{Encode B}
+  η op e1 e2 (φ1 : A1 → Prop) (φ2 : A2 → Prop) (φ : A → Prop) (ζ : B → Prop) :
+  pure (eval η e1) φ1 ζ →
+  pure (eval η e2) φ2 ζ →
+  (∀ a1 a2, φ1 a1 → φ2 a2 → pure (eval_bin_op op #a1 #a2) φ ζ) →
+  pure (eval η (EBinOp op e1 e2)) φ ζ.
+Proof.
+  intros He1 He2 Hp. simpl_eval.
+  eapply pure_bind.
+  { instantiate (1 := λ '(a1, a2), { eval_bin_op op #a1 #a2 ensures φ raises ζ }).
+    eapply pure_par; eauto. }
+  intros [??] Hop. apply Hop.
+Qed.
+
+Lemma pure_eval_un_op `{Encode A', Encode A} `{Encode B}
+  η op e (φe : A' → Prop) (φ : A → Prop) (ζ : B → Prop) :
+  pure (eval η e) φe ζ →
+  (∀ a, φe a → pure (eval_un_op op #a) φ ζ) →
+  pure (eval η (EUnOp op e)) φ ζ.
+Proof.
+  intros He Hp. simpl_eval.
+  eapply pure_bind; [ exact He | ]. intros a Ha. cbn beta. by apply Hp.
+Qed.
+
+(* The integer operators all share the [as_ints] prefix, so they share these
+   rules: the caller supplies the tail [f] and discharges the first premise
+   by [reflexivity]. Applying the tail to two integer values reduces the
+   [val_as_int] coercions away. *)
+
+Lemma pure_eval_bin_op_int `{Encode B} η op e1 e2 f
+  (φ1 φ2 φ : Z → Prop) (ζ : B → Prop) :
+  (∀ v1 v2, eval_bin_op op v1 v2 = as_ints v1 v2 f) →
+  pure (eval η e1) φ1 ζ →
+  pure (eval η e2) φ2 ζ →
+  (∀ z1 z2, φ1 z1 → φ2 z2 → pure (f (repr z1) (repr z2)) φ ζ) →
+  pure (eval η (EBinOp op e1 e2)) φ ζ.
+Proof.
+  intros Hop He1 He2 Hf.
+  eapply pure_eval_bin_op; [ exact He1 | exact He2 | ].
+  intros z1 z2 Hz1 Hz2. rewrite Hop. by apply Hf.
+Qed.
+
+Lemma pure_eval_un_op_int `{Encode B} η op e f
+  (φe φ : Z → Prop) (ζ : B → Prop) :
+  (∀ v, eval_un_op op v = 'i ← val_as_int v ; f i) →
+  pure (eval η e) φe ζ →
+  (∀ z, φe z → pure (f (repr z)) φ ζ) →
+  pure (eval η (EUnOp op e)) φ ζ.
+Proof.
+  intros Hop He Hf.
+  eapply pure_eval_un_op; [ exact He | ].
+  intros z Hz. rewrite Hop. by apply Hf.
+Qed.
+
 (* Primitive arithmetic operations. *)
 
 (* EIntNeg (e : expr) *)
@@ -435,11 +495,8 @@ Lemma pure_eval_neg `{Encode B} η e (φ φe : Z -> Prop) (ζ : B → Prop) :
   (forall z, φe z -> φ (- z)) ->
   pure (eval η (EIntNeg e)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  eapply pure_as_int; eauto.
-  intros i Hφe.
-  eapply pure_ret; encode.
+  intros. eapply pure_eval_un_op_int; [ done | eauto | ].
+  intros z Hφe. eapply pure_ret; encode.
 Qed.
 
 (* EIntAdd (e1 e2 : expr) *)
@@ -449,11 +506,8 @@ Lemma pure_eval_add `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (z1 + z2)) →
   pure (eval η (EIntAdd e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval. eapply pure_bind.
-  instantiate (1:= λ '(z1, z2), φ (z1 + z2)).
-  eapply pure_par_as_int; eauto.
-  intros (i1, i2) Hφ.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* EIntSub (e1 e2 : expr) *)
@@ -463,11 +517,8 @@ Lemma pure_eval_sub `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (z1 - z2)) →
   pure (eval η (EIntSub e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval. eapply pure_bind.
-  instantiate (1:= λ '(z1, z2), φ (z1 - z2)).
-  eapply pure_par_as_int; eauto.
-  intros (i1, i2) Hφ.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* EIntMul (e1 e2 : expr) *)
@@ -477,11 +528,8 @@ Lemma pure_eval_mul `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (z1 * z2)) →
   pure (eval η (EIntMul e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval. eapply pure_bind.
-  instantiate (1:= λ '(z1, z2), φ (z1 * z2)).
-  eapply pure_par_as_int; eauto.
-  intros (i1, i2) Hφ.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* Import for "^~" notation. *)
@@ -497,12 +545,8 @@ Lemma pure_eval_div `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (z1 ÷ z2)) →
   pure (eval η (EIntDiv e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval. eapply pure_bind.
-  instantiate (1:= λ '(z1, z2), φ1 z1 ∧ φ2 z2).
-
-  eapply pure_par_as_int; eauto.
-  intros (i1, i2) (Hφ1 & Hφ2).
-  eapply pure_bind.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 Hφ1 Hφ2. eapply pure_bind.
   - apply pure_check_div_by_zero; eauto.
   - intros [] [].
     eapply pure_ret; last eauto.
@@ -519,12 +563,8 @@ Lemma pure_eval_mod `{Encode B} η e1 e2 (φ1 φ2 φ : Z -> Prop) (ζ : B → Pr
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (z1 `rem` z2)) →
   pure (eval η (EIntMod e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval. eapply pure_bind.
-  instantiate (1:= λ '(z1, z2), φ1 z1 ∧ φ2 z2).
-
-  eapply pure_par_as_int; eauto.
-  intros (i1, i2) (Hφ1 & Hφ2).
-  eapply pure_bind.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 Hφ1 Hφ2. eapply pure_bind.
   - apply pure_check_div_by_zero; eauto.
   - intros [] [].
     eapply pure_ret; last eauto.
@@ -560,12 +600,8 @@ Lemma pure_eval_land `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → 
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.land z1 z2)) →
   pure (eval η (EIntLand e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ (Z.land z1 z2)).
-    eapply pure_par_as_int; eauto. }
-  intros [??] ?.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* EIntLor  (e1 e2 : expr) *)
@@ -576,12 +612,8 @@ Lemma pure_eval_lor `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.lor z1 z2)) →
   pure (eval η (EIntLor e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ (Z.lor z1 z2)).
-    eapply pure_par_as_int; eauto. }
-  intros [??] ?.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* EIntLxor (e1 e2 : expr) *)
@@ -592,12 +624,8 @@ Lemma pure_eval_lxor `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → 
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.lxor z1 z2)) →
   pure (eval η (EIntLxor e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ (Z.lxor z1 z2)).
-    eapply pure_par_as_int; eauto. }
-  intros [??] ?.
-  eapply pure_ret; eauto with encode.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. eapply pure_ret; eauto with encode.
 Qed.
 
 (* EIntLnot (e : expr) *)
@@ -607,9 +635,8 @@ Lemma pure_eval_lnot `{Encode B} η e1 (φ1 φ : Z → Prop) (ζ : B → Prop) :
   (∀ z1, φ1 z1 → φ (Z.lnot z1)) →
   pure (eval η (EIntLnot e1)) φ ζ.
 Proof.
-  intros He1%pure_as_int Hp. simpl_eval.
-  eapply pure_bind; eauto. intros ??.
-  eapply pure_ret; eauto.
+  intros He1 Hp. eapply pure_eval_un_op_int; [ done | eauto | ].
+  intros z ?. eapply pure_ret; eauto.
   encode.
 Qed.
 
@@ -623,12 +650,8 @@ Lemma pure_eval_lsl `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.shiftl z1 z2)) →
   pure (eval η (EIntLsl e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ1 z1 ∧ φ2 z2).
-    eapply pure_par_as_int; eauto. }
-  intros [??] [??].
-  apply pure_if_in_shift_range; auto.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. apply pure_if_in_shift_range; auto.
   eapply pure_ret; eauto with encode.
 Qed.
 
@@ -642,12 +665,8 @@ Lemma pure_eval_lsr `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.shiftr z1 z2)) →
   pure (eval η (EIntLsr e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ1 z1 ∧ φ2 z2).
-    eapply pure_par_as_int; eauto. }
-  intros [??] [??].
-  apply pure_if_in_shift_range; auto.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. apply pure_if_in_shift_range; auto.
   eapply pure_ret; eauto with encode.
 Qed.
 
@@ -661,12 +680,8 @@ Lemma pure_eval_asr `{Encode B} η e1 e2 (φ1 φ2 φ : Z → Prop) (ζ : B → P
   (∀ z1 z2, φ1 z1 → φ2 z2 → φ (Z.shiftr z1 z2)) →
   pure (eval η (EIntAsr e1 e2)) φ ζ.
 Proof.
-  intros. simpl_eval.
-  eapply pure_bind.
-  { instantiate (1:=λ '(z1,z2), φ1 z1 ∧ φ2 z2).
-    eapply pure_par_as_int; eauto. }
-  intros [??] [??].
-  apply pure_if_in_shift_range; auto.
+  intros. eapply pure_eval_bin_op_int; [ done | eauto | eauto | ].
+  intros z1 z2 ??. apply pure_if_in_shift_range; auto.
   eapply pure_ret; eauto with encode.
 Qed.
 

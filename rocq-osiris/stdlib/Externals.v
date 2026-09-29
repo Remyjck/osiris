@@ -62,8 +62,8 @@ Section ExternalsDef.
   (* ------------------------------------------------------------------------ *)
   (* Content of Externals used in [stdlib/int.ml]. *)
 
-  Definition Externals__negint : val := VEta1 EIntNeg.
-  Definition Externals__addint : val := VEta2 EIntAdd.
+  Definition Externals__negint : val := VEta1 (EUnOp UNeg).
+  Definition Externals__addint : val := VEta2 (EBinOp BAdd).
 
   Lemma add_spec :
     ⊢ □ {{ True }} Externals__addint i j : Z Z {{ RET (n : Z); ⌜(n = i + j)%Z⌝ }}.
@@ -82,7 +82,7 @@ Section ExternalsDef.
     - iIntros "!>" (??) "-> ->". done.
   Qed.
 
-  Definition Externals__subint : val := VEta2 EIntSub.
+  Definition Externals__subint : val := VEta2 (EBinOp BSub).
 
   Lemma sub_spec :
     ⊢ □ {{ True }} Externals__subint i j : Z Z {{ RET (n : Z); ⌜(n = i - j)%Z⌝ }}.
@@ -101,18 +101,18 @@ Section ExternalsDef.
     - iIntros "!>" (??) "-> ->". done.
   Qed.
 
-  Definition Externals__mulint : val := VEta2 EIntMul.
-  Definition Externals__divint : val := VEta2 EIntDiv.
-  Definition Externals__modint : val := VEta2 EIntMod.
+  Definition Externals__mulint : val := VEta2 (EBinOp BMul).
+  Definition Externals__divint : val := VEta2 (EBinOp BDiv).
+  Definition Externals__modint : val := VEta2 (EBinOp BMod).
   Definition Externals__succint : val :=
     VEta1 (fun x => EIntAdd x (EInt 1)).
   Definition Externals__predint : val :=
     VEta1 (fun x => EIntSub x (EInt 1)).
 
-  Definition Externals__lessthan : val := VEta2 EOpLt.
-  Definition Externals__greaterthan : val := VEta2 EOpGt.
-  Definition Externals__lessequal : val := VEta2 EOpLe.
-  Definition Externals__greaterequal : val := VEta2 EOpGe.
+  Definition Externals__lessthan : val := VEta2 (EBinOp BLt).
+  Definition Externals__greaterthan : val := VEta2 (EBinOp BGt).
+  Definition Externals__lessequal : val := VEta2 (EBinOp BLe).
+  Definition Externals__greaterequal : val := VEta2 (EBinOp BGe).
 
   (* The following names are used in [stdlib/int.ml], but they are not supported
      yet: - %andint
@@ -130,7 +130,7 @@ Section ExternalsDef.
 
   (* On Booleans. *)
 
-  Definition Externals__boolnot : val := VEta1 EBoolNeg.
+  Definition Externals__boolnot : val := VEta1 (EUnOp UNot).
 
   (* ------------------------------------------------------------------------ *)
 
@@ -154,8 +154,8 @@ Section ExternalsDef.
     VClo [] $ AnonFun "_" $ EUnit.
 
   (* Comparison. *)
-  Definition Externals__eq : val := VEta2 EOpEq.
-  Definition Externals__ne : val := VEta2 EOpNe.
+  Definition Externals__eq : val := VEta2 (EBinOp BEq).
+  Definition Externals__ne : val := VEta2 (EBinOp BNe).
 
   (* ------------------------------------------------------------------------ *)
 

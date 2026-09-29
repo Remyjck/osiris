@@ -200,6 +200,39 @@ Section imp_rules_expr.
     iFrame.
   Qed.
 
+  (** * EUnOp : un_op → expr → expr *)
+  (** * EBinOp : bin_op → expr → expr → expr *)
+
+  (* [EBinOp] evaluates its two operands in parallel and then hands the
+     resulting values to [eval_bin_op]; [EUnOp] is the unary counterpart.
+     These two rules expose exactly that structure and leave the operator
+     itself to the caller. Every per-operator rule below is an instance:
+     applying [eval_bin_op] to encoded values reduces away the [val_as_int]
+     (or [val_as_bool]) coercions it performs. *)
+
+  Lemma imp_EUnOp `{Encode B, Encode A} {ζ}
+    (Φ' : B → iProp Σ) (Φ : A → iProp Σ) η op e :
+    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ' }} -∗
+    (∀ a, Φ' a -∗ EWP eval_un_op op #a @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
+    EWP eval η (EUnOp op e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+  Proof.
+    iIntros "He Hcon". simpl_eval.
+    iApply (imp_bind with "He"). iIntros (a) "HΦ'".
+    by iApply "Hcon".
+  Qed.
+
+  Lemma imp_EBinOp `{Encode A1, Encode A2, Encode A} {ζ}
+    (Φ1 : A1 → iProp Σ) (Φ2 : A2 → iProp Σ) (Φ : A → iProp Σ) η op e1 e2 :
+    EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
+    EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
+    (∀ a1 a2, Φ1 a1 -∗ Φ2 a2 -∗
+              ▷ EWP eval_bin_op op #a1 #a2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
+    EWP eval η (EBinOp op e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+  Proof.
+    iIntros "H1 H2 Hjoin". simpl_eval.
+    iApply (imp_bind_par with "H1 H2 Hjoin").
+  Qed.
+
   (** * EBoolConj : expr → expr → expr *)
   (** * EBoolDisj : expr → expr → expr *)
   (** * EBoolNeg : expr → expr *)
@@ -209,11 +242,11 @@ Section imp_rules_expr.
     impure E (eval η (EBoolNeg e)) Ψ ζ Φ.
   Proof.
     iIntros "He".
-    simpl_eval.
-    iApply (imp_bind with "[He]").
-    { iApply (imp_as_bool with "He"). }
+    iApply (imp_EUnOp with "He").
     iIntros (b) "HΦ".
-    iApply (imp_ret with "HΦ"); first encode.
+    (* [val_as_bool] reduces once the Boolean is known. *)
+    destruct b; simpl; rewrite bind_ret;
+      iApply (imp_ret with "HΦ"); encode.
   Qed.
 
   (* [e1 || e2] short-circuits: [e2] is evaluated only when [e1] yields
@@ -263,9 +296,8 @@ Section imp_rules_expr.
     (∀ i, Φ1 i -∗ Φ (- i)) -∗
     EWP eval η (EIntNeg e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "He Hcon". simpl_eval.
-    iApply (imp_bind with "[He]").
-    { iApply (imp_as_int with "He"). }
+    iIntros "He Hcon".
+    iApply (imp_EUnOp with "He").
     iIntros (i) "HΦ1".
     iApply imp_ret; first encode.
     iApply ("Hcon" with "HΦ1").
@@ -279,10 +311,8 @@ Section imp_rules_expr.
     ▷ (∀ i j, Φ1 i -∗ Φ2 j -∗ Φ (i + j)) -∗
     EWP eval η (EIntAdd e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "H1 H2 Hjoin /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_int with "H1"). }
-    { iApply (imp_as_int with "H2"). }
+    iIntros "H1 H2 Hjoin /=".
+    iApply (imp_EBinOp with "H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iApply imp_ret. encode.
     iApply ("Hjoin" with "HΦ1 HΦ2").
@@ -295,13 +325,8 @@ Section imp_rules_expr.
     ▷ (∀ i j, Φ1 i -∗ Φ2 j -∗ Φ (i + j)) -∗
     EWP eval η (EIntAdd e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ i, Φ i ∗ P }}.
   Proof.
-    iIntros "P H1 H2 Hjoin /=". rewrite -{3}fold_pre_eval /= !fold_pre_eval.
-    fold (as_int (eval η e1)) (as_int (eval η e2)).
-    iApply (imp_bind_par_frac with "P [H1] [H2]").
-    { iIntros "Q". iSpecialize ("H1" with "Q").
-      iApply (imp_as_int with "H1"). }
-    { iIntros "Q". iSpecialize ("H2" with "Q").
-      iApply (imp_as_int with "H2"). }
+    iIntros "P H1 H2 Hjoin /=". simpl_eval.
+    iApply (imp_bind_par_frac with "P H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iApply imp_ret. encode.
     iApply ("Hjoin" with "HΦ1 HΦ2").
@@ -326,10 +351,8 @@ Section imp_rules_expr.
     ▷ (∀ i j, Φ1 i -∗ Φ2 j -∗ Φ (i - j)) -∗
     EWP eval η (EIntSub e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "H1 H2 Hjoin /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_int with "H1"). }
-    { iApply (imp_as_int with "H2"). }
+    iIntros "H1 H2 Hjoin /=".
+    iApply (imp_EBinOp with "H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iApply imp_ret. encode.
     iApply ("Hjoin" with "HΦ1 HΦ2").
@@ -343,10 +366,8 @@ Section imp_rules_expr.
     ▷ (∀ i j, Φ1 i -∗ Φ2 j -∗ Φ (i * j)) -∗
     EWP eval η (EIntMul e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "H1 H2 Hjoin /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_int with "H1"). }
-    { iApply (imp_as_int with "H2"). }
+    iIntros "H1 H2 Hjoin /=".
+    iApply (imp_EBinOp with "H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iApply imp_ret. encode.
     iApply ("Hjoin" with "HΦ1 HΦ2").
@@ -359,13 +380,8 @@ Section imp_rules_expr.
     ▷ (∀ i j, Φ1 i -∗ Φ2 j -∗ Φ (i * j)) -∗
     EWP eval η (EIntMul e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ i, Φ i ∗ P }}.
   Proof.
-    iIntros "P H1 H2 Hjoin /=". rewrite -{3}fold_pre_eval /= !fold_pre_eval.
-    fold (as_int (eval η e1)) (as_int (eval η e2)).
-    iApply (imp_bind_par_frac with "P [H1] [H2]").
-    { iIntros "Q". iSpecialize ("H1" with "Q").
-      iApply (imp_as_int with "H1"). }
-    { iIntros "Q". iSpecialize ("H2" with "Q").
-      iApply (imp_as_int with "H2"). }
+    iIntros "P H1 H2 Hjoin /=". simpl_eval.
+    iApply (imp_bind_par_frac with "P H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iApply imp_ret. encode.
     iApply ("Hjoin" with "HΦ1 HΦ2").
@@ -391,14 +407,13 @@ Section imp_rules_expr.
               ⌜representable i⌝ ∧ ⌜representable j⌝ ∧ ⌜j ≠ 0⌝ ∧ Φ (i `quot` j)) -∗
     EWP eval η (EIntDiv e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "H1 H2 Hjoin /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_int with "H1"). }
-    { iApply (imp_as_int with "H2"). }
+    iIntros "H1 H2 Hjoin /=".
+    iApply (imp_EBinOp with "H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iDestruct ("Hjoin" with "HΦ1 HΦ2")
       as "(%Hrepr1 & %Hrepr2 & %Hneq & HΦ)".
-    rewrite /continue /=.
+    (* Reduce the [val_as_int] coercions performed by [eval_bin_op]. *)
+    rewrite /continue /eval_bin_op as_ints_VInt.
     iApply imp_bind.
     { rewrite /check_div_by_zero /=.
       rewrite eq_repr_repr; try representable.
@@ -418,14 +433,13 @@ Section imp_rules_expr.
               ⌜representable i⌝ ∧ ⌜representable j⌝ ∧ ⌜j ≠ 0⌝ ∧ Φ (i `rem` j)) -∗
     EWP eval η (EIntMod e1 e2) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "H1 H2 Hjoin /=". simpl_eval.
-    iApply (imp_bind_par with "[H1] [H2]").
-    { iApply (imp_as_int with "H1"). }
-    { iApply (imp_as_int with "H2"). }
+    iIntros "H1 H2 Hjoin /=".
+    iApply (imp_EBinOp with "H1 H2").
     iIntros (i j) "HΦ1 HΦ2 !>".
     iDestruct ("Hjoin" with "HΦ1 HΦ2")
       as "(%Hrepr1 & %Hrepr2 & %Hneq & HΦ)".
-    rewrite /continue /=.
+    (* Reduce the [val_as_int] coercions performed by [eval_bin_op]. *)
+    rewrite /continue /eval_bin_op as_ints_VInt.
     iApply imp_bind.
     { rewrite /check_div_by_zero /=.
       rewrite eq_repr_repr; try representable.

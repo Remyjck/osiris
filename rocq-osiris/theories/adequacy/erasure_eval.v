@@ -401,6 +401,43 @@ Qed.
 
 (* -------------------------------------------------------------------------- *)
 
+(** ** Primitive operators. *)
+
+(* Both operators are applied to already-evaluated values, so erasure commutes
+   with them for a trivial reason: neither inspects a prophecy. *)
+
+Lemma erase_eval_un_op op v :
+  erase_microvx (eval_un_op op v) (eval_un_op op (erase_val v)).
+Proof.
+  destruct op; simpl.
+  - eapply erase_bind; [ apply erase_val_as_int | ]. intros i.
+    exact (EM_Ret erase_val erase_val (VInt (int.neg i))).
+  - eapply erase_bind; [ apply erase_val_as_int | ]. intros i.
+    exact (EM_Ret erase_val erase_val (VInt (int.lnot i))).
+  - eapply erase_bind; [ apply erase_val_as_bool | ]. intros b.
+    exact (EM_Ret erase_val erase_val (VBool (negb b))).
+Qed.
+
+Lemma erase_eval_bin_op op v1 v2 :
+  erase_microvx
+    (eval_bin_op op v1 v2) (eval_bin_op op (erase_val v1) (erase_val v2)).
+Proof.
+  (* The integer operators all share the [as_ints] prefix; the comparison
+     operators each delegate to a [_val] function handled above. *)
+  destruct op; simpl; unfold as_ints;
+    try (eapply erase_bind; [ apply erase_val_as_int | ]; intros i1;
+         eapply erase_bind; [ apply erase_val_as_int | ]; intros i2);
+    try (eapply erase_bind;
+         [ first [ apply erase_check_div_by_zero | apply erase_phys_eq_val
+                 | apply erase_eq_val | apply erase_ne_val | apply erase_lt_val
+                 | apply erase_le_val | apply erase_gt_val | apply erase_ge_val ]
+         | ]; intros []);
+    try apply erase_if_in_shift_range;
+    exact (EM_Ret erase_val erase_val _).
+Qed.
+
+(* -------------------------------------------------------------------------- *)
+
 (** ** Effects and continuations. *)
 
 Lemma erase_perform v : erase_microvx (perform v) (perform (erase_val v)).
@@ -1190,135 +1227,26 @@ Proof.
     simpl_eval;
     eapply erase_bind; [ apply erase_as_bool, IHe0_1 | ]; intros b; ee_pair;
     destruct b; [ ee_ret | apply IHe0_2 ].
-  - (* EBoolNeg *)
+  - (* EUnOp *)
     simpl_eval;
-    eapply erase_bind; [ apply erase_as_bool, IHe0 | ]; intros b; ee_pair;
-    ee_ret.
+    eapply erase_bind; [ apply IHe0 | ]; intros v; ee_pair;
+    apply erase_eval_un_op.
+  - (* EBinOp *)
+    simpl_eval;
+    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
+    intros [ v1 v2 ]; ee_pair; apply erase_eval_bin_op.
   - (* EInt *)
     simpl_eval; ee_ret.
   - (* EMaxInt *)
     simpl_eval; ee_ret.
   - (* EMinInt *)
     simpl_eval; ee_ret.
-  - (* EIntNeg *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_as_int, IHe0 | ]; intros i; ee_pair;
-    ee_ret.
-  - (* EIntAdd *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntSub *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntMul *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntDiv *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_check_div_by_zero | ]; intros []; ee_pair;
-    ee_ret.
-  - (* EIntMod *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_check_div_by_zero | ]; intros []; ee_pair;
-    ee_ret.
-  - (* EIntLand *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntLor *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntLxor *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; ee_ret.
-  - (* EIntLnot *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_as_int, IHe0 | ]; intros i; ee_pair;
-    ee_ret.
-  - (* EIntLsl *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; apply erase_if_in_shift_range; ee_ret.
-  - (* EIntLsr *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; apply erase_if_in_shift_range; ee_ret.
-  - (* EIntAsr *)
-    simpl_eval;
-    eapply erase_bind;
-      [ apply erase_par;
-          [ apply erase_as_int, IHe0_1 | apply erase_as_int, IHe0_2 ] | ];
-    intros [ i1 i2 ]; ee_pair; apply erase_if_in_shift_range; ee_ret.
   - (* EFloat *)
     simpl_eval; ee_ret.
   - (* EChar *)
     simpl_eval; ee_ret.
   - (* EString *)
     simpl_eval; ee_ret.
-  - (* EOpPhysEq *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_phys_eq_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpEq *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_eq_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpNe *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_ne_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpLt *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_lt_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpLe *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_le_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpGt *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_gt_val | ]; intros b; ee_pair; ee_ret.
-  - (* EOpGe *)
-    simpl_eval;
-    eapply erase_bind; [ apply erase_par; [ apply IHe0_1 | apply IHe0_2 ] | ];
-    intros [ v1 v2 ]; ee_pair;
-    eapply erase_bind; [ apply erase_ge_val | ]; intros b; ee_pair; ee_ret.
   - (* ELet *)
     simpl_eval;
     eapply erase_bind; [ apply erase_eval_bindings, H | ];

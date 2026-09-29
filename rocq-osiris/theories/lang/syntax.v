@@ -200,6 +200,34 @@ Inductive proph_arg :=
 
 (* ------------------------------------------------------------------------ *)
 
+(* Primitive operators. *)
+
+(* A binary operator is a strict, effect-free primitive: both of its operands
+   are evaluated (in parallel: see [EBinOp] in [eval.v]) before the operator
+   itself is applied to the resulting values. The short-circuiting Boolean
+   connectives [&&] and [||] are therefore *not* binary operators; they remain
+   separate constructs ([EBoolConj] and [EBoolDisj]). *)
+
+Inductive bin_op :=
+  (* Integer arithmetic. *)
+  | BAdd | BSub | BMul | BDiv | BMod
+  (* Integer logical operations. *)
+  | BLand | BLor | BLxor | BLsl | BLsr | BAsr
+  (* Physical equality [==]. *)
+  | BPhysEq
+  (* Polymorphic structural comparison. *)
+  | BEq | BNe | BLt | BLe | BGt | BGe.
+
+(* A unary operator is subject to the same discipline. *)
+
+Inductive un_op :=
+  (* Integer negation and bitwise complement. *)
+  | UNeg | ULnot
+  (* Boolean negation. *)
+  | UNot.
+
+(* ------------------------------------------------------------------------ *)
+
 (* Expressions. *)
 
 Inductive expr :=
@@ -253,30 +281,20 @@ Inductive expr :=
   | EFreeze (e : expr)
   | EUnfreeze (e : expr)
 
-  (* Boolean conjunction, disjunction, and negation. *)
+  (* Boolean conjunction and disjunction. These short-circuit, so they are
+     not binary operators: see [bin_op]. *)
   | EBoolConj (e1 e2 : expr)
   | EBoolDisj (e1 e2 : expr)
-  | EBoolNeg (e : expr)
+
+  (* Application of a unary operator: [op e]. *)
+  | EUnOp (op : un_op) (e : expr)
+  (* Application of a binary operator: [e1 op e2]. *)
+  | EBinOp (op : bin_op) (e1 e2 : expr)
 
   (* Integer literals. *)
   | EInt (i : Z)
   | EMaxInt
   | EMinInt
-  (* Integer arithmetic. *)
-  | EIntNeg (e : expr)
-  | EIntAdd (e1 e2 : expr)
-  | EIntSub (e1 e2 : expr)
-  | EIntMul (e1 e2 : expr)
-  | EIntDiv (e1 e2 : expr)
-  | EIntMod (e1 e2 : expr)
-  (* Integer logical operations. *)
-  | EIntLand (e1 e2 : expr)
-  | EIntLor  (e1 e2 : expr)
-  | EIntLxor (e1 e2 : expr)
-  | EIntLnot (e : expr)
-  | EIntLsl  (e1 e2 : expr)
-  | EIntLsr  (e1 e2 : expr)
-  | EIntAsr  (e1 e2 : expr)
 
   (* Floating-point literals. *)
   | EFloat (f : float)
@@ -286,15 +304,6 @@ Inductive expr :=
 
   (* String literals. *)
   | EString (s: string)
-
-  (* Polymorphic comparison operators. *)
-  | EOpPhysEq (e1 e2 : expr)
-  | EOpEq (e1 e2 : expr)
-  | EOpNe (e1 e2 : expr)
-  | EOpLt (e1 e2 : expr)
-  | EOpLe (e1 e2 : expr)
-  | EOpGt (e1 e2 : expr)
-  | EOpGe (e1 e2 : expr)
 
   (* Non-recursive local definition: [let bs in e]. *)
   | ELet (bs : list binding) (e : expr)
@@ -542,6 +551,38 @@ Definition envs := (env * env)%type.
 (* Core sugar, used in eval.v. *)
 
 (* More sugar is defined in sugar.v. *)
+
+(* Primitive operators. *)
+
+(* [EUnOp] and [EBinOp] subsume what used to be one expression constructor per
+   operator. These abbreviations restore the old names: they are accepted both
+   in terms and in patterns, so the translator, the notations of [notations.v]
+   and the reasoning rules can keep spelling out [EIntAdd e1 e2] and friends. *)
+
+Abbreviation EIntNeg e := (EUnOp UNeg e).
+Abbreviation EIntLnot e := (EUnOp ULnot e).
+Abbreviation EBoolNeg e := (EUnOp UNot e).
+
+Abbreviation EIntAdd e1 e2 := (EBinOp BAdd e1 e2).
+Abbreviation EIntSub e1 e2 := (EBinOp BSub e1 e2).
+Abbreviation EIntMul e1 e2 := (EBinOp BMul e1 e2).
+Abbreviation EIntDiv e1 e2 := (EBinOp BDiv e1 e2).
+Abbreviation EIntMod e1 e2 := (EBinOp BMod e1 e2).
+
+Abbreviation EIntLand e1 e2 := (EBinOp BLand e1 e2).
+Abbreviation EIntLor  e1 e2 := (EBinOp BLor e1 e2).
+Abbreviation EIntLxor e1 e2 := (EBinOp BLxor e1 e2).
+Abbreviation EIntLsl  e1 e2 := (EBinOp BLsl e1 e2).
+Abbreviation EIntLsr  e1 e2 := (EBinOp BLsr e1 e2).
+Abbreviation EIntAsr  e1 e2 := (EBinOp BAsr e1 e2).
+
+Abbreviation EOpPhysEq e1 e2 := (EBinOp BPhysEq e1 e2).
+Abbreviation EOpEq e1 e2 := (EBinOp BEq e1 e2).
+Abbreviation EOpNe e1 e2 := (EBinOp BNe e1 e2).
+Abbreviation EOpLt e1 e2 := (EBinOp BLt e1 e2).
+Abbreviation EOpLe e1 e2 := (EBinOp BLe e1 e2).
+Abbreviation EOpGt e1 e2 := (EBinOp BGt e1 e2).
+Abbreviation EOpGe e1 e2 := (EBinOp BGe e1 e2).
 
 (* Unit. *)
 
