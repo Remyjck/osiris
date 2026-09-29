@@ -20,31 +20,34 @@ Section atomic_proofs.
   (* The logically-atomic specification of [Atomic.Loc.compare_and_set]
      at inline-record values. *)
 
-  Definition compare_and_set_spec `{InlineEncode A} (l : loc) (seen v' : A)
-      (m : microvx) : iProp Σ :=
-    ∀ (E2 : coPset) (Φ : bool → iProp Σ),
-      ▷ (|={⊤,E2}=>
-           ∃ (a : A) dq1 dq2 t,
-             ▷ l ↦ #a ∗ ▷ isBlock (inline_blk a) dq1 t ∗
-             ▷ isBlock (inline_blk seen) dq2 Mut ∗
-             ▷ (l ↦ #(if locations.eqb (inline_blk a) (inline_blk seen)
-                      then v' else a) -∗
-                isBlock (inline_blk a) dq1 t -∗
-                isBlock (inline_blk seen) dq2 Mut -∗
-                |={E2,⊤}=>
-                  Φ (locations.eqb (inline_blk a) (inline_blk seen)))) -∗
-      EWP m {{ Φ }}.
+  Definition compare_and_set_spec compare_and_set : iProp Σ :=
+  □ ∀∀ `(TaggedEncode A);
+  {{ ∀ E2 Φ;
+     ▷ (|={⊤, E2}=>
+        ∃ (a : A) dq1 dq2 t,
+          ▷ l ↦ₗ #a ∗ ▷ blockTag (tagged_blk a) dq1 t ∗
+          ▷ blockTag (tagged_blk seen) dq2 Mut ∗
+          ▷ (l ↦ₗ #(if locations.eqb (tagged_blk a) (tagged_blk seen) then
+                      v'
+                    else
+                      a) -∗
+            blockTag (tagged_blk a) dq1 t -∗
+            blockTag (tagged_blk seen) dq2 Mut -∗
+            |={E2, ⊤}=>
+              Φ (locations.eqb (tagged_blk a) (tagged_blk seen)))) }}
+  compare_and_set l seen v' : loc A A
+  {{ RET b; Φ b }}.
 
   Lemma imp_Loc_compare_and_set η :
     ⊢ EWP (eval η (EAnonFun __Loc_fun5))
-        {{ c, □ ∀ A `(InlineEncode A), iSpec τ[loc; A; A] c compare_and_set_spec }}.
+        {{ compare_and_set_spec }}.
   Proof.
-    iApply (imp_EAnon_poly_str_pers (λ A HA, @InlineEncode A HA)).
+    unfold compare_and_set_spec.
+    iApply imp_EAnon_poly; simpl.
     iIntros "!>" (A HencA HinlA). simpl.
     iIntros (l seen v').
-    unfold compare_and_set_spec.
     iIntros (E2 Φ) "Hfupd".
-    iApply imp_please; iNext.
+    iApply imp_please; iNext. unfold deco.
     iApply (imp_cas_inline_atomic E2 ⊤ _ _ _ _
               (λ l0 : loc, ⌜l0 = l⌝)%I (λ s : val, ⌜s = #seen⌝)%I
               (λ w : val, ⌜w = #v'⌝)%I
@@ -57,15 +60,15 @@ Section atomic_proofs.
     iModIntro.
     iIntros (l0 s w) "-> -> ->".
     iDestruct "Hfupd" as (a dq1 dq2 t) "(Hl & Hr & Hrs & Hk)".
-    iExists (inline_tag a), (inline_tag seen),
-            (inline_blk a), (inline_blk seen), dq1, dq2, t.
-    iSplitR; first by rewrite (inline_encode_eq seen).
-    rewrite -(inline_encode_eq a).
+    iExists (tagged_tag a), (tagged_tag seen),
+            (tagged_blk a), (tagged_blk seen), dq1, dq2, t.
+    iSplitR; first by rewrite (tagged_encode_eq seen).
+    rewrite -(tagged_encode_eq a).
     iFrame "Hl Hr Hrs".
     iNext. iIntros "Hl Hr Hrs".
     (* The two shapes of the written value differ only by where the [if]
        sits, inside or outside the encoding. *)
-    destruct (locations.eqb (inline_blk a) (inline_blk seen));
+    destruct (locations.eqb (tagged_blk a) (tagged_blk seen));
       iApply ("Hk" with "Hl Hr Hrs").
   Qed.
 
@@ -78,9 +81,7 @@ Section atomic_proofs.
 
   Definition atomic_loc_module_spec : env → iProp Σ :=
     (context [
-         var_spec "compare_and_set"
-           (λ cas, □ ∀ A `(InlineEncode A),
-                     iSpec τ[loc; A; A] cas compare_and_set_spec)
+         var_spec "compare_and_set" compare_and_set_spec
       ] atomic_loc_module_dom)%I.
 
   Definition atomic_module_dom : gset var :=
@@ -109,9 +110,7 @@ Section atomic_proofs.
       iApply (imp_sitems_external (λ _, True)%I).
       { admit. }
       iIntros (exchange) "_".
-      iApply (imp_sitems_external
-                (λ cas, □ ∀ A `(InlineEncode A),
-                          iSpec τ[loc; A; A] cas compare_and_set_spec)%I).
+      iApply (imp_sitems_external compare_and_set_spec).
       { iApply imp_Loc_compare_and_set. }
       iIntros (cas) "#Hcas".
       iApply (imp_sitems_external (λ _, True)%I).
@@ -163,9 +162,7 @@ Section atomic_proofs.
      top-level alias such as [let cas = Atomic.Loc.compare_and_set]. *)
   Lemma atomic_cas_path_spec η :
     in_env "Atomic" atomic_module_spec η -∗
-    path_spec ["Atomic"; "Loc"; "compare_and_set"]
-      (λ cas, □ ∀ A `(InlineEncode A),
-                iSpec τ[loc; A; A] cas compare_and_set_spec)%I η.
+    path_spec ["Atomic"; "Loc"; "compare_and_set"] compare_and_set_spec η.
   Proof.
     iIntros "(%δA & %HA & #HAspec)".
     rewrite /atomic_module_spec /atomic_loc_module_spec /context /=.

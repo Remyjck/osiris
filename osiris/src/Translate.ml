@@ -398,7 +398,7 @@ let rec translate_pat (pat: pattern) : pat =
       (* An inline-record constructor pattern has exactly one argument:
          a pattern for the record itself. *)
       match pats with
-      | [ p ] -> PInline (data, translate_pat p)
+      | [ p ] -> PTaggedRecord (data, translate_pat p)
       | _ -> assert false
     else
       let tuple = translate_pats pats in
@@ -460,6 +460,26 @@ let apply e1 e2 =
 
 let apply e1 e2s =
   List.fold_left apply e1 e2s
+
+(* -------------------------------------------------------------------------- *)
+
+(* References. *)
+
+(* A reference, like an [Atomic.t], is a mutable record with a single
+   field. Allocation, lookup and assignment keep their own nodes; the
+   atomic operations act on the location of that field. *)
+
+let make_ref e =
+  ERef e
+
+let load_ref e =
+  ELoad e
+
+let store_ref e1 e2 =
+  EStore (e1, e2)
+
+let field_loc_ref e =
+  EAtomicLoc (e, 0)
 
 (* -------------------------------------------------------------------------- *)
 
@@ -685,12 +705,20 @@ and translate_stdlib_application loc path args =
       EContinue (e1, e2)
   | ["Stdlib"; "Effect"; "Deep"; "discontinue"], [e1; e2] ->
       EDiscontinue (e1, e2)
+  (* [Atomic.t] is a record with one atomic field (see the standard
+     library's [atomic.ml]). *)
   | ["Stdlib"; "Atomic"; "make"], [e] ->
-      ERef e
+      make_ref e
+  | ["Stdlib"; "Atomic"; "get"], [e] ->
+      load_ref e
   | ["Stdlib"; "Atomic"; "set"], [e1; e2] ->
-      EStore (e1, e2)
+      store_ref e1 e2
+  | ["Stdlib"; "Atomic"; "exchange"], [e1; e2] ->
+      EExchange (field_loc_ref e1, e2)
   | ["Stdlib"; "Atomic"; "compare_and_set"], [e1; e2; e3] ->
-      ECAS (e1, e2, e3)
+      ECAS (field_loc_ref e1, e2, e3)
+  | ["Stdlib"; "Atomic"; "fetch_and_add"], [e1; e2] ->
+      EFAA (field_loc_ref e1, e2)
   (* [Proph.create ()] allocates a prophecy variable. The module's own
      definition is never the one that is verified: it exists so that an
      annotated program still compiles and runs. *)
@@ -809,28 +837,22 @@ and translate_primitive_application loc path p args =
   (* References. *)
 
   | ["Stdlib"; "ref"], "%makemutable", [e] ->
-      ERef e
+      make_ref e
   | ["Stdlib"; "!"], "%field0", [e] ->
-      ELoad e
+      load_ref e
   | ["Stdlib"; ":="], "%setfield0", [e1; e2] ->
-      EStore (e1, e2)
+      store_ref e1 e2
 
   (* Atomic references. *)
   | ["Stdlib"; "Atomic"; "ignore"], "%ignore", [e] ->
       EIgnore e
-  | ["Stdlib"; "Atomic"; "get"], "%atomic_load_loc", [e] ->
-      ELoad e
-  | ["Stdlib"; "Atomic"; "exchange"], "%atomic_exchange_loc", [e1; e2] ->
-      EExchange (e1, e2)
-  | ["Stdlib"; "Atomic"; "compare_and_set"], "%atomic_cas_loc", [e1; e2; e3] ->
-      ECAS (e1, e2, e3)
 
   (* Atomic field locations. These primitives are recognized regardless of
      the path through which they are named, e.g. [Atomic.Loc.get] in the
      standard library or a local alias. Their first argument is an atomic
-     location, that is, a value of the form [VLoc l]. *)
+     location, that is, a value of the form [VFieldLoc l]. *)
   | _, "%atomic_load_loc", [e] ->
-      ELoad e
+      EFieldLoad e
   | _, "%atomic_exchange_loc", [e1; e2] ->
       EExchange (e1, e2)
   | _, "%atomic_cas_loc", [e1; e2; e3] ->
@@ -1134,14 +1156,14 @@ and translate_primitive_expr prim_name args =
   (* References. *)
 
   | "%makemutable", [e] ->
-      ERef e
+      make_ref e
   | "%setfield0", [e1; e2] ->
-      EStore (e1, e2)
+      store_ref e1 e2
 
   (* Atomic field locations. *)
 
   | "%atomic_load_loc", [e] ->
-      ELoad e
+      EFieldLoad e
   | "%atomic_exchange_loc", [e1; e2] ->
       EExchange (e1, e2)
   | "%atomic_cas_loc", [e1; e2; e3] ->

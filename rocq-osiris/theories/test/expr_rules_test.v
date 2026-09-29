@@ -10,8 +10,8 @@ Context `{!osirisGS Σ}.
 (* iApply-ing it will fail without providing much information if [R] or [v]
    depends on a variable [y] that was created after the creation of the evar, in
    which case, instantiate the evar with something like [λx, ∃y, ⌜x = y⌝ ∗ R] *)
-Lemma imp_ret_eq `{Encode A} {E} {Ψ} (v : A) :
-  ⊢ EWP (@Ret val E #v) <|Ψ|> {{ x, ⌜x = v⌝ }}.
+Lemma imp_ret_eq `{Encode A} {Ψ} (v : A) :
+  ⊢ EWP (@Ret val exn #v) <|Ψ|> {{ x, ⌜x = v⌝ }}.
 Proof.
   iApply imp_ret; auto.
 Qed.
@@ -35,100 +35,103 @@ Proof.
   auto.
 Qed.
 
+(* References are one-field mutable records: [ref e], [!e] and [e1 := e2]
+   are [ERef e], [ELoad e] and [EStore e1 e2]. *)
+
 (* [ref 1] *)
 
 Lemma example_ref_1 η:
-  ⊢ EWP (eval η (ERef (EInt 1))) {{ (l : loc), l ↦ #1%Z }}.
+  ⊢ EWP (eval η (ERef (EInt 1))) {{ (r : record), r ↦ #1%Z }}.
 Proof.
   imp_ref.
 Qed.
 
 (* [!x] *)
-Lemma example_load η x l v :
-  l ↦ #v ⊢ EWP (eval (x~>#l; η) (ELoad (EVar x))) {{ v', ⌜v' = v⌝ ∗ l ↦ v }}.
+Lemma example_load η x (r : record) v :
+  r ↦ #v ⊢ EWP (eval (x~>#r; η) (ELoad (EVar x))) {{ v', ⌜v' = v⌝ ∗ r ↦ v }}.
 Proof.
-  iIntros "Hl".
-  imp_load l.
+  iIntros "Hr".
+  imp_step.
 Qed.
 
 (* [x := 2] *)
-Lemma example_store η x l :
-  lookup_name η x = Some #l ->
-  l ↦ #1%Z
+Lemma example_store η x (r : record) :
+  lookup_name η x = Some #r ->
+  r ↦ #1%Z
     ⊢ EWP (eval η (EStore (EVar x) (EInt 2)))
-    {{ (_ : unit), l ↦ #2 }}.
+    {{ (_ : unit), r ↦ #2 }}.
 Proof.
-  iIntros (Hx) "Hl".
-  imp_store l.
+  iIntros (Hx) "Hr".
+  imp_store r.
 Qed.
 
 (* [x := 2; x := 4] *)
-Lemma example_2_stores η x l :
-  lookup_name η x = Some #l ->
-  l ↦ #1%Z
+Lemma example_2_stores η x (r : record) :
+  lookup_name η x = Some #r ->
+  r ↦ #1%Z
   ⊢ EWP (eval η
            (ESeq
               (EStore (EVar x) (EInt 2))
               (EStore (EVar x) (EInt 4))))
-      {{ (_ : unit), l ↦ #4%Z }}.
+      {{ (_ : unit), r ↦ #4%Z }}.
 Proof.
-  iIntros (Hx) "Hl".
-  iApply (imp_ESeq with "[Hl]").
-  - imp_store l 2%Z.
-  - iIntros "Hl".
-    imp_store l.
+  iIntros (Hx) "Hr".
+  iApply (imp_ESeq with "[Hr]").
+  - imp_store r 2%Z.
+  - iIntros "Hr".
+    imp_store r.
 Qed.
 
 (* [!(ref 1)]  *)
 Lemma example_load_ref η :
   ⊢ EWP (eval η (ELoad (ERef (EInt 1)))) {{ r, ⌜r = 1%Z⌝ }}.
 Proof.
-  iApply (imp_ELoad2 (λ l, l ↦ #1%Z)%I).
+  iApply (imp_deref2 (λ r, r ↦ #1%Z)%I).
   - (* ref 1 *)
     imp_ref.
   - (* load *)
-    iIntros (l) "$".
+    iIntros (r) "$".
     auto.
 Qed.
 
 (* [x := 1 + !x] *)
-Lemma example_incr η x lx n :
-  lookup_name η x = Some #lx ->
-  lx ↦ #n
+Lemma example_incr η x (rx : record) n :
+  lookup_name η x = Some #rx ->
+  rx ↦ #n
   ⊢ EWP (eval η (EStore (EVar x) (EIntAdd (EInt 1) (ELoad (EVar x)))))
-    {{ (_ : unit),lx ↦ #(1 + n)%Z }}.
+    {{ (_ : unit), rx ↦ #(1 + n)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
-  iApply (imp_EStore2 (A:=Z) with "[] [Hx]").
+  iApply (imp_assign2 (A:=Z) with "[] [Hx]").
 
   - (* l-value x *)
     imp_path.
 
   - (* 1 + !x *)
-    set_postcondition (λ i, ⌜(i = 1 + n)%Z⌝ ∗ lx ↦ #n)%I.
+    set_postcondition (λ i, ⌜(i = 1 + n)%Z⌝ ∗ rx ↦ #n)%I.
     imp_arith with "[] [Hx]".
     (* add's postcondition *)
     iIntros "(-> & $)".
     auto.
 
   - (* store's postcondition *)
-    iIntros (n2) "(-> & Hlx)".
+    iIntros (n2) "(-> & Hrx)".
     iFrame. auto.
 Qed.
 
 (* [x := !x + !x] *)
-Lemma example_double η x lx n :
-  lookup_name η x = Some #lx ->
-  lx ↦ #n
+Lemma example_double η x (rx : record) n :
+  lookup_name η x = Some #rx ->
+  rx ↦ #n
   ⊢ EWP (eval η (EStore (EVar x) (ELoad (EVar x) + ELoad (EVar x))))
-    {{ (_ : unit), lx ↦ #(2 * n)%Z }}.
+    {{ (_ : unit), rx ↦ #(2 * n)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
-  iApply (imp_EStore2 (A:=Z) with "[] [Hx]").
+  iApply (imp_assign2 (A:=Z) with "[] [Hx]").
   - imp_path.
   - (* !x + !x *)
     iDestruct "Hx" as "(Hx1 & Hx2)".
-    set_postcondition (λ i, ⌜(i = 2 * n)%Z⌝ ∗ lx ↦ #n)%I.
+    set_postcondition (λ i, ⌜(i = 2 * n)%Z⌝ ∗ rx ↦ #n)%I.
     imp_arith with "[Hx1] [Hx2]".
     (* add's postcondition *)
     iIntros "(-> & Hx1) (-> & Hx2)".
@@ -145,15 +148,15 @@ Qed.
    For example, the following proof should be mostly automatable. *)
 
 (* [x := (!x * !x) + (!x * !x)] *)
-Lemma example_double_double η x lx n :
-  lookup_name η x = Some #lx ->
-  lx ↦ #n
+Lemma example_double_double η x (rx : record) n :
+  lookup_name η x = Some #rx ->
+  rx ↦ #n
   ⊢ EWP (eval η (EStore (EVar x)
      ((ELoad (EVar x) + ELoad (EVar x)) * (ELoad (EVar x) + ELoad (EVar x)) )))
-    {{ (_ : unit), lx ↦ #((2 * n)^2)%Z }}.
+    {{ (_ : unit), rx ↦ #((2 * n)^2)%Z }}.
 Proof.
   iIntros (Ex) "Hx".
-  iApply (imp_EStore2 (A:=Z) with "[] [Hx]").
+  iApply (imp_assign2 (A:=Z) with "[] [Hx]").
   - imp_path.
   - (* !x + !x *)
     imp_arith reading "Hx".
@@ -166,13 +169,13 @@ Qed.
 
 
 (* [(!x, !y)] *)
-Lemma example_tuple_resources η x lx y ly (n : Z) :
-  lookup_name η x = Some #lx ->
-  lookup_name η y = Some #ly ->
-  lx ↦ #n -∗
-  ly ↦ #n -∗
+Lemma example_tuple_resources η x (rx : record) y (ry : record) (n : Z) :
+  lookup_name η x = Some #rx ->
+  lookup_name η y = Some #ry ->
+  rx ↦ #n -∗
+  ry ↦ #n -∗
   EWP (eval η (ETuple [ELoad (EVar x); ELoad (EVar y)]))
-    {{ (x, y), ⌜x = n⌝ ∗ ⌜y = n⌝ ∗ lx ↦ #n ∗ ly ↦ #n }}.
+    {{ (x, y), ⌜x = n⌝ ∗ ⌜y = n⌝ ∗ rx ↦ #n ∗ ry ↦ #n }}.
 Proof.
   iIntros (Ex Ey) "Hx Hy".
   imp_tuple with "[Hx] [Hy]".
@@ -180,16 +183,36 @@ Proof.
   iIntros (x0 y0) "((-> & ?) & (-> & ?))". by iFrame.
 Qed.
 
-Lemma example_data_resources η x lx (n : Z) :
-  lookup_name η x = Some #lx ->
-  lx ↦ #n -∗
+Lemma example_data_resources η x (rx : record) (n : Z) :
+  lookup_name η x = Some #rx ->
+  rx ↦ #n -∗
   EWP (eval η (EData "::" [ELoad (EVar x); EData "[]" []]))
-    {{ (l : list Z), ⌜l = [n]⌝ ∗ lx ↦ #n }}.
+    {{ (l : list Z), ⌜l = [n]⌝ ∗ rx ↦ #n }}.
 Proof.
   iIntros (Ex) "Hx".
   imp_data with "[Hx]".
   (* Only the monotonicity goal remains; the arguments were stepped. *)
   iIntros (h t) "((-> & ?) & ->)". by iFrame.
+Qed.
+
+(* [x.f], with only the field [f = 1] of [x] owned *)
+Lemma example_field_read η x (r : record) (n : Z) :
+  lookup_name η x = Some #r ->
+  r ↦[1] #n ⊢
+  EWP (eval η (ERecordAccess (EVar x) 1%Z)) {{ v, ⌜v = n⌝ ∗ r ↦[1] #n }}.
+Proof.
+  iIntros (Hx) "Hr".
+  imp_step.
+Qed.
+
+(* [x.f <- 2] *)
+Lemma example_field_write η x (r : record) (n : Z) :
+  lookup_name η x = Some #r ->
+  r ↦[1] #n ⊢
+  EWP (eval η (ERecordSet (EVar x) 1%Z (EInt 2))) {{ (_ : unit), r ↦[1] #2%Z }}.
+Proof.
+  iIntros (Hx) "Hr".
+  imp_step.
 Qed.
 
 Lemma example_env_lookup `{Encode A} η (fun_spec : A → iProp Σ) :

@@ -111,7 +111,9 @@ Section pure_rules.
   (* A reasoning rule for [try]; corollary of [pure_try2] *)
 
   Corollary pure_try `{Observe A1 V1} `{Observe A2 V2} `{Observe B E}
-    (m : micro V1 E) k z (φ : A2 -> _) (φ' : A1 -> _) (ψ : B → Prop) ψ' :
+    `{Observe B' E}
+    (m : micro V1 E) k z (φ : A2 -> _) (φ' : A1 -> _)
+    (ψ : B → Prop) (ψ' : B' → Prop) :
     pure m φ' ψ' →
     (∀ a, φ' a → pure (k ♯a) φ ψ) →
     (∀ b, ψ' b → pure (z ♯b) φ ψ) →
@@ -228,15 +230,15 @@ Section pure_rules.
 
   (* Sequentializations of previous lemmas, considering the LHS first *)
 
-  Lemma pure_Par_seq_strong
-    `{Observe A1 V1, Observe B1 E1}
-    `{Observe A2 V2, Observe B2 E2}
+  Lemma pure_Par_seq_strong {E12}
+    `{Observe A1 V1, Observe B1 E12}
+    `{Observe A2 V2, Observe B2 E12}
     `{Observe A3 V3, Observe B3 E3}
-    (m1 : micro V1 _) (m2 : micro V2 _) (k : _ -> micro V3 E3)
+    (m1 : micro V1 E12) (m2 : micro V2 E12) (k : _ -> micro V3 E3)
     (φ : A3 → Prop) (ψ : B3 → Prop)
   :
     pure (B := B1) m1 (λ a1 : A1,
-      pure m2 (λ a2 : A2,
+      pure (B := B2) m2 (λ a2 : A2,
         pure (continue k (♯ a1, ♯ a2)) φ ψ) ⊥) ⊥ →
     pure (A:=A3) (B:=B3) (Par m1 m2 k) φ ψ.
   Proof.
@@ -256,7 +258,7 @@ Section pure_rules.
     (m1 : micro V1 E1) (m2 : micro V2 E1) (k : _ -> micro V3 E2)
     (φ : A3 → Prop) (ψ : B3 → Prop)
   :
-    pure m1
+    pure (B := B1) m1
       (λ (a1 : A1),
         pure m2
           (λ (a2 : A2), pure (continue k (♯ a1, ♯ a2)) φ ψ)
@@ -279,7 +281,7 @@ Section pure_rules.
     (m1 : micro V1 E1) (m2 : micro V2 E1)
     φ (ψ : B2 → Prop)
   :
-    pure m1
+    pure (B := B1) m1
       (λ (a1 : A1),
         pure m2 (λ (a2 : A2), φ (a1, a2)) ψ)
       ⊥ →

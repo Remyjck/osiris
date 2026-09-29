@@ -6,9 +6,9 @@ Require Import UnionFind01Data UnionFind02EmptyCreate UnionFind03Link UnionFind0
 
 From Stdlib Require Import FunctionalExtensionality.
 
-(* An object in the Union Find data structure is represented by an
-   heap_lang location. *)
-Abbreviation elem := loc.
+(* An object in the Union Find data structure is represented by a
+   reference, that is, a one-field mutable record. *)
+Abbreviation elem := record.
 
 Record link `{Encode A} : Type := { parent : elem }.
 Record root `{Encode A} : Type := { rank : Z; value : A }.
@@ -18,7 +18,7 @@ Record root `{Encode A} : Type := { rank : Z; value : A }.
    heap block holding the record's own fields (rank/value, or parent). *)
 
 (* Matching on a vertex's content is done directly on the loaded value
-   (a [VInline "Root"/"Link"] tag wrapping the record pointer): the
+   (a [VTaggedRecord "Root"/"Link"] tag wrapping the record pointer): the
    pattern rules read the record fields themselves, so no intermediate
    typed snapshot of the content is needed. *)
 
@@ -37,6 +37,7 @@ Section UnionFind.
 Context `{!osirisGS Σ}.
 
 Implicit Types x y r : elem.
+Implicit Types ζ : exn → iProp Σ.
 Implicit Types v : val.
 Implicit Types D : gset elem.  (* domain *)
 Implicit Types F : elem -> elem -> Prop.      (* edges *)
@@ -119,8 +120,8 @@ Definition rec_repr (lr : record) (lc : lcontent) : iProp Σ :=
 
 Definition content_of (lr : record) (lc : lcontent) : val :=
   match lc with
-  | LRoot _ => VInline "Root" lr
-  | LLink _ => VInline "Link" lr
+  | LRoot _ => VTaggedRecord "Root" lr
+  | LLink _ => VTaggedRecord "Link" lr
   end.
 
 (* [vertex x lr lc] is the full heap footprint of one vertex [x]: its
@@ -464,8 +465,8 @@ Proof.
   destruct (M !! x) as [c|] eqn:Heq; [|done].
   iExFalso.
   iDestruct (big_sepM_lookup with "HM") as "[Hx' _]"; [exact Heq|].
-  iCombine "Hx Hx'" gives %Hbad.
-  destruct Hbad as [Hbad _]. exfalso; eapply dfrac_full_exclusive; exact Hbad.
+  iDestruct (ref_pointsto_valid_2 with "Hx Hx'") as %[Hbad _].
+  exfalso; eapply dfrac_full_exclusive; exact Hbad.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -481,18 +482,17 @@ Hypothesis Hmax2 : (2 ≤ max_array_length)%Z.
    - [D'] is [D] extended with [x];
    - [V'] is [V] extended with a mapping of [x] to [v]. *)
 
-Definition make_spec : val → microvx → iProp Σ :=
-  λ v m,
-    (∀ D R V,
-       UF D R V -∗
-       EWP m {{ (x : elem), UF (D ∪ {[x]}) R V.[x -/R/> v] ∗ ⌜(x ∉ D) ∧ R x = x⌝ }})%I.
+Definition make_spec make : iProp Σ :=
+  □ {{ ∀ D R V; UF D R V }}
+  make v : val
+  {{ RET (x : elem); UF (D ∪ {[x]}) R V.[x -/R/> v] ∗ ⌜(x ∉ D) ∧ R x = x⌝ }}.
 
 Lemma imp_make η :
-  ⊢ EWP (eval η (EAnonFun __make)) {{ c, □ iSpec τ[val] c make_spec }}.
+  ⊢ EWP (eval η (EAnonFun __make)) {{ make_spec }}.
 Proof.
+  unfold make_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (v).
-  unfold make_spec.
   iIntros (D R V) "HUF".
   iApply imp_please; iNext.
   (* Goal: [ ref (Root { rank = 0; value = v }) ] *)
@@ -542,6 +542,18 @@ Proof.
   intros HM. iIntros "HM".
   iDestruct (big_sepM_lookup_acc _ _ _ _ HM with "HM") as "[$ HM]".
   iIntros "Hv". iApply ("HM" with "Hv").
+Qed.
+
+(* Every vertex is a reference; physical equality needs to know it. *)
+
+Lemma pointsto_M_is_ref M x :
+  x ∈ dom M ->
+  pointsto_M M -∗ is_ref x ∗ pointsto_M M.
+Proof.
+  intros [[lr lc] Hx]%elem_of_dom. iIntros "HM".
+  iDestruct (pointsto_M_acc_same _ _ _ _ Hx with "HM") as "([Hx Hrec] & Hback)".
+  iDestruct (ref_pointsto_is_ref with "Hx") as "[#$ Hx]".
+  iApply "Hback". iFrame.
 Qed.
 
 (* A generic two-key variant of [big_sepM_insert_acc]: simultaneous access
@@ -607,7 +619,7 @@ Lemma imp_vertex_load {η E Ψ ζ} x lr lc (e : expr) :
 Proof.
   iIntros "[Hx Hrec] He".
   iApply (imp_wand with "[Hx He]").
-  { iApply (imp_ELoad (A:=val) with "Hx He"). }
+  { iApply (imp_deref (A:=val) with "Hx He"). }
   iIntros (c) "[-> Hx]". by iFrame.
 Qed.
 
@@ -898,6 +910,11 @@ Proof.
       iApply ("Hm" with "[%//] [%//] [%//] [%//] HM"). }
     simpl.
     iIntros (z) "(%M2' & -> & %Hskel & HM' & %HMem')".
+    (* Comparing [R y] with [y] needs both to be references. *)
+    iDestruct (pointsto_M_is_ref _ y with "HM'") as "[#Hy HM']".
+    { rewrite (proj1 HMem'). exact HyD. }
+    iDestruct (pointsto_M_is_ref _ (R y) with "HM'") as "[#HRy HM']".
+    { rewrite (proj1 HMem'). destruct HInv. eapply sticky_R; eauto. }
 
     (* The recursion never touches [e] ([e] is not reachable from [y]), so [e]
        is still a [Link] to [y] in the returned [M2'], with the same record
@@ -913,7 +930,10 @@ Proof.
     imp_if.
     { set_postcondition (λ b, ⌜b = negb (locations.eqb (R y) y)⌝)%I.
       iApply imp_EBoolNeg.
-      iApply (imp_EOpPhysEq_loc with "[] []"); [imp_path|imp_path|].
+      iApply (imp_EOpPhysEq_ref _ _ _ (λ r, ⌜r = R y⌝)%I (λ r, ⌜r = y⌝)%I
+        with "[] []").
+      { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
+      { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
       iIntros "!>" (l1 l2) "-> -> //". }
 
     + (* [R y ≠ y]: perform [link.parent <- R y]. *)
@@ -939,20 +959,19 @@ Proof.
       rewrite HFeq0. apply Mem_compress; [exact HMem' | exact Hin]. }
 Qed.
 
-Definition find_spec (e : elem) (m : microvx) : iProp Σ :=
-  ∀ D R V,
-    ⌜e ∈ D⌝ -∗
-    UF D R V -∗
-    EWP m {{ (x : elem), ⌜x = R e⌝ ∗ UF D R V }}.
+Definition find_spec find : iProp Σ :=
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  find e : elem
+  {{ RET (x : elem); ⌜x = R e⌝ ∗ UF D R V }}.
 
 Lemma find_proof :
-  ∀ find, iSpec τ[elem] find find_spec' -∗ iSpec τ[elem] find find_spec.
+  ∀ find, □ iSpec τ[elem] find find_spec' -∗ find_spec find.
 Proof.
-  iIntros (find) "Hspec".
-  iApply (iSpec_mono with "Hspec").
+  iIntros (find) "#Hspec' !>".
+  iApply (iSpec_mono with "Hspec'").
   iIntros (x m) "Hspec".
-  unfold find_spec, find_spec', tapp.
-  iIntros (D R V) "%Hin HUF".
+  unfold find_spec', tapp.
+  iIntros (D R V) "(%Hin & HUF)".
   iDestruct "HUF" as "(%F & %LM & %HInv & %HMem & Hpointsto)".
   pose proof (Inv_dsf D F R V HInv) as Hdsf.
   edestruct (ipc_defined D F x Hdsf) as (d & F' & Hipc).
@@ -975,19 +994,18 @@ Qed.
    answer is [bool_decide (R x = x)]. No call to [find] is involved, and the
    data structure is left untouched. *)
 
-Definition is_representative_spec (e : elem) (m : microvx) : iProp Σ :=
-  ∀ D R V,
-    ⌜e ∈ D⌝ -∗
-    UF D R V -∗
-    EWP m {{ (b : bool), ⌜b = bool_decide (R e = e)⌝ ∗ UF D R V }}.
+Definition is_representative_spec is_representative : iProp Σ :=
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  is_representative e : elem
+  {{ RET (b : bool); ⌜b = bool_decide (R e = e)⌝ ∗ UF D R V }}.
 
 Lemma is_representative_proof η :
-  ⊢ EWP (eval η (EAnonFun __is_representative))
-      {{ c, □ iSpec τ[elem] c is_representative_spec }}.
+  ⊢ EWP (eval η (EAnonFun __is_representative)) {{ is_representative_spec }}.
 Proof.
+  unfold is_representative_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (e).
-  iIntros (D R V) "%Hin HUF".
+  iIntros (D R V) "(%Hin & HUF)".
   iDestruct "HUF" as (F M) "(%HInv & %HMem & HM)".
   iApply imp_please; iNext.
   destruct (M !! e) as [[re lc]|] eqn:Heq;
@@ -1028,26 +1046,25 @@ Qed.
 
 (* -------------------------------------------------------------------------- *)
 
-Definition get_spec (e : elem) (m : microvx) : iProp Σ :=
-  ∀ D R V,
-    ⌜e ∈ D⌝ -∗
-    UF D R V -∗
-    EWP m {{ (x : val), ⌜x = V e⌝ ∗ UF D R V }}.
+Definition get_spec get : iProp Σ :=
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  get e : elem
+  {{ RET (x : val); ⌜x = V e⌝ ∗ UF D R V }}.
 
 Lemma get_proof η :
-  in_env "find" (λ c, □ iSpec τ[elem] c find_spec)%I η -∗
-  EWP (eval η (EAnonFun __get)) {{ c, □ iSpec τ[elem] c get_spec }}.
+  in_env "find" find_spec η -∗
+  EWP (eval η (EAnonFun __get)) {{ get_spec }}.
 Proof.
   iIntros "#Hfind".
+  unfold get_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (e).
-  unfold get_spec.
-  iIntros (D R V) "%Hin HUF".
+  iIntros (D R V) "(%Hin & HUF)".
   iApply imp_please; iNext.
 
   iApply (imp_ELet_var (B:=elem) with "[HUF]").
   { imp_app τ[elem].
-    iIntros "Hm". iApply ("Hm" with "[%//] HUF"). }
+    iIntros "Hm". iApply ("Hm" with "[$HUF //]"). }
   iIntros (?) "(-> & HUF)".
   iPoseProof (UF_image with "HUF") as "%HRD"; first eassumption.
   iPoseProof (UF_idempotent with "HUF") as "%HRidem".
@@ -1074,26 +1091,25 @@ Qed.
 
 (* -------------------------------------------------------------------------- *)
 
-Definition set_spec (e : elem) (v : val) (m : microvx) : iProp Σ :=
-  ∀ D R V,
-    ⌜e ∈ D⌝ -∗
-    UF D R V -∗
-    EWP m {{ (x : unit), UF D R V.[ e -/R/> v] }}.
+Definition set_spec set : iProp Σ :=
+  □ {{ ∀ D R V; ⌜e ∈ D⌝ ∗ UF D R V }}
+  set e v : elem val
+  {{ RET (x : unit); UF D R V.[ e -/R/> v] }}.
 
 Lemma set_proof η :
-  in_env "find" (λ c, □ iSpec τ[elem] c find_spec)%I η -∗
-  EWP (eval η (EAnonFun __set)) {{ c, □ iSpec τ[elem;val] c set_spec }}.
+  in_env "find" find_spec η -∗
+  EWP (eval η (EAnonFun __set)) {{ set_spec }}.
 Proof.
   iIntros "#Hfind".
+  unfold set_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (e v).
-  unfold set_spec.
-  iIntros (D R V) "%Hin HUF".
+  iIntros (D R V) "(%Hin & HUF)".
   iApply imp_please; iNext.
 
   iApply (imp_ELet_var (B:=elem) with "[HUF]").
   { imp_app τ[elem].
-    iIntros "Hm". iApply ("Hm" with "[%//] HUF"). }
+    iIntros "Hm". iApply ("Hm" with "[$HUF //]"). }
   iIntros (?) "(-> & HUF)".
   iPoseProof (UF_image with "HUF") as "%HRD"; first eassumption.
   iPoseProof (UF_idempotent with "HUF") as "%HRidem".
@@ -1119,39 +1135,48 @@ Qed.
 
 (* -------------------------------------------------------------------------- *)
 
-Definition union_spec (x y : elem) (m : microvx) : iProp Σ :=
-  ∀ D R V,
-    ⌜x ∈ D⌝ -∗
-    ⌜y ∈ D⌝ -∗
-    UF D R V -∗
-    EWP m {{ z, UF D R.[y -/R/> z].[x -/R/> z] V.[y -/R/> (V z)].[x -/R/> (V z)] ∗
-                  ⌜z = R x ∨ z = R y⌝ }}.
+Definition union_spec union : iProp Σ :=
+  □ {{ ∀ D R V; ⌜x ∈ D⌝ ∗ ⌜y ∈ D⌝ ∗ UF D R V }}
+  union x y : elem elem
+  {{ RET z; UF D R.[y -/R/> z].[x -/R/> z] V.[y -/R/> (V z)].[x -/R/> (V z)] ∗
+              ⌜z = R x ∨ z = R y⌝ }}.
 
 Lemma union_proof η :
-  in_env "find" (λ c, □ iSpec τ[elem] c find_spec) η -∗
-  EWP (eval η (EAnonFun __union)) {{ c, □ iSpec τ[elem;elem] c union_spec }}.
+  in_env "find" find_spec η -∗
+  EWP (eval η (EAnonFun __union)) {{ union_spec }}.
 Proof.
   iIntros "#Hfind".
+  unfold union_spec.
   iApply imp_EAnon_pers.
   iIntros "!>" (x y).
-  unfold union_spec.
-  iIntros (D R V) "%Hin_x %Hin_y HUF".
+  iIntros (D R V) "(%Hin_x & %Hin_y & HUF)".
   iApply imp_please; iNext.
   iApply (imp_ELet_var (B:=elem) with "[HUF]").
   { imp_app τ[elem].
-    iIntros "Hm". iApply ("Hm" with "[%//] HUF"). }
+    iIntros "Hm". iApply ("Hm" with "[$HUF //]"). }
   iIntros (?) "(-> & HUF)".
   iApply (imp_ELet_var (B:=elem) with "[HUF]").
   { imp_app τ[elem].
-    iIntros "Hm". iApply ("Hm" with "[%//] HUF"). }
+    iIntros "Hm". iApply ("Hm" with "[$HUF //]"). }
   iIntros (?) "(-> & HUF)".
 
+  (* Comparing [R x] with [R y] needs both to be references. *)
+  iAssert (is_ref (R x) ∗ is_ref (R y))%I as "#[HRx HRy]".
+  { iDestruct "HUF" as (F M HI HM) "HM".
+    assert (R x ∈ dom M ∧ R y ∈ dom M) as [HRxM HRyM].
+    { rewrite (proj1 HM). destruct HI. split; eapply sticky_R; eauto. }
+    iDestruct (pointsto_M_is_ref _ _ HRxM with "HM") as "[$ HM]".
+    iDestruct (pointsto_M_is_ref _ _ HRyM with "HM") as "[$ HM]". }
   imp_if.
   { set_postcondition (λ b, ⌜b = locations.eqb (R x) (R y)⌝)%I.
-    iApply imp_EOpPhysEq_loc; [imp_path|imp_path|].
+    iApply (imp_EOpPhysEq_ref _ _ _ (λ r, ⌜r = R x⌝)%I (λ r, ⌜r = R y⌝)%I
+      with "[] []").
+    { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
+    { iApply imp_wand. imp_path. iIntros (?) "->". by iFrame "#". }
     iIntros "!>" (??) "-> -> //". }
 
   { iIntros "%Heq".
+    iClear "HRx HRy".
     imp_path.
     iSplit; last (iPureIntro; tauto).
     iDestruct "HUF" as "(%F & %M & %HI & %HM & Hpts)".
@@ -1205,7 +1230,7 @@ Proof.
     iDestruct "Hvx" as "[Hx _]".
     iApply (imp_ESeq with "[Hx]").
     { (* Goal:= [ x := Link { parent = y } ] *)
-      imp_store' (R x) $! (∃ (r : record), r ⤇ {| parent := R y |} ∗ R x ↦ VInline "Link" r)%I.
+      imp_store' (R x) $! (∃ (r : record), r ⤇ {| parent := R y |} ∗ R x ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->) /=".
       iExists r. iFrame. }
@@ -1234,7 +1259,7 @@ Proof.
    { (* Same record-block replacement, this time on [R y]'s side. *)
     iDestruct "Hvy" as "[Hy _]".
     iApply (imp_ESeq with "[Hy]").
-    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VInline "Link" r)%I.
+    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->)".
       simpl. iExists r. iFrame. }
@@ -1262,7 +1287,7 @@ Proof.
 
   iDestruct "Hvy" as "[Hy _]".
   iApply (imp_ESeq with "[Hy]").
-    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VInline "Link" r)%I.
+    { imp_store' (R y) $! (∃ (r : record), r ⤇ {| parent := R x |} ∗ R y ↦ VTaggedRecord "Link" r)%I.
       iIntros "!>" (r) "HΦ Hl".
       iDestruct "HΦ" as (z) "(Hown & ->)".
       simpl. iExists r. iFrame. }
@@ -1305,27 +1330,25 @@ Definition UnionFind_names : gset var :=
    and it is what [imp_path] consumes at the recursive call sites. *)
 
 Local Ltac find_in_env :=
-  repeat (iApply (in_env_cons (Φ := λ c : val, (□ iSpec τ[elem] c find_spec)%I));
-          [reflexivity|]);
-  iApply (in_env_here (Φ := λ c : val, (□ iSpec τ[elem] c find_spec)%I) with "Hfind");
+  repeat (iApply (in_env_cons (Φ := find_spec)); [reflexivity|]);
+  iApply (in_env_here (Φ := find_spec) with "Hfind");
   reflexivity.
 
 Theorem UnionFind_module_proof η :
   ⊢ EWP (eval_mexpr η __main)
     {{ context [
-         var_spec "make"  (λ make,  □ iSpec τ[val] make make_spec);
-         var_spec "find"  (λ find,  □ iSpec τ[elem] find find_spec);
-         var_spec "is_representative"
-                          (λ isrep, □ iSpec τ[elem] isrep is_representative_spec);
-         var_spec "get"   (λ get,   □ iSpec τ[elem] get get_spec);
-         var_spec "set"   (λ set,   □ iSpec τ[elem; val] set set_spec);
-         var_spec "union" (λ union, □ iSpec τ[elem; elem] union union_spec)
+         var_spec "make"  make_spec;
+         var_spec "find"  find_spec;
+         var_spec "is_representative" is_representative_spec;
+         var_spec "get"   get_spec;
+         var_spec "set"   set_spec;
+         var_spec "union" union_spec
        ] UnionFind_names }}.
 Proof.
   iApply imp_module.
 
   (* [let make v = ref (Root { rank = 0; value = v })] *)
-  iApply (imp_sitems_let (λ make : val, □ iSpec τ[val] make make_spec)%I).
+  iApply (imp_sitems_let make_spec).
   { iApply imp_make. }
   iIntros (make) "#Hmake".
 
@@ -1342,12 +1365,11 @@ Proof.
   iIntros (find) "#Hfind'".
 
   (* Weaken [find]'s inductive specification to its user-facing one. *)
-  iAssert (□ iSpec τ[elem] find find_spec)%I as "#Hfind".
-  { iModIntro. iApply (find_proof with "Hfind'"). }
+  iAssert (find_spec find) as "#Hfind".
+  { iApply (find_proof with "Hfind'"). }
 
   (* [let is_representative x = ...] *)
-  iApply (imp_sitems_let
-            (λ isrep : val, □ iSpec τ[elem] isrep is_representative_spec)%I).
+  iApply (imp_sitems_let is_representative_spec).
   { iApply is_representative_proof. }
   iIntros (is_representative) "#Hisrep".
 
@@ -1357,17 +1379,17 @@ Proof.
   iIntros (eq) "_".
 
   (* [let get x = ...] *)
-  iApply (imp_sitems_let (λ get : val, □ iSpec τ[elem] get get_spec)%I).
+  iApply (imp_sitems_let get_spec).
   { iApply get_proof. find_in_env. }
   iIntros (get) "#Hget".
 
   (* [let set x v = ...] *)
-  iApply (imp_sitems_let (λ set : val, □ iSpec τ[elem; val] set set_spec)%I).
+  iApply (imp_sitems_let set_spec).
   { iApply set_proof. find_in_env. }
   iIntros (set) "#Hset".
 
   (* [let union x y = ...] *)
-  iApply (imp_sitems_let (λ union : val, □ iSpec τ[elem; elem] union union_spec)%I).
+  iApply (imp_sitems_let union_spec).
   { iApply union_proof. find_in_env. }
   iIntros (union) "#Hunion".
 

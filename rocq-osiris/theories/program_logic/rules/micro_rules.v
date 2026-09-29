@@ -48,11 +48,30 @@ Section ewp_basic_rules.
     by rewrite ewp_unfold /ewp_pre.
   Qed.
 
-  Lemma ewp_crash_inv :
+  (* [Crash] is never reducible, so its [ewp] is refuted as soon as a state
+     interpretation is at hand. *)
+  Lemma ewp_crash_inv σ κs π :
+    osiris_state_interp σ -∗ osiris_proph_interp σ κs -∗ osiris_thread_interp π -∗
     ewp_def E (Crash : micro A X) Ψ Q ={E}=∗ False.
   Proof.
     ewp_unfold (@Crash A X).
-    by iIntros "Hsi".
+    iIntros "Hsi Hpi Hti Hwp".
+    iCombine "Hsi Hpi Hti" as "Hsi".
+    iMod ("Hwp" $! σ [] κs π with "Hsi") as "[%Hred _]".
+    by apply not_reducible_Crash in Hred.
+  Qed.
+
+  (* Any state refutes an [ewp] of [Crash], so one such [ewp] gives all the
+     others, whatever their protocol and postcondition. *)
+  Lemma ewp_crash_any {B Y} Ψ' (Q' : outcome2 B Y → iProp Σ) :
+    ewp_def E (Crash : micro A X) Ψ Q -∗ ewp_def E (Crash : micro B Y) Ψ' Q'.
+  Proof.
+    iIntros "Hwp".
+    ewp_unfold_head.
+    iEval (rewrite ewp_unfold /ewp_pre /=) in "Hwp".
+    iIntros (σ κ κs π) "Hsi".
+    iMod ("Hwp" with "Hsi") as "[%Hred _]".
+    by apply not_reducible_Crash in Hred.
   Qed.
 
   Lemma ewp_outcome2 o :
@@ -92,11 +111,11 @@ Ltac ewp_invert :=
   (* ewp_def ret *)
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ (ret _) _ _)] =>
       iPoseProof (ewp_ret_inv with "[$]") as "HΦ"
-  (* ewp_def crash *)
+  (* ewp_def crash: needs the state interpretation, as [Hsi], [Hpi], [Hti] *)
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ Crash _ _)] =>
-      iMod (ewp_crash_inv with "[$]") as "%"
+      iMod (ewp_crash_inv with "Hsi Hpi Hti [$]") as "%"
   | |- context [environments.Esnoc _ ?Hwp (ewp_def _ (crash _) _ _)] =>
-      iMod (ewp_crash_inv with "[$]") as "%"
+      iMod (ewp_crash_inv with "Hsi Hpi Hti [$]") as "%"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -145,10 +164,6 @@ Section ewp_rules.
     { rewrite try2_inject2.
       iPoseProof (ewp_outcome2_inv with "Hwp") as "Hret"; cbn.
       iApply (fupd_ewp with "Hret"). }
-    (* Case : [m1] is [crash]; trivial  *)
-    { iClear "IH".
-      iApply fupd_ewp.
-      ewp_unfold (@Crash A X); by iMod "Hwp". }
     (* Case : [m1] is [Perform _ _]. *)
     { cbn.
       ewp_unfold_all.
@@ -161,7 +176,7 @@ Section ewp_rules.
       ewp_unfold_all. rewrite Hhm. rewrite Hhm2.
       (* Process a step of computation. *)
       intro_state. spec_state.
-      iModIntro. pose proof Hstep as Hcp. apply invert_can_progress in Hstep.
+      iModIntro. pose proof Hstep as Hcp. apply invert_reducible in Hstep.
       destruct Hstep as [ Hstep | Hstep ].
       { (* Case: [m1] is [Join _]. *)
         destruct Hstep as (ι' & k & -> & Hdom).
@@ -179,8 +194,19 @@ Section ewp_rules.
         iModIntro.
         iApply ("IH" with "Hwp"). }
       destruct Hstep as [ Hstep | Hstep ].
+      { (* Case: [m1] is [NewProph _] *)
+        destruct Hstep as (x & k & ->).
+        simpl try2. construct_wp_nonret.
+        destruct_subjective_step. subst.
+        eassert (subjective_step (_, Stop CNewProph x k, dom π) _ _)
+          by (eapply NewProphS; eassumption).
+        spec_step.
+        ewp_mask_elim. iMod "Hwp" as "(Hwp & $)".
+        iModIntro.
+        iApply ("IH" with "Hwp"). }
+      destruct Hstep as [ Hstep | Hstep ].
       { destruct Hstep as (Y & c & y & k & ->).
-        iSplitR; [ iPureIntro; by apply can_progress_try2 | ].
+        iSplitR; [ iPureIntro; by apply reducible_try2 | ].
         simpl try2. cbn match.
         iIntros (σ' m' μ) "%Hstep2".
         dependent destruction Hstep2.
@@ -211,7 +237,6 @@ Section ewp_rules.
     { simpl. ewp_unfold_all.
       intro_state_join. spec_state_join. iMod "Hwp".
       destruct (π !! x); last done.
-      iDestruct "Hwp" as "(%φ' & $ & Hwp)".
       iIntros "!> !> %o Ho". iSpecialize ("Hwp" with "Ho").
       ewp_mask_elim.
       iMod "Hwp" as "[Hwp $]".
@@ -314,7 +339,7 @@ Section ewp_rules.
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         destruct x.
         rewrite (ewp_unfold (Stop CFork (v, v0) _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         construct_wp_nonret. destruct_subjective_step.
         epose proof (ForkS _ _ _ _ _ _ H0).
@@ -325,19 +350,29 @@ Section ewp_rules.
       - (* Step then [JoinS]. *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop CJoin x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H1".
         destruct (π !! x); last done.
-        iDestruct "H1" as "(%φ' & $ & H1)".
         iIntros "!> !> %o Ho". iSpecialize ("H1" with "Ho").
+        ewp_mask_elim. iMod "H1" as "(H1 & $)".
+        iApply ("IH" with "H1 H2 Hjoin").
+
+      - (* Step then [NewProphS]. *)
+        ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
+        rewrite (ewp_unfold (Stop CNewProph x _)) /ewp_pre /=.
+        clear κs. rename σ into σ_par.
+        ewp_unfold_head. intro_state. spec_state. iModIntro.
+        construct_wp_nonret. destruct_subjective_step. subst.
+        epose proof (NewProphS _ _ _ _ _ ltac:(eassumption)) as Hs.
+        iSpecialize ("H1" $! _ _ _ Hs).
         ewp_mask_elim. iMod "H1" as "(H1 & $)".
         iApply ("IH" with "H1 H2 Hjoin").
 
       - ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
-        iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+        iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".
         dependent destruction Hstep2.
         { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }
@@ -348,7 +383,7 @@ Section ewp_rules.
           iSpecialize ("H1" $! _ _ _ Hs);
           ewp_mask_elim; iMod "H1" as "(H1 & $)".
         + rewrite try2_inject2. iApply ("IH" with "H1 H2 Hjoin").
-        + iApply fupd_ewp; iMod (ewp_crash_inv with "H1") as "[]". }
+        + simpl try2. iModIntro. by iApply (ewp_crash_any with "H1"). }
 
     { (* [StepThroughParRight]. *)
       destruct_code.
@@ -367,7 +402,7 @@ Section ewp_rules.
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         destruct x.
         rewrite (ewp_unfold (Stop CFork (v, v0) _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
         construct_wp_nonret. destruct_subjective_step.
         epose proof (ForkS _ _ _ _ _ _ H0).
@@ -378,20 +413,30 @@ Section ewp_rules.
       - (* [StepParJoinRight] *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop CJoin x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state_join. spec_state_join. iMod "H2".
         destruct (π !! x); last done.
-        iDestruct "H2" as "(%φ' & $ & H2)".
         iIntros "!> !> %o Ho". iSpecialize ("H2" with "Ho").
+        ewp_mask_elim. iMod "H2" as "(H2 & $)".
+        iApply ("IH" with "H1 H2 Hjoin").
+
+      - (* [StepParNewProphRight] *)
+        ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
+        rewrite (ewp_unfold (Stop CNewProph x _)) /ewp_pre /=.
+        clear κs. rename σ into σ_par.
+        ewp_unfold_head. intro_state. spec_state. iModIntro.
+        construct_wp_nonret. destruct_subjective_step. subst.
+        epose proof (NewProphS _ _ _ _ _ ltac:(eassumption)) as Hs.
+        iSpecialize ("H2" $! _ _ _ Hs).
         ewp_mask_elim. iMod "H2" as "(H2 & $)".
         iApply ("IH" with "H1 H2 Hjoin").
 
       - (* [StepParResolveRight]: the mirror image of the left case. *)
         ewp_mask_intro "Hmod"; ewp_mask_elim; iFrame.
         rewrite (ewp_unfold (Stop (CResolve c) x _)) /ewp_pre /=.
-        clear κs.
+        clear κs. rename σ into σ_par.
         ewp_unfold_head. intro_state. spec_state. iModIntro.
-        iSplitR; [ iPureIntro; by eapply can_progress_resolve_cont | ].
+        iSplitR; [ iPureIntro; by eapply reducible_resolve_cont | ].
         iIntros (σ'' m'' μ) "%Hstep2".
         dependent destruction Hstep2.
         { exfalso. eapply (no_step_Resolve _ _ _ _); eassumption. }
@@ -401,7 +446,7 @@ Section ewp_rules.
           iSpecialize ("H2" $! _ _ _ Hs);
           ewp_mask_elim; iMod "H2" as "(H2 & $)".
         + rewrite try2_inject2. iApply ("IH" with "H1 H2 Hjoin").
-        + iApply fupd_ewp; iMod (ewp_crash_inv with "H2") as "[]". }
+        + simpl try2. iModIntro. by iApply (ewp_crash_any with "H2"). }
 
     { (* [ParLeft] *)
       eapply BaseS in H as Hstep.

@@ -89,18 +89,19 @@ Context `{!osirisGS Σ}.
 
 (* The specification of our [find_first] function. *)
 
-Definition find_spec `{Encode A} (l : list A) (pred : val) (m : microvx) : iProp Σ :=
-  ∀ (φ : A -> Prop),
-    (* Assuming that [pred] is a pure function such that
-       [pred x] reflects the pure proposition [φ x]*)
-    (∀ `(Encode B), ⌜Spec τ[A] pred (λ x mx, pure mx (λ (P : Prop), P <-> φ x) (⊥ : B → Prop))⌝) -∗
-    (* Calling [find l pred] returns an option [o] such that
-       - if [o = Some x] then [φ x]
-       - if [o = None] then there is no [x] such that [φ x]. *)
-    EWP m {{ (o : option A), ⌜match o with
-                                | Some x => x ∈ l ∧ φ x
-                                | None => Forall (λ x, ¬ (φ x)) l
-                                end⌝ }}.
+Definition find_spec find : iProp Σ :=
+  □ {{ ∀ (φ : A -> Prop);
+     (* Assuming that [pred] is a pure function such that
+        [pred x] reflects the pure proposition [φ x]*)
+     ∀ `(Encode B), ⌜Spec τ[A] pred (λ x mx, pure mx (λ (P : Prop), P <-> φ x) (⊥ : B → Prop))⌝ }}
+  (* Calling [find l pred] returns an option [o] such that
+     - if [o = Some x] then [φ x]
+     - if [o = None] then there is no [x] such that [φ x]. *)
+  find l pred : (list A) val
+  {{ RET (o : option A); ⌜match o with
+                          | Some x => x ∈ l ∧ φ x
+                          | None => Forall (λ x, ¬ (φ x)) l
+                          end⌝ }}.
 
 (* Our high level statement:
    "After evaluation the [__main] module corresponding to the whole
@@ -111,7 +112,7 @@ Definition find_spec `{Encode A} (l : list A) (pred : val) (m : microvx) : iProp
 Lemma iter_module_pure η :
   ⊢ EWP (eval_mexpr η __main)
     {{ context [
-         var_spec "find_first" (λ find, □ iSpec τ[list A; val] find find_spec)
+         var_spec "find_first" find_spec
        ]
        {["find_first";"iter"]} }}.
 Proof.
@@ -186,11 +187,12 @@ Proof.
   (* We now face the toplevel definition of [find_elem]. *)
   iApply (imp_sitems_let
             (* We give [find_elem] the specification [find_spec]. *)
-            (λ (find : val), □ iSpec τ[list A; val] find find_spec)%I).
+            find_spec).
 
   { (* Start of the proof from the paper *)
     (* Subgoal: Prove that [find_elem] satisfies its specification. *)
     (* Step into the function's body *)
+    unfold find_spec.
     iApply (imp_EAnon_pers τ[list A; val]).
     (* Introduce the function's arguments. *)
     iIntros "!>" (l pred φ Hpred).
@@ -202,7 +204,7 @@ Proof.
       iIntros (found) "Hfound".
     (* Finish evaluating the local module and enrich the scoping environment. *)
     iApply imp_sitems_nil.
-    instantiate (1 := (λ δ, ∃ l, ⌜δ = ("Found" ¬> #l)⌝ ∗ l ↦ #())%I).
+    instantiate (1 := (λ δ, ∃ l, ⌜δ = ("Found" ¬> #l)⌝ ∗ l ↦ₗ #())%I).
     by iFrame.
 
     iIntros (δ) "(%found & -> & Hfound)".

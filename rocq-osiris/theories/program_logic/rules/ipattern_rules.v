@@ -40,8 +40,9 @@ Section ipattern.
 
   (* A two-channel consequence rule for [impure]. *)
 
-  Lemma imp_wand2 {V X A} `{Observe A V} (m : micro V X)
-      (ζ ζ' : X → iProp Σ) (Φ Φ' : A → iProp Σ) :
+  Lemma imp_wand2 {V X A} `{Observe A V} {B} `{HobsB : Observe B X}
+      (m : micro V X)
+      (ζ ζ' : B → iProp Σ) (Φ Φ' : A → iProp Σ) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
     (∀ a, Φ a -∗ Φ' a) ∧ (∀ e, ζ e -∗ ζ' e) -∗
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ' }}.
@@ -197,19 +198,19 @@ Section ipattern.
   (* Rules for inline-record patterns: the constructor comparison is
      pure; the sub-pattern is matched against the underlying record. *)
 
-  Lemma ipat_PInline_eq η δ c p v l Φ ψ :
-    v = VInline c l →
+  Lemma ipat_PTaggedRecord_eq η δ c p v l Φ ψ :
+    v = VTaggedRecord c l →
     ipattern η δ p (VRecord l) Φ ψ -∗
-    ipattern η δ (PInline c p) v Φ ψ.
+    ipattern η δ (PTaggedRecord c p) v Φ ψ.
   Proof.
     iIntros (->) "Hp". rewrite /ipattern. simpl_eval_pat.
     rewrite String.eqb_refl. iApply "Hp".
   Qed.
 
-  Lemma ipat_PInline_neq η δ c c' p l Φ ψ :
+  Lemma ipat_PTaggedRecord_neq η δ c c' p l Φ ψ :
     c ≠ c' →
     ψ -∗
-    ipattern η δ (PInline c p) (VInline c' l) Φ ψ.
+    ipattern η δ (PTaggedRecord c p) (VTaggedRecord c' l) Φ ψ.
   Proof.
     iIntros (Hne) "Hψ". rewrite /ipattern. simpl_eval_pat.
     rewrite (proj2 (String.eqb_neq c c')); last assumption.
@@ -218,10 +219,10 @@ Section ipattern.
 
   (* Reading all the fields of a block. *)
 
-  Lemma imp_loadn {X} (ζ : X → iProp Σ) (dq : dfrac) ls (vs : list val) :
-    ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
+  Lemma imp_loadn {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) :
+    ([∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v) -∗
     EWP (loadn ls) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),
-        ⌜vs' = vs⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦{dq} v }}.
+        ⌜vs' = vs⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v }}.
   Proof.
     iInduction ls as [|l ls] "IH" forall (vs); iIntros "Hls"; simpl.
     - iDestruct (big_sepLZ2_nil_inv_l with "Hls") as %->.
@@ -238,11 +239,11 @@ Section ipattern.
       iFrame.
   Qed.
 
-  Lemma imp_loadfs {X} (ζ : X → iProp Σ) (dq : dfrac) ls (vs : list val) fps :
+  Lemma imp_loadfs {X B} `{HobsB : Observe B X} (ζ : B → iProp Σ) (dq : dfrac) ls (vs : list val) fps :
     Forall (λ fp, valid fp.1 ls) fps →
-    ([∗ listZ] l;v ∈ ls; vs, l ↦{dq} v) -∗
+    ([∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v) -∗
     EWP (loadfs ls fps) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (vs' : list val),
-        ⌜vs' = fvals vs fps⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦{dq} v }}.
+        ⌜vs' = fvals vs fps⌝ ∗ [∗ listZ] l;v ∈ ls; vs, l ↦ₗ{dq} v }}.
   Proof.
     iIntros (Hvalid) "Hls".
     iInduction fps as [|[f p] fps] "IH"; simpl.

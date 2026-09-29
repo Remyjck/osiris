@@ -38,8 +38,17 @@ Osiris reasons about arbitrary OCaml programs with Iris.
 
 - `ewp.v`: definition of our weakest precondition
 - `fun_spec.v`: `iSpec` abstraction for reasoning about n-ary function calls
-- `protocols.v`: Iris effect protocols (adapted from Hazel by Vilhena & Pottier)
 - `osiris_utils.v`: utility definitions for Osiris proofs (re-exported via proofmode)
+- `lib/`: the custom ghost state Osiris is built on:
+  - `ghost_state.v`: Osiris's ghost state (`osirisGS`, `osirisΣ`), heap and thread
+    resources (`valid_thread`), and the state interpretation
+  - `block_resources.v`: block resources (`blockLocs`, `blockTag`)
+  - `block_map.v`: block ghost map, an authoritative map of agreements from each
+    block to its element locations
+  - `thread_post.v`: thread postconditions, an authoritative map of agreements
+    from thread ids to their postconditions
+  - `protocols.v`: Iris effect protocols (adapted from Hazel by Vilhena & Pottier)
+  - `escrows.v`: escrow allocation lemmas, and `big_sepL` helpers
 - `rules/`: EWP reasoning rules:
   - `basic_rules.v`: core EWP definition and pure-step rules
   - `micro_rules.v`: rules for micro monad constructs (ret, throw, crash, bind, try, Par)
@@ -65,7 +74,8 @@ Osiris reasons about arbitrary OCaml programs with Iris.
 
 - `pure_tactics.v`: tactics for discharging pure goals
 - `imp_tactics.v`: tactics for Iris/EWP goals (`imp_store_atomic`, `imp_arith`, `imp_if`, …)
-- `env_lookups.v`: specifications for modules (environments) and the `imp_path` tactic
+- `env_lookups.v`: specifications for modules (environments), the `imp_path` tactic, and
+  the `solve_env` tactic
 - `handler_tactics.v`: tactics for reasoning about handlers
 - `setup.v`: opacity settings and general proofmode configuration (exported last)
 - `proofmode.v`: umbrella re-export

@@ -162,8 +162,8 @@ let rec pat (p : pat) =
   | PRecord fps ->
       c "PRecord" [ fpats fps ]
 
-  | PInline (d, p) ->
-      c "PInline" [ data d ; pat p ]
+  | PTaggedRecord (d, p) ->
+      c "PTaggedRecord" [ data d ; pat p ]
 
   | PInt i ->
       c "PInt" [ int i ]
@@ -427,6 +427,9 @@ let rec expr (e : expr) =
 
   | EStore (e1, e2) ->
       c "EStore" [ expr e1; expr e2 ]
+
+  | EFieldLoad e ->
+      c "EFieldLoad" [ expr e ]
 
   | EExchange (e1, e2) ->
       c "EExchange" [ expr e1; expr e2 ]

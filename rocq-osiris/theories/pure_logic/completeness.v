@@ -86,13 +86,13 @@ Qed.
 (** [PXData], assuming the path lookup is safe *)
 
 Lemma reversible_pat_PXData η δ π ps l l' vs φ ψ :
-  lookup_path η π = Some (VLoc l') →
+  lookup_path η π = Some (VFieldLoc l') →
   (l = l' → patterns η δ ps vs φ ψ)
   <->
   pattern η δ (PXData π ps) (VXData l vs) φ (ψ ∨ l ≠ l').
 Proof.
   unfold pattern. simpl_eval_pat. intros ->.
-  change (as_loc (of_option (Some (VLoc l')))) with (@ret _ unit l'). rewrite bind_ret.
+  change (as_field_loc (of_option (Some (VFieldLoc l')))) with (@ret _ unit l'). rewrite bind_ret.
   destruct (eqb_spec l l').
   - unfold patterns.
     assert ((ψ ∨ l ≠ l') → ψ) by tauto.

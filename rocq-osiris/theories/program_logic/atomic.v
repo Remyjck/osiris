@@ -1,5 +1,5 @@
 From stdpp Require Import namespaces.
-Require Import ewp rules.basic_rules rules.impure_rules rules.proph_rules.
+Require Import ewp rules.basic_rules rules.impure_rules rules.proph_rules fun_spec.
 From iris.base_logic.lib Require Import proph_map.
 From osiris.lang Require Import encode.
 From iris.bi Require Import telescopes.
@@ -58,8 +58,8 @@ example where we want it to be anything else.
 For the non-atomic post-condition, we use an [option PROP], combined with a
 [-∗?]. This is to avoid introducing spurious [True -∗] into proofs that do not
 need a non-atomic post-condition (which is most of them). *)
-Definition atomic_ewp `{!osirisGS Σ} `{Observe A V} {X} {TA TB TP : tele}
-  (m: micro V X) (* computation *)
+Definition atomic_ewp `{!osirisGS Σ} `{Observe A V} {TA TB TP : tele}
+  (m: micro V exn) (* computation *)
   (E : coPset) (* *implementation* mask *)
   (α: TA → iProp Σ) (* atomic pre-condition *)
   (β: TA → TB → iProp Σ) (* atomic post-condition *)
@@ -263,8 +263,8 @@ Section lemmas.
   Implicit Types (α : TA → iProp) (β : TA → TB → iProp) (POST : TA → TB → TP → option iProp) (f : TA → TB → TP → A).
 
   (* Atomic triples imply sequential triples. *)
-  Lemma atomic_ewp_seq {X} e E α β POST f :
-    atomic_ewp (X:=X) e E α β POST f -∗
+  Lemma atomic_ewp_seq e E α β POST f :
+    atomic_ewp e E α β POST f -∗
     ∀ Φ, ∀.. x, α x -∗ (∀.. y, β x y -∗ ∀.. z, POST x y z -∗? Φ (f x y z)) -∗ EWP e {{ Φ }}.
   Proof.
     iIntros "Hwp" (Φ x) "Hα HΦ".
@@ -276,20 +276,20 @@ Section lemmas.
 
   (** This version matches the Texan triple, i.e., with a later in front of the
   [(∀.. y, β x y -∗ Φ (f x y))]. *)
-  Lemma atomic_ewp_seq_step {X} (e : micro V X) E α β POST f :
+  Lemma atomic_ewp_seq_step (e : micro V exn) E α β POST f :
     TCEq (is_ewp_case e) WPStep →
     atomic_ewp e E α β POST f -∗
     ∀ Φ, ∀.. x, α x -∗ ▷ (∀.. y, β x y -∗ ∀.. z, POST x y z -∗? Φ (f x y z)) -∗ EWP e {{ Φ }}.
   Proof.
     iIntros (?) "H"; iIntros (Φ x) "Hα HΦ".
-    iApply (imp_step_fupd ⊤ ⊤ _ _ (∀.. y : TB, _)
+    iApply (imp_step_fupd (B:=exn) ⊤ ⊤ _ _ (∀.. y : TB, _)
       with "[$HΦ //]"); first done.
     iApply (atomic_ewp_seq with "H Hα").
     iIntros "%y Hβ %z Hpost HΦ". iApply ("HΦ" with "Hβ Hpost").
   Qed.
 
   (* Sequential triples with the empty mask for a physically atomic [e] are atomic. *)
-  Lemma atomic_seq_ewp_atomic {X} (e : micro V X) E α β POST f
+  Lemma atomic_seq_ewp_atomic (e : micro V exn) E α β POST f
       `{!subjective_step.Atomic e}
       `{!TCEq (to_eff e) None}
       `{!TCEq (to_join e) None} :
@@ -304,7 +304,7 @@ Section lemmas.
 
   (** Sequential triples with a persistent precondition and no initial quantifier
   are atomic. *)
-  Lemma persistent_seq_ewp_atomic {X} (e : micro V X) E
+  Lemma persistent_seq_ewp_atomic (e : micro V exn) E
       (α : [tele] → iProp) (β : [tele] → TB → iProp)
       (POST : [tele] → TB → TP → option iProp) (f : [tele] → TB → TP → A)
       {HP : Persistent (α [tele_arg])} :
@@ -329,7 +329,7 @@ Section lemmas.
     iSplit; [by iIntros "$" | iApply "HΦ"].
   Qed.
 
-  Lemma atomic_ewp_mask_weaken {X} (e : micro V X) E1 E2 α β POST f :
+  Lemma atomic_ewp_mask_weaken (e : micro V exn) E1 E2 α β POST f :
     E1 ⊆ E2 → atomic_ewp e E1 α β POST f -∗ atomic_ewp e E2 α β POST f.
   Proof.
     iIntros (HE) "Hwp". iIntros (Φ) "AU". iApply "Hwp".
@@ -338,7 +338,7 @@ Section lemmas.
 
   (** We can open invariants around atomic triples.
       (Just for demonstration purposes; we always use [iInv] in proofs.) *)
-  Lemma atomic_ewp_inv {X} (e : micro V X) E α β POST f N I :
+  Lemma atomic_ewp_inv (e : micro V exn) E α β POST f N I :
     ↑N ⊆ E →
     atomic_ewp e (E ∖ ↑N) (λ.. x, ▷ I ∗ α x) (λ.. x y, ▷ I ∗ β x y) POST f -∗
     inv N I -∗ atomic_ewp e E α β POST f.
@@ -355,13 +355,341 @@ Section lemmas.
 
 End lemmas.
 
+(** Logically atomic specification triples *)
+
+(* [ipostA] is the atomic counterpart of [ipost] (fun_spec.v): a private
+   precondition [P], followed by a logically atomic triple. Like [ipost], it
+   is the body of an [iSpec], so an atomic specification of a function is
+   an ordinary function specification, written
+
+     <<{ ∀ x .. y; P | ∀∀ x1 .. xn, α }>>
+       c a .. b : τ1 .. τn @ E
+     <<{ ∃∃ y1 .. yn, β | RET v; POST }>>
+
+   where [x .. y] are ghost binders (as in [{{ ∀ x .. y; P }}]), [P] is the
+   private precondition, and the rest reads as in [atomic_ewp]. The ghost
+   binders, the [∃∃] binders and [POST] may each be omitted. Like
+   [{{ P }} c a .. b : τ {{ RET v; Q }}], these triples are persistent. *)
+
+Definition ipostA `{!osirisGS Σ} `{Observe A val} {TA TB TP : tele}
+  (P : iProp Σ) (E : coPset)
+  (α : TA → iProp Σ) (β : TA → TB → iProp Σ)
+  (POST : TA → TB → TP → option (iProp Σ)) (f : TA → TB → TP → A)
+  (m : microvx) : iProp Σ :=
+  P -∗ atomic_ewp m E α β POST f.
+
+Global Arguments ipostA {_ _ _ _ _ _ _} _ _ _ _ _ _ _ /.
+
+Section ipostA_lemmas.
+  Context `{!osirisGS Σ} {TA TB TP : tele}.
+  Context `{Observe A val}.
+  Implicit Types (α : TA → iProp Σ) (β : TA → TB → iProp Σ)
+    (POST : TA → TB → TP → option (iProp Σ)) (f : TA → TB → TP → A).
+
+  (* Rule of consequence: strengthen the private precondition and enlarge
+     the implementation mask. Combined with [iSpec_mono_pers], it derives
+     one atomic triple from another. *)
+
+  Lemma ipostA_mono (P P' : iProp Σ) E E' α β POST f m :
+    E ⊆ E' →
+    ipostA P E α β POST f m -∗
+    (P' -∗ P) -∗
+    ipostA P' E' α β POST f m.
+  Proof.
+    iIntros (HE) "H HP HP'".
+    iApply (atomic_ewp_mask_weaken with "(H (HP HP'))"). done.
+  Qed.
+
+End ipostA_lemmas.
+
+(* The notations below come in 16 variants: with and without ghost binders
+   [∀ x .. y;], with one or several argument types, with and without [∃∃]
+   binders, with and without [POST]. The [∀∀] binders are mandatory (they
+   can be [_ : ()]) and there are no binders before [RET]. *)
+
+(* Ghost binders, one argument type. *)
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ Some POST%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ v%V) ..) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app None) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app v%V) ..) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ Some POST%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ v%V) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app None) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app v%V) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+(* Ghost binders, several argument types. *)
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ Some POST%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ v%V) ..) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app None) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app v%V) ..) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ Some POST%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ v%V) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' ∀ x .. y ; P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b, iforall (λ x, .. (iforall (λ y,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app None) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app v%V) ..)
+     )) ..)) ..))%I
+  (at level 20, x closed binder, y closed binder, x1 binder, xn binder,
+   a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+(* No ghost binders, one argument type. *)
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ Some POST%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ v%V) ..) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app None) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app v%V) ..) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ Some POST%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ v%V) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ '@' E '<<{' β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tbase τ) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app None) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app v%V) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder, a closed binder, b closed binder,
+   τ, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+(* No ghost binders, several argument types. *)
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ Some POST%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app $ v%V) ..) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' ∃∃ y1 .. yn , β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleS (λ y1, .. (TeleS (λ yn, TeleO)) ..))
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, β%I) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app None) ..) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ λ y1, .. (λ yn, tele_app v%V) ..) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder,
+   y1 binder, yn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v ; POST '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ Some POST%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app $ v%V) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v, POST at level 200)
+  : bi_scope.
+
+Notation "'<<{' P '|' ∀∀ x1 .. xn , α '}>>' c a .. b ':' τ1 .. τn τm '@' E '<<{' β '|' 'RET' v '}>>'" :=
+  (iSpec (type_nel.Tcons τ1 (.. (type_nel.Tcons τn (type_nel.Tbase τm)) ..)) c
+     (λ a, .. (λ b,
+        ipostA (TA:=TeleS (λ x1, .. (TeleS (λ xn, TeleO)) ..))
+               (TB:=TeleO)
+               (TP:=TeleO)
+               P E
+               (tele_app $ λ x1, .. (λ xn, α%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app β%I) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app None) ..)
+               (tele_app $ λ x1, .. (λ xn, tele_app $ tele_app v%V) ..)
+     ) ..))%I
+  (at level 20, x1 binder, xn binder, a closed binder, b closed binder,
+   τ1, τn, τm, c at level 9, E, α, β, v at level 200)
+  : bi_scope.
+
 (** Prophecy resolution at a linearization point *)
 
 (* [resolved p v w pvs] is what a caller learns once a resolution has
    fired: the prophecy's head was the pair of the value the call returned
    and the tag [v], and the rest of the prediction is [pvs']. *)
 
-Definition resolved `{!osirisGS Σ} (p : locations.loc) (v w : val)
+Definition resolved `{!osirisGS Σ} (p : proph_id) (v w : val)
     (pvs : list (val * val)) : iProp Σ :=
   ∃ pvs', ⌜pvs = (w, v) :: pvs'⌝ ∗ proph p pvs'.
 
@@ -383,7 +711,7 @@ Section proph_lemmas.
      step later could be separated from the commit by another thread. *)
 
   Lemma atomic_ewp_resolve {Y} (c : code Y val exn) (y : Y)
-      (p : locations.loc) (v : val) (pvs : list (val * val)) E α β POST f :
+      (p : proph_id) (v : val) (pvs : list (val * val)) E α β POST f :
     call_is_atomic c y →
     proph p pvs -∗
     atomic_ewp (stop c y) E α β POST f -∗
@@ -422,7 +750,7 @@ Section proph_lemmas.
   Qed.
 
   Lemma atomic_ewp_resolve_return (m : micro val exn)
-      (p : locations.loc) (v : val) (pvs : list (val * val)) E α β POST f :
+      (p : proph_id) (v : val) (pvs : list (val * val)) E α β POST f :
     proph p pvs -∗
     atomic_ewp m E α β POST f -∗
     atomic_ewp (bind m (λ w, resolve CReturn w p v)) E α β

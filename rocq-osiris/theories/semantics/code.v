@@ -121,8 +121,8 @@ Inductive code : Type → Type → Type → Type :=
 | CWrap : code (bool * cont * env * handler) loc exn
 | CFork : code (val * val) val exn
 | CJoin : code thread val exn
-| CNewProph : code unit loc exn
-| CResolve {X} (c : code X val exn) : code (X * loc * val) val exn
+| CNewProph : code unit proph_id exn
+| CResolve {X} (c : code X val exn) : code (X * proph_id * val) val exn
 | CReturn : code val val exn
 .
 
@@ -134,12 +134,13 @@ Definition is_concurrent_code {v exn eff} (c : code v exn eff) : Prop :=
 
 (* The codes that [step] cannot reduce on their own, and which therefore
    float out of [Handle] and [Par] until they reach the top of a thread.
-   [CResolve] joins them for the same reason [CFork] and [CJoin] are here:
-   its step belongs to [subjective_step]. *)
+   [CNewProph] and [CResolve] join them for the same reason [CFork] and
+   [CJoin] are here: their step belongs to [subjective_step], where the
+   prophecy state lives. *)
 
 Definition step_through_par_code {v exn eff} (c : code v exn eff) :=
   match c with
-  | CPerf | CJoin | CFork | CResolve _ => True
+  | CPerf | CJoin | CFork | CNewProph | CResolve _ => True
   | _ => False
   end.
 
@@ -228,13 +229,13 @@ Definition faa (l : loc) (i : int) :=
 
 (* [new_proph] allocates a fresh prophecy variable. *)
 
-Definition new_proph : micro loc exn :=
+Definition new_proph : micro proph_id exn :=
   stop CNewProph ().
 
 (* [resolve c x p v] performs the system call [c x] and resolves the
    prophecy [p] with the pair of its result and [v], at that very step. *)
 
-Definition resolve {X} (c : code X val exn) (x : X) (p : loc) (v : val)
+Definition resolve {X} (c : code X val exn) (x : X) (p : proph_id) (v : val)
   : micro val exn :=
   stop (CResolve c) (x, p, v).
 
@@ -244,7 +245,7 @@ Definition resolve {X} (c : code X val exn) (x : X) (p : loc) (v : val)
    resolved, the result of the system call it was fused with, and the
    annotation the program supplied. *)
 
-Definition observation : Type := loc * (val * val).
+Definition observation : Type := proph_id * (val * val).
 
 (* ------------------------------------------------------------------------ *)
 

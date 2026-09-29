@@ -5,7 +5,7 @@ From osiris Require Import osiris.
 From osiris.examples Require Import og_exception.
 
 Definition stdlib_with_notfound :=
-  ("Not_found", (VLoc (Loc 0))) :: [].
+  ("Not_found", (VFieldLoc (Loc 0))) :: [].
 
 Inductive exception :=
 | Not_found.

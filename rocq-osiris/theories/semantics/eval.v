@@ -130,20 +130,37 @@ Definition as_bool (m : microvx) : micro bool exn :=
 
 (* ------------------------------------------------------------------------ *)
 
-(* [val_as_loc v] checks that the value [v] is a language-level location
+(* [val_as_field_loc v] checks that the value [v] is a language-level location
    value and returns its meta-level value. *)
 
-Definition val_as_loc {E} (v : val) : micro loc E :=
+Definition val_as_field_loc {E} (v : val) : micro loc E :=
   match v with
-  | VLoc l =>
+  | VFieldLoc l =>
       ret l
   | _ =>
       type_mismatch "location value expected"
   end.
 
-Definition as_loc {E} (m : micro val E) : micro loc E :=
+Definition as_field_loc {E} (m : micro val E) : micro loc E :=
   v ← m ;
-  val_as_loc v.
+  val_as_field_loc v.
+
+(* ------------------------------------------------------------------------ *)
+
+(* [val_as_proph v] checks that the value [v] is a prophecy identifier and
+   returns its meta-level value. *)
+
+Definition val_as_proph {E} (v : val) : micro proph_id E :=
+  match v with
+  | VProph p =>
+      ret p
+  | _ =>
+      type_mismatch "prophecy expected"
+  end.
+
+Definition as_proph {E} (m : micro val E) : micro proph_id E :=
+  v ← m ;
+  val_as_proph v.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -177,10 +194,10 @@ Definition as_array {E} (m : micro val E) : micro array E :=
 
 Definition val_as_record {E} (v : val) : micro record E :=
   match v with
-  | VRecord l =>
-      ret l
-  | VInline _ l =>
-      ret l
+  | VRecord r =>
+      ret r
+  | VTaggedRecord _ r =>
+      ret r
   | _ =>
       type_mismatch "location value expected"
   end.
@@ -249,6 +266,22 @@ Definition check_div_by_zero i : micro unit exn :=
     division_by_zero
   else
     ret ().
+
+(* [as_ints v1 v2 f] checks that both values are language-level integers and
+   passes their meta-level values to [f]. *)
+
+Definition as_ints {A} (v1 v2 : val) (f : int → int → micro A exn) : micro A exn :=
+  i1 ← val_as_int v1 ;
+  i2 ← val_as_int v2 ;
+  f i1 i2.
+
+(* On two integer values the coercions vanish. [simpl] does not perform this
+   reduction on its own, so proofs about the integer operators rewrite with
+   this equation instead. *)
+
+Lemma as_ints_VInt {A} (i1 i2 : int) (f : int → int → micro A exn) :
+  as_ints (VInt i1) (VInt i2) f = f i1 i2.
+Proof. reflexivity. Qed.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -344,11 +377,11 @@ End LookupEnv.
 
 (* ------------------------------------------------------------------------ *)
 
-Lemma bind_proph_args {B E} {η} {π : path} {a : proph_arg} {p : loc} {v : val}
-    {k : loc → val → micro B E} :
-  lookup_path η π = Some (VLoc p) →
+Lemma bind_proph_args {B E} {η} {π : path} {a : proph_arg} {p : proph_id}
+    {v : val} {k : proph_id → val → micro B E} :
+  lookup_path η π = Some (VProph p) →
   eval_proph_arg η a = Some v →
-  (p' ← as_loc (of_option (lookup_path η π)) ;
+  (p' ← as_proph (of_option (lookup_path η π)) ;
    v' ← of_option (eval_proph_arg η a) ;
    k p' v') = k p v.
 Proof.
@@ -554,7 +587,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       (* A data pattern for an extensible data type matches a data value, provided
          the data constructors correspond to the same location in the environment.
          If the data constructors do not match, a meta-level exception is raised. *)
-      l' ← as_loc (of_option (lookup_path η π)) ;
+      l' ← as_field_loc (of_option (lookup_path η π)) ;
       if (locations.eqb l l') then eval_pats η δ ps vs else throw ()
   | PRecord fps, VRecord l =>
       (* A record pattern matches a record value. The pattern may
@@ -563,7 +596,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       '(_, ls) ← load_block l ;
       vs ← loadfs ls fps ;
       eval_fpats η δ fps vs
-  | PInline c p, VInline c' l =>
+  | PTaggedRecord c p, VTaggedRecord c' l =>
       (* An inline-record pattern matches an inline-record value with the
          same constructor; the sub-pattern is matched against the record
          itself. A constructor mismatch is a match failure. *)
@@ -586,10 +619,10 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
   (* An inline-record constructor and an ordinary (or extensible) one can be
      constructors of the same sum type, so these four combinations are ordinary
      constructor mismatches. *)
-  | PData _ _, VInline _ _
-  | PXData _ _, VInline _ _
-  | PInline _ _, VData _ _
-  | PInline _ _, VXData _ _ =>
+  | PData _ _, VTaggedRecord _ _
+  | PXData _ _, VTaggedRecord _ _
+  | PTaggedRecord _ _, VData _ _
+  | PTaggedRecord _ _, VXData _ _ =>
       throw ()
   | PTuple _, _ =>
       type_mismatch "tuple expected"
@@ -599,7 +632,7 @@ Local Fixpoint pre_eval_pat η δ p v : micro env unit :=
       type_mismatch "extensible algebraic data expected"
   | PRecord _, _ =>
       type_mismatch "record expected"
-  | PInline _ _, _ =>
+  | PTaggedRecord _ _, _ =>
       type_mismatch "inline record expected"
   | PArray _, _ =>
       type_mismatch "array expected"
@@ -713,18 +746,16 @@ Definition call v1 v2 : microvx :=
 
 Definition phys_eq_val v1 v2 : micro bool exn :=
   match v1, v2 with
-  | VLoc l1, VLoc l2 =>
+  | VFieldLoc l1, VFieldLoc l2 =>
       ret (locations.eqb l1 l2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
-  | VInline _ l1, VInline _ l2 =>
+  | VTaggedRecord _ l1, VTaggedRecord _ l2 =>
       '((t1, _), (t2, _)) ← par (load_block l1) (load_block l2) ;
       match t1, t2 with
       | Mut, _ | _, Mut => ret (locations.eqb l1 l2)
       | _, _ => physical_equality_error "invalid or unsupported arguments"
       end
-  (* | VCont k1, VCont k2 => *)
-  (*     ret (locations.eqb k1 k2) *)
   | VData c1 [], VData c2 [] =>
       ret (c1 =? c2)
   | _, _ =>
@@ -822,6 +853,75 @@ Definition ge_val v1 v2 : micro bool exn :=
 
 (* ------------------------------------------------------------------------ *)
 
+(* The interpretation of primitive operators. *)
+
+(* [eval_un_op op v] applies the unary operator [op] to the value [v]. *)
+
+Definition eval_un_op (op : un_op) (v : val) : microvx :=
+  match op with
+  | UNeg =>
+      i ← val_as_int v ;
+      ret (VInt (int.neg i))
+  | ULnot =>
+      i ← val_as_int v ;
+      ret (VInt (int.lnot i))
+  | UNot =>
+      b ← val_as_bool v ;
+      ret (VBool (negb b))
+  end.
+
+(* [eval_bin_op op v1 v2] applies the binary operator [op] to the values [v1]
+   and [v2]. Both operands have already been evaluated by the time this
+   function is reached: see the [EBinOp] case of [eval]. *)
+
+Definition eval_bin_op (op : bin_op) (v1 v2 : val) : microvx :=
+  match op with
+  | BAdd =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.add i1 i2))
+  | BSub =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.sub i1 i2))
+  | BMul =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.mul i1 i2))
+  | BDiv =>
+      (* Signed division is used. *)
+      as_ints v1 v2 $ λ i1 i2,
+      '() ← check_div_by_zero i2 ;
+      ret (VInt (int.divs i1 i2))
+  | BMod =>
+      (* Signed remainder is used. *)
+      as_ints v1 v2 $ λ i1 i2,
+      '() ← check_div_by_zero i2 ;
+      ret (VInt (int.mods i1 i2))
+  | BLand =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.land i1 i2))
+  | BLor =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.lor i1 i2))
+  | BLxor =>
+      as_ints v1 v2 $ λ i1 i2, ret (VInt (int.lxor i1 i2))
+  | BLsl =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.lsl i1 i2)))
+  | BLsr =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.lsr i1 i2)))
+  | BAsr =>
+      as_ints v1 v2 $ λ i1 i2, if_in_shift_range i2 (ret (VInt (int.asr i1 i2)))
+  | BPhysEq =>
+      b ← phys_eq_val v1 v2 ; ret (VBool b)
+  | BEq =>
+      b ← eq_val v1 v2 ; ret (VBool b)
+  | BNe =>
+      b ← ne_val v1 v2 ; ret (VBool b)
+  | BLt =>
+      b ← lt_val v1 v2 ; ret (VBool b)
+  | BLe =>
+      b ← le_val v1 v2 ; ret (VBool b)
+  | BGt =>
+      b ← gt_val v1 v2 ; ret (VBool b)
+  | BGe =>
+      b ← ge_val v1 v2 ; ret (VBool b)
+  end.
+
+(* ------------------------------------------------------------------------ *)
+
 (* The evaluation of a list of structure items involves two environments [η]
    and [δ]. The environment [η] contains the bindings that are currently in
    scope: it is used when a name must be looked up. The environment [δ]
@@ -895,7 +995,7 @@ Fixpoint eval_type_extensions (cs : list name) :=
   | c :: cs =>
       l ← alloc VUnit;
       η ← eval_type_extensions cs;
-      ret ((c, VLoc l) :: η)
+      ret ((c, VFieldLoc l) :: η)
   end.
 
 (* ------------------------------------------------------------------------ *)
@@ -1271,7 +1371,7 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       v ← evals η es ;
       ret (VData c v)
   | EXData π es =>
-      l ← as_loc (of_option (lookup_path η π)) ;
+      l ← as_field_loc (of_option (lookup_path η π)) ;
       v ← evals η es ;
       ret (VXData l v)
   | ERecord t es =>
@@ -1281,13 +1381,13 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       l ← alloc_block t ls;
       ret (VRecord l)
   | ERecordUpdate e fes =>
-      '(r, fvs') ← par (as_record (eval η e)) (evalfs η fes) ;
+      '(r, fvs) ← par (as_record (eval η e)) (evalfs η fes) ;
       '(t, ls) ← load_block r ;
       (* Copy the values in record [e] into a new block. *)
       vs ← loadn ls ;
       ls ← allocn vs ;
       (* The new components override existing components by the same name. *)
-      '() ← update ls fvs' ;
+      '() ← update ls fvs ;
       l ← alloc_block t ls ;
       ret (VRecord l)
   | ERecordAccess e f =>
@@ -1310,14 +1410,14 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       r ← as_record (eval η e) ;
       '(_, ls) ← load_block r ;
       match ls !! f with
-      | Some l => ret (VLoc l)
+      | Some l => ret (VFieldLoc l)
       | None => Crash
       end
   | EInline c t es =>
     vs ← evals η es ;
     ls ← allocn vs ;
     l ← alloc_block t ls ;
-    ret (VInline c l)
+    ret (VTaggedRecord c l)
   | EArrayLit es =>
       vs ← evals η es ;
       ls ← allocn vs ;
@@ -1372,85 +1472,19 @@ Fixpoint pre_eval η e {struct e} : microvx :=
       ret (VInt (int.repr int.max_signed))
   | EMinInt =>
       ret (VInt (int.repr int.min_signed))
-  | EIntNeg e =>
-      i ← as_int (eval η e) ;
-      ret (VInt (int.neg i))
-  | EIntAdd e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.add i1 i2))
-  | EIntSub e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.sub i1 i2))
-  | EIntMul e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.mul i1 i2))
-  | EIntDiv e1 e2 =>
-      (* Signed division is used. *)
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      '() ← check_div_by_zero i2 ;
-      ret (VInt (int.divs i1 i2))
-  | EIntMod e1 e2 =>
-      (* Signed remainder is used. *)
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      '() ← check_div_by_zero i2 ;
-      ret (VInt (int.mods i1 i2))
-  | EIntLand e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.land i1 i2))
-  | EIntLor e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.lor i1 i2))
-  | EIntLxor e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      ret (VInt (int.lxor i1 i2))
-  | EIntLnot e =>
-      i ← as_int (eval η e) ;
-      ret (VInt (int.lnot i))
-  | EIntLsl e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.lsl i1 i2)))
-  | EIntLsr e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.lsr i1 i2)))
-  | EIntAsr e1 e2 =>
-      '(i1, i2) ← pair_op Strat.fun_app_order (as_int (eval η e1)) (as_int (eval η e2)) ;
-      if_in_shift_range i2 (ret (VInt (int.asr i1 i2)))
+  | EUnOp op e =>
+      v ← eval η e ;
+      eval_un_op op v
+  | EBinOp op e1 e2 =>
+      (* The two operands are evaluated in parallel; the operator itself is
+         then carried out by [eval_bin_op]. *)
+      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
+      eval_bin_op op v1 v2
   | EFloat f =>
       ret (VFloat f)
-  | EOpPhysEq e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← phys_eq_val v1 v2 ;
-      ret (VBool b)
-  | EOpEq e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← eq_val v1 v2 ;
-      ret (VBool b)
-  | EOpNe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← ne_val v1 v2 ;
-      ret (VBool b)
-  | EOpLt e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← lt_val v1 v2 ;
-      ret (VBool b)
-  | EOpLe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← le_val v1 v2 ;
-      ret (VBool b)
-  | EOpGt e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← gt_val v1 v2 ;
-      ret (VBool b)
-  | EOpGe e1 e2 =>
-      '(v1, v2) ← pair_op Strat.fun_app_order (eval η e1) (eval η e2) ;
-      b ← ge_val v1 v2 ;
-      ret (VBool b)
   | EBoolDisj e1 e2 =>
       b1 ← as_bool (eval η e1) ;
       if (b1 : bool) then ret VTrue else eval η e2
-  | EBoolNeg e =>
-      b ← as_bool (eval η e) ;
-      ret (VBool (negb b))
   | ELet bs e =>
       (* This is evaluated like a [match] construct with one branch. *)
       δ ← eval_bindings η bs ;
@@ -1520,47 +1554,77 @@ Fixpoint pre_eval η e {struct e} : microvx :=
   | ELetSitem s e =>
       '(η,_) ← eval_sitem (η,[]) s ;
       eval η e
+  (* A reference is a mutable record with one field, like [ERecord Mut [e]];
+     it is read and written at field [0]. *)
   | ERef e =>
       v ← eval η e ;
       l ← alloc v ;
-      ret (VLoc l)
+      r ← alloc_block Mut [l] ;
+      ret (VRecord r)
   | ELoad e =>
-      l ← as_loc (eval η e) ;
-      load l
+      r ← as_record (eval η e) ;
+      '(_, ls) ← load_block r ;
+      match ls !! 0%Z with
+      | Some l => load l
+      | None => Crash
+      end
   | EStore e1 e2 =>
-      '(l, v) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
-      store l v
+      '(r, v) ← par (as_record (eval η e1)) (eval η e2) ;
+      '(_, ls) ← load_block r ;
+      match ls !! 0%Z with
+      | Some l => store l v
+      | None => Crash
+      end
+  | EFieldLoad e =>
+      l ← as_field_loc (eval η e) ;
+      load l
   | EExchange e1 e2 =>
-      '(l, v) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
+      '(l, v) ← pair_op Strat.fun_app_order (as_field_loc (eval η e1)) (eval η e2) ;
       exchange l v
   | ECAS e1 e2 e3 =>
-      '(l, seen, v) ← par (par (as_loc (eval η e1)) (eval η e2)) (eval η e3);
+      '(l, seen, v) ← par (par (as_field_loc (eval η e1)) (eval η e2)) (eval η e3);
       cas l seen v
   | EFAA e1 e2 =>
-      '(l, i) ← par (as_loc (eval η e1)) (as_int (eval η e2)) ;
+      '(l, i) ← par (as_field_loc (eval η e1)) (as_int (eval η e2)) ;
       faa l i
   | ENewProph =>
       p ← new_proph ;
-      ret (VLoc p)
+      ret (VProph p)
   | EResolve e π a =>
       (* The prophecy [π] and the annotation [a] are looked up in the
          environment. The resolved expression [e]'s own arguments are
          then evaluated, and the resolution is attached to the system
          call performing [e]'s effect (if there is one). *)
-      p ← as_loc (of_option (lookup_path η π)) ;
+      p ← as_proph (of_option (lookup_path η π)) ;
       v ← of_option (eval_proph_arg η a) ;
       match e with
       | ELoad e1 =>
-          l ← as_loc (eval η e1) ;
+          r ← as_record (eval η e1) ;
+          '(_, ls) ← load_block r ;
+          match ls !! 0%Z with
+          | Some l => resolve CLoad l p v
+          | None => Crash
+          end
+      | EFieldLoad e1 =>
+          l ← as_field_loc (eval η e1) ;
           resolve CLoad l p v
+      | ERecordAccess e1 f =>
+          (* A field read, e.g. [!r] or [r.f], is a single load once the
+             field's location is known: the resolution is attached to it. *)
+          r ← as_record (eval η e1) ;
+          '(_, ls) ← load_block r ;
+          match ls !! f with
+          | Some l => resolve CLoad l p v
+          | None => Crash
+          end
       | EExchange e1 e2 =>
-          '(l, w) ← pair_op Strat.fun_app_order (as_loc (eval η e1)) (eval η e2) ;
+          '(l, w) ← pair_op Strat.fun_app_order (as_field_loc (eval η e1)) (eval η e2) ;
           resolve CExchange (l, w) p v
       | ECAS e1 e2 e3 =>
-          '(l, seen, w) ← par (par (as_loc (eval η e1)) (eval η e2)) (eval η e3) ;
+          '(l, seen, w) ← par (par (as_field_loc (eval η e1)) (eval η e2)) (eval η e3) ;
           resolve CCAS (l, seen, w) p v
       | EFAA e1 e2 =>
-          '(l, i) ← par (as_loc (eval η e1)) (as_int (eval η e2)) ;
+          '(l, i) ← par (as_field_loc (eval η e1)) (as_int (eval η e2)) ;
           resolve CFAA (l, i) p v
       | _ =>
           (* A non-atomic expression cannot be resolved at its own step:

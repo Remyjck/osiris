@@ -15,22 +15,25 @@ Section monotonicity.
   Context `{!osirisGS Σ}.
 
   Context {A V X : Type} `{Observe A V}.
+  Context {B : Type} `{Observe B X}.
   Implicit Type m : micro V X.
+  Implicit Types ζ : B → iProp Σ.
+  Implicit Types Φ Q : A → iProp Σ.
 
-  Lemma imp_strong_mono E1 E2 m Ψ1 Ψ2 ζ1 ζ2 Φ1 Φ2 :
+  Lemma imp_strong_mono E1 E2 m Ψ1 Ψ2 (ζ1 ζ2 : B → iProp Σ) Φ1 Φ2 :
     E1 ⊆ E2 →
     impure E1 m Ψ1 ζ1 Φ1 -∗
     (Ψ1 ⊑ Ψ2)%ieff -∗
-    (∀ e, ζ1 e ={E2}=∗ ζ2 e) ∧ (∀ (a : A), Φ1 a ={E2}=∗ Φ2 a) -∗
+    (∀ b, ζ1 b ={E2}=∗ ζ2 b) ∧ (∀ (a : A), Φ1 a ={E2}=∗ Φ2 a) -∗
     impure E2 m Ψ2 ζ2 Φ2.
   Proof.
     iIntros (HE) "Himp Hprot H".
     iApply (ewp_strong_mono with "Himp Hprot"); auto.
     iIntros ([|]).
     - iIntros "(%v & -> & HΦ1)".
-      by iMod ("H" with "HΦ1") as "$".
-    - iIntros "Hζ1".
-      by iMod ("H" with "Hζ1") as "$".
+      iMod ("H" with "HΦ1") as "HΦ2". iModIntro. iExists v. by iFrame.
+    - iIntros "(%b & -> & Hζ1)".
+      iMod ("H" with "Hζ1") as "Hζ2". iModIntro. iExists b. by iFrame.
   Qed.
 
   Local Tactic Notation "imp_mono" "with" constr(s) :=
@@ -43,10 +46,7 @@ Section monotonicity.
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros (Hmonor Hmonot) "H"; iApply (ewp_mono with "H").
-    iIntros ([|]); last apply Hmonot.
-    iIntros "(%v & -> & H)".
-    iExists v. iSplit. auto.
-    by iApply Hmonor.
+    iIntros ([|]); [ apply ireturns_mono, Hmonor | apply ireturns_mono, Hmonot ].
   Qed.
 
   Lemma imp_mono_val E m Ψ ζ (Φ' : A → iProp Σ) Φ :
@@ -57,7 +57,7 @@ Section monotonicity.
     iIntros (Hmonor) "H"; iApply (imp_mono with "H"); auto.
   Qed.
 
-  Lemma imp_mono_exn E m Ψ ζ' ζ Φ :
+  Lemma imp_mono_exn E m Ψ (ζ' ζ : B → iProp Σ) Φ :
     (∀ e, ζ' e ⊢ ζ e) →
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ }} ⊢
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
@@ -71,11 +71,12 @@ Section monotonicity.
   Proof. apply ewp_mask_mono. Qed.
 
   Global Instance imp_mono' E m Ψ ζ :
-    Proper (pointwise_relation _ (⊢) ==> (⊢)) (impure E m Ψ ζ).
+    Proper (pointwise_relation _ (⊢) ==> (⊢)) (@impure A V X Σ _ _ E m Ψ B _ ζ).
   Proof. by intros Φ Φ' ?; apply imp_mono. Qed.
 
   Global Instance imp_flip_mono' E m Ψ ζ :
-    Proper (pointwise_relation _ (CRelationClasses.flip (⊢)) ==> (CRelationClasses.flip (⊢))) (impure E m Ψ ζ).
+    Proper (pointwise_relation _ (CRelationClasses.flip (⊢)) ==> (CRelationClasses.flip (⊢)))
+      (@impure A V X Σ _ _ E m Ψ B _ ζ).
   Proof. by intros Φ Φ' ?; apply imp_mono. Qed.
 
   Lemma imp_frame_l E m Ψ ζ Φ R : R ∗ impure E m Ψ ζ Φ ⊢ impure E m Ψ ζ (λ o, R ∗ Φ o).
@@ -175,7 +176,10 @@ Section updates.
   Context `{!osirisGS Σ}.
 
   Context {A V X : Type} `{Observe A V}.
+  Context {B : Type} `{Observe B X}.
   Implicit Type m : micro V X.
+  Implicit Types ζ : B → iProp Σ.
+  Implicit Types Φ Q : A → iProp Σ.
 
   Lemma fupd_imp E m Ψ ζ Φ :
     (|={E}=> EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ⊢
@@ -193,14 +197,15 @@ Section updates.
     iFrame.
   Qed.
 
-  Lemma imp_fupd_exn E m Ψ ζ Φ :
+  Lemma imp_fupd_exn E m Ψ (ζ : B → iProp Σ) Φ :
     EWP m @ E <|Ψ|> ⟨⟨ e, |={E}=> ζ e ⟩⟩ {{ Φ }} -∗
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Himp".
     iApply ewp_fupd.
     iApply (ewp_wand with "Himp").
-    iIntros ([|]); [ by iIntros "(%v & -> & $) !>" | by iIntros "$ !>" ].
+    iIntros ([|]); [ by iIntros "$ !>" | ].
+    iIntros "(%b & -> & >Hζ) !>". by iExists b; iFrame.
   Qed.
 
   Import ewp_rules_tactics.
@@ -214,16 +219,15 @@ Section updates.
     iIntros "He".
     iApply (ewp_atomic E E2). iMod "He". iModIntro.
     iApply (ewp_wand with "He").
-    iIntros ([|]); [ iIntros "(% & -> & HΦ)" | iIntros "H" ].
-    - by iMod "HΦ" as "$".
-    - by iMod "H" as "$".
+    iIntros ([|]); iIntros "(% & -> & H)"; iMod "H"; iModIntro; by iFrame.
   Qed.
 
   Lemma imp_atomic E E2 m Ψ Φ `{!subjective_step.Atomic m}
     `{TCEq (option val) (to_eff m) None}
     `{TCEq (option thread) (to_join m) None}
       :
-    (|={E,E2}=> impure E2 m Ψ ⊥ (λ o, |={E2,E}=> Φ o)) ⊢ impure E m Ψ ⊥ Φ.
+    (|={E,E2}=> impure E2 m Ψ (⊥ : B → iProp Σ) (λ o, |={E2,E}=> Φ o))
+      ⊢ impure E m Ψ (⊥ : B → iProp Σ) Φ.
   Proof.
     iIntros "He".
     iApply (imp_atomic' E E2). iMod "He". iModIntro.
@@ -241,17 +245,16 @@ Section updates.
     iIntros (??) "HR He".
     iApply (ewp_step_fupd with "HR"); [ done.. | ].
     iApply (ewp_wand with "He").
-    iIntros ([|]); [ iIntros "(%r & -> & HΦ) HP" | iIntros "Hζ HP" ].
-    - iMod ("HΦ" with "HP") as "HΦ". by iFrame.
-    - by iApply "Hζ".
+    iIntros ([|]); iIntros "(%r & -> & H) HP";
+      iMod ("H" with "HP") as "H"; by iFrame.
   Qed.
 
   Lemma imp_step_fupd E1 E2 m Ψ P Φ :
     TCEq (is_ewp_case m) WPStep →
     E2 ⊆ E1 →
     (|={E1}[E2]▷=> P) -∗
-    impure E2 m Ψ ⊥ (λ a, P ={E1}=∗ Φ a) -∗
-    impure E1 m Ψ ⊥ Φ.
+    impure E2 m Ψ (⊥ : B → iProp Σ) (λ a, P ={E1}=∗ Φ a) -∗
+    impure E1 m Ψ (⊥ : B → iProp Σ) Φ.
   Proof.
     iIntros (??) "HR He".
     iApply (imp_step_fupd' with "HR"); [ done.. | ].
@@ -264,8 +267,10 @@ End updates.
 Section proofmode_classes.
   Context `{!osirisGS Σ}.
   Context {A X V : Type} `{Observe A V}.
+  Context {B : Type} `{Observe B X}.
   Implicit Types P Q : iProp Σ.
   Implicit Types Φ : A → iProp Σ.
+  Implicit Types ζ : B → iProp Σ.
   Implicit Types m : micro V X.
 
   Global Instance frame_imp p E m R Ψ ζ Φ Φ' :
@@ -309,7 +314,8 @@ Section proofmode_classes.
     :
     ElimModal True p false
             (|={E1,E2}=> P) P
-            (impure E1 m Ψ ⊥ Φ) (impure E2 m Ψ ⊥ (λ o, |={E2,E1}=> Φ o))%I | 99.
+            (impure E1 m Ψ (⊥ : B → iProp Σ) Φ)
+            (impure E2 m Ψ (⊥ : B → iProp Σ) (λ o, |={E2,E1}=> Φ o))%I | 99.
   Proof.
     intros _. by rewrite bi.intuitionistically_if_elim
       fupd_frame_r bi.wand_elim_r imp_atomic.
@@ -347,11 +353,12 @@ Section proofmode_classes.
     :
     ElimAcc (X:=Y) True
             (fupd E1 E2) (fupd E2 E1)
-            α β γ (impure E1 m Ψ ⊥ Φ)
-            (λ x, impure E2 m Ψ ⊥ (λ v, |={E2}=> β x ∗ (γ x -∗? Φ v)))%I | 99.
+            α β γ (impure E1 m Ψ (⊥ : B → iProp Σ) Φ)
+            (λ x, impure E2 m Ψ (⊥ : B → iProp Σ)
+                    (λ v, |={E2}=> β x ∗ (γ x -∗? Φ v)))%I | 99.
   Proof.
     iIntros (_) "Hinner >Hacc". iDestruct "Hacc" as (x) "[Hα Hclose]".
-    iApply (imp_mono_exn _ _ _ ⊥). iIntros (? []).
+    iApply (imp_mono_exn _ _ _ (⊥ : B → iProp Σ)). iIntros (? []).
     iApply (imp_wand with "(Hinner Hα)").
     iIntros (v) ">[Hβ HΦ]". iApply "HΦ". by iApply "Hclose".
   Qed.
@@ -374,8 +381,9 @@ Section proofmode_classes.
 
   Global Instance elim_acc_imp_nonatomic {Y} E α β γ m Ψ Φ :
     ElimAcc (X:=Y) True (fupd E E) (fupd E E)
-            α β γ (impure E m Ψ ⊥ Φ)
-            (λ x, impure E m Ψ ⊥ (λ v, |={E}=> β x ∗ (γ x -∗? Φ v)))%I.
+            α β γ (impure E m Ψ (⊥ : B → iProp Σ) Φ)
+            (λ x, impure E m Ψ (⊥ : B → iProp Σ)
+                    (λ v, |={E}=> β x ∗ (γ x -∗? Φ v)))%I.
   Proof.
     iIntros (_) "Hinner >Hacc". iDestruct "Hacc" as (x) "[Hα Hclose]".
     iApply imp_fupd.
@@ -402,7 +410,8 @@ Section micro_constructors.
   Context `{!osirisGS Σ}.
 
   Context {A V X : Type} `{Observe A V}.
-  Context {E : coPset} {Ψ : iEff Σ} {ζ : X → iProp Σ} {Φ : A → iProp Σ}.
+  Context {B : Type} `{Observe B X}.
+  Context {E : coPset} {Ψ : iEff Σ} {ζ : B → iProp Σ} {Φ : A → iProp Σ}.
 
   Lemma imp_ret (v : V) a :
     v = ♯ a →
@@ -423,64 +432,74 @@ Section micro_constructors.
     iModIntro. iFrame. auto.
   Qed.
 
-  Lemma imp_throw e :
-    ζ e -∗
-    EWP (throw e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+  Lemma imp_throw (x : X) b :
+    x = ♯ b →
+    ζ b -∗
+    EWP (throw x) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
-    iIntros "Hζ".
+    iIntros (Hobserve) "Hζ".
     iApply ewp_throw.
-    iFrame.
+    iFrame. iPureIntro; apply Hobserve.
   Qed.
 
-  Lemma invert_imp_throw e :
-    EWP (throw e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
-    |={E}=> ζ e.
+  Lemma invert_imp_throw (x : X) :
+    EWP (throw x) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
+    |={E}=> ∃ b, ⌜x = ♯b⌝ ∗ ζ b.
   Proof.
     iIntros "Himp".
-    iPoseProof (ewp_throw_inv with "Himp") as ">$".
-    iModIntro. auto.
+    iPoseProof (ewp_throw_inv with "Himp") as ">(%b & -> & Hζ)".
+    iModIntro. iFrame. auto.
   Qed.
 
-  Lemma invert_imp_Crash :
+  Lemma invert_imp_Crash σ κs π :
+    osiris_state_interp σ -∗ osiris_proph_interp σ κs -∗ osiris_thread_interp π -∗
     EWP Crash @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
     |={E}=> False.
   Proof.
-    iIntros "Himp".
-    iPoseProof (ewp_crash_inv with "Himp") as ">False".
+    iIntros "Hsi Hpi Hti Himp".
+    iPoseProof (ewp_crash_inv with "Hsi Hpi Hti Himp") as ">False".
     auto.
   Qed.
 
   Lemma imp_Par2 `{Observe A1 V1} `{Observe A2 V2} {X'}
-    Φ1 ζ1 Φ2 ζ2 m1 m2 (k : outcome2 (V1 * V2) X' → micro V X) :
+    `{Observe B1 X'} `{Observe B2 X'}
+    (Φ1 : A1 → iProp Σ) (ζ1 : B1 → iProp Σ)
+    (Φ2 : A2 → iProp Σ) (ζ2 : B2 → iProp Σ)
+    m1 m2 (k : outcome2 (V1 * V2) X' → micro V X) :
     EWP m1 @ E <|Ψ|> ⟨⟨ ζ1 ⟩⟩ {{ Φ1 }} -∗
     EWP m2 @ E <|Ψ|> ⟨⟨ ζ2 ⟩⟩ {{ Φ2 }} -∗
-    (∀ e, ζ1 e -∗ ▷ EWP discontinue k e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
-    (∀ e, ζ2 e -∗ ▷ EWP discontinue k e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
+    (∀ b, ζ1 b -∗ ▷ EWP discontinue k (♯b) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
+    (∀ b, ζ2 b -∗ ▷ EWP discontinue k (♯b) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
     (∀ x y, Φ1 x -∗ Φ2 y -∗ ▷ EWP continue k (♯x, ♯y) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (Par m1 m2 k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H1 H2 Hjoin".
     iApply (ewp_Par with "H1 H2").
     iSplit; last iSplit.
-    - iDestruct "Hjoin" as "[$ _]".
-    - iDestruct "Hjoin" as "[_ [$ _]]".
+    - iDestruct "Hjoin" as "[H _]".
+      iIntros (e) "(%b & -> & Hζ)". by iApply "H".
+    - iDestruct "Hjoin" as "[_ [H _]]".
+      iIntros (e) "(%b & -> & Hζ)". by iApply "H".
     - iIntros (v1 v2) "(%x & -> & HΦ1) (%y & -> & HΦ2)".
       iApply ("Hjoin" with "HΦ1 HΦ2").
   Qed.
 
   Lemma imp_Par `{Observe A1 V1} `{Observe A2 V2}
-    Φ1 Φ2 m1 m2 (k : outcome2 (V1 * V2) X → micro V X) :
+    (Φ1 : A1 → iProp Σ) (Φ2 : A2 → iProp Σ)
+    m1 m2 (k : outcome2 (V1 * V2) X → micro V X) :
     EWP m1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
     EWP m2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
-    (∀ e, ζ e -∗ ▷ EWP discontinue k e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
+    (∀ b, ζ b -∗ ▷ EWP discontinue k (♯b) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
     (∀ x y, Φ1 x -∗ Φ2 y -∗ ▷ EWP continue k (♯x, ♯y) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (Par m1 m2 k) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "H1 H2 Hjoin".
     iApply (ewp_Par with "H1 H2").
     iSplit; last iSplit.
-    - iDestruct "Hjoin" as "[$ _]".
-    - iDestruct "Hjoin" as "[$ _]".
+    - iDestruct "Hjoin" as "[H _]".
+      iIntros (e) "(%b & -> & Hζ)". by iApply "H".
+    - iDestruct "Hjoin" as "[H _]".
+      iIntros (e) "(%b & -> & Hζ)". by iApply "H".
     - iIntros (v1 v2) "(%x & -> & HΦ1) (%y & -> & HΦ2)".
       iApply ("Hjoin" with "HΦ1 HΦ2").
   Qed.
@@ -492,7 +511,8 @@ Section micro_combinators.
   Context `{!osirisGS Σ}.
   Context {E : coPset} {Ψ : iEff Σ}.
 
-  Lemma imp_par' {ζ : exn → iProp Σ} `{Observe A1 V1} `{Observe A2 V2} {Φ : A1 * A2 → iProp Σ}
+  Lemma imp_par' `{Encode B} {ζ : B → iProp Σ}
+    `{Observe A1 V1} `{Observe A2 V2} {Φ : A1 * A2 → iProp Σ}
     Φ1 Φ2 m1 m2 :
     EWP m1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
     EWP m2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
@@ -502,14 +522,15 @@ Section micro_combinators.
     iIntros "H1 H2 Hjoin".
     iApply (imp_Par with "H1 H2").
     iSplit.
-    - iIntros (e) "Hζ".
-      iApply (imp_throw with "Hζ").
+    - iIntros (b) "Hζ".
+      by iApply (imp_throw _ b with "Hζ").
     - iIntros (v1 v2) "HΦ1 HΦ2".
       iApply (imp_ret _ (v1, v2)); first encode.
       iApply ("Hjoin" with "HΦ1 HΦ2").
   Qed.
 
-  Lemma imp_par {ζ : exn → iProp Σ} `{Observe A1 V1} `{Observe A2 V2}
+  Lemma imp_par `{Encode B} {ζ : B → iProp Σ}
+    `{Observe A1 V1} `{Observe A2 V2}
     (Φ1 : A1 → iProp Σ) (Φ2 : A2 → iProp Σ) m1 m2 :
     EWP m1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
     EWP m2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
@@ -521,33 +542,32 @@ Section micro_combinators.
   Qed.
 
   Context {A X V : Type} `{Observe A V}.
-  Context {ζ : X → iProp Σ} {Φ : A → iProp Σ}.
+  Context {B : Type} `{Observe B X}.
+  Context {ζ : B → iProp Σ} {Φ : A → iProp Σ}.
   Implicit Types P Q : iProp Σ.
   Implicit Types Φ : A → iProp Σ.
   Implicit Types m : micro V X.
 
-  Lemma imp_try2 `{Observe A1 V1} {X1}
-    (Φ' : A1 → iProp Σ) (ζ' : X1 → iProp Σ) (m : micro V1 X1)
+  Lemma imp_try2 `{Observe A1 V1} {X1} `{Observe B1 X1}
+    (Φ' : A1 → iProp Σ) (ζ' : B1 → iProp Σ) (m : micro V1 X1)
     (h : outcome2 V1 X1 -> micro V X) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ' }} -∗
     (∀ a, Φ' a -∗ EWP (continue h ♯a) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
-    (∀ e, ζ' e -∗ EWP (discontinue h e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
+    (∀ b, ζ' b -∗ EWP (discontinue h ♯b) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (try2 m h) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Himp Hresume".
     iApply ewp_try2.
     iApply (ewp_wand with "Himp").
-    iIntros ([|]); [ iIntros "(%v & -> & HΦ)" | iIntros "Hζ" ].
-    - iApply ("Hresume" with "HΦ").
-    - iApply ("Hresume" with "Hζ").
+    iIntros ([|]); iIntros "(%v & -> & H)"; iApply ("Hresume" with "H").
   Qed.
 
-  Lemma imp_try `{Observe A1 V1} {X1}
-    (Φ' : A1 → iProp Σ) (ζ' : X1 → iProp Σ) (m : micro V1 X1)
+  Lemma imp_try `{Observe A1 V1} {X1} `{Observe B1 X1}
+    (Φ' : A1 → iProp Σ) (ζ' : B1 → iProp Σ) (m : micro V1 X1)
     (k : V1 → micro V X) (z : X1 → micro V X) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ' }} -∗
     (∀ a, Φ' a -∗ EWP (k ♯a) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
-    (∀ e, ζ' e -∗ EWP (z e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
+    (∀ b, ζ' b -∗ EWP (z ♯b) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) -∗
     EWP (try m k z) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Himp Hresume".
@@ -567,15 +587,15 @@ Section micro_combinators.
     rewrite bind_as_try.
     iApply (imp_try with "Himp [Hconseq]").
     iSplit; first iExact "Hconseq".
-    iIntros (e). iApply imp_throw.
+    iIntros (b) "Hζ". by iApply (imp_throw _ b with "Hζ").
   Qed.
 
   Lemma imp_bind2 `{Observe A1 V1}
-    (Φ' : A1 → iProp Σ) (ζ' : X → iProp Σ) (m : micro V1 X)
+    (Φ' : A1 → iProp Σ) (ζ' : B → iProp Σ) (m : micro V1 X)
     (f : V1 → micro V X) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ' ⟩⟩ {{ Φ' }} -∗
     (∀ (x : A1), Φ' x -∗ EWP (f ♯x) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}) ∧
-    (∀ (e : X), ζ' e -∗ ζ e) -∗
+    (∀ (b : B), ζ' b -∗ ζ b) -∗
     EWP (bind m f) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Himp Hconseq".
@@ -584,12 +604,12 @@ Section micro_combinators.
     iSplit.
     - iDestruct "Hconseq" as "[$ _]".
     - iDestruct "Hconseq" as "[_ Hζ]".
-      iIntros (e) "Hζ'". iSpecialize ("Hζ" with "Hζ'").
-      iApply (imp_throw with "Hζ").
+      iIntros (b) "Hζ'". iSpecialize ("Hζ" with "Hζ'").
+      by iApply (imp_throw _ b with "Hζ").
   Qed.
 
   Lemma imp_widen (m : micro V void) :
-    EWP m @ E <|Ψ|> {{ Φ }} -∗
+    impure E m Ψ (⊥ : void → iProp Σ) Φ -∗
     EWP (widen m) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Himp".
@@ -618,7 +638,9 @@ Section micro_combinators.
 
 End micro_combinators.
 
-Lemma imp_bind_par `{!osirisGS Σ} {V : Type} {E Ψ ζ} `{Observe A V} `{Observe A1 V1} `{Observe A2 V2}
+Lemma imp_bind_par `{!osirisGS Σ} {V : Type} {E Ψ}
+  `{Observe A V} `{Observe A1 V1} `{Observe A2 V2}
+  `{Encode B} {ζ : B → iProp Σ}
   {Φ : A → iProp Σ}
   (Φ1 : A1 → iProp Σ) (Φ2 : A2 → iProp Σ) m1 m2 (f : (V1 * V2) → micro V exn) :
   EWP m1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ1 }} -∗
@@ -628,7 +650,7 @@ Lemma imp_bind_par `{!osirisGS Σ} {V : Type} {E Ψ ζ} `{Observe A V} `{Observe
   EWP (bind (par m1 m2) f) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
 Proof.
   iIntros "H1 H2 P".
-  iApply (imp_bind with "[-]").
+  iApply (imp_bind (A1:=A1 * A2) with "[-]").
   iApply (imp_par' with "H1 H2").
   iIntros (??) "HΦ1 HΦ2".
   instantiate (1:=λ '(x, y), impure E (f (♯x, ♯y)) _ _ _).
@@ -636,7 +658,8 @@ Proof.
   iIntros ([??]) "$".
 Qed.
 
-Lemma imp_bind_par_frac `{osirisGS Σ} `{Hfrac : fractional.AsFractional _ P Q q} {E Ψ ζ} `{Observe A V} `{Observe A1 V1} `{Observe A2 V2}
+Lemma imp_bind_par_frac `{osirisGS Σ} `{Hfrac : fractional.AsFractional _ P Q q} {E Ψ}
+  `{Observe A V} `{Observe A1 V1} `{Observe A2 V2} `{Encode B} {ζ : B → iProp Σ}
   (Φ : A → iProp Σ) (Φ1 : A1 → iProp Σ) (Φ2 : A2 → iProp Σ) (m1 : micro V1 exn) (m2 : micro V2 exn) (f : V1 * V2 → micro V exn) :
   P -∗
   (Q (q/2)%Qp -∗ impure E m1 Ψ ζ (λ a1, Φ1 a1 ∗ Q (q/2)%Qp)) -∗
@@ -647,7 +670,7 @@ Lemma imp_bind_par_frac `{osirisGS Σ} `{Hfrac : fractional.AsFractional _ P Q q
 Proof.
   iIntros "P H1 H2 Hf".
   iDestruct "P" as "[P1 P2]".
-  iApply (imp_bind with "[-]").
+  iApply (imp_bind (A1:=A1 * A2) with "[-]").
   { iApply (imp_par' with "[P1 H1] [P2 H2]").
     iApply ("H1" with "P1"). iApply ("H2" with "P2").
     iIntros (a1 a2) "(HΦ1 & Q1) (HΦ2 & Q2)".
@@ -671,10 +694,11 @@ Proof.
   iIntros ([v|e]).
   - iIntros "(%a & %Henc & %Ha)". iExists a; iFrame "%".
   - iIntros "%He". iPureIntro.
-    destruct He as (c & -> & Hc). unfold observe, observe_id. exact Hc.
+    destruct He as (c & -> & Hc). exists c. auto.
 Qed.
 
-Lemma impure_pure `{osirisGS Σ} {V} `{Observe A V} `{Encode B} {E Ψ ζ} (m : micro V exn) Φ :
+Lemma impure_pure `{osirisGS Σ} {V} `{Observe A V} `{Encode B} {E Ψ}
+  `{Encode B'} {ζ : B' → iProp Σ} (m : micro V exn) (Φ : A → Prop) :
   pure m Φ (⊥ : B → Prop) →
   ⊢ EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ x, ⌜Φ x⌝ }}.
 Proof.
@@ -706,9 +730,9 @@ Section dynamic_checks.
     iApply (imp_ret with "HΦ"); first encode.
   Qed.
 
-  Lemma imp_as_loc (m : microvx) (Φ : locations.loc → iProp Σ) :
+  Lemma imp_as_field_loc (m : microvx) (Φ : locations.loc → iProp Σ) :
     EWP m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
-    EWP as_loc m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
+    EWP as_field_loc m @ E <| Ψ |> ⟨⟨ ζ ⟩⟩ {{ Φ }}.
   Proof.
     iIntros "Hm".
     iApply (imp_bind with "Hm").

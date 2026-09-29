@@ -847,6 +847,7 @@ Section pure_wp_rules.
       + by apply invert_pure_wp_stop in Hm.
       + by apply invert_pure_wp_stop in Hm.
       + by apply invert_pure_wp_stop in Hm.
+      + by apply invert_pure_wp_stop in Hm.
       + edestruct IHm; eauto with may.
     - pose proof invert_pure_wp_stop _ _ _ _ _ Hm.
       destruct c; try tauto; invdep Hstep; split; auto; try destruct b; constructor.

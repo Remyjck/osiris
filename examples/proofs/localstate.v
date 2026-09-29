@@ -107,8 +107,8 @@ Section verification.
 
   Lemma confront_addresses l1 l2 :
     ∀ v1 v2,
-      (l1 ↦ v1) -∗
-      (l2 ↦ v2) -∗
+      (l1 ↦ₗ v1) -∗
+      (l2 ↦ₗ v2) -∗
       ⌜address l1 ≠ address l2⌝.
   Proof.
     iIntros (v1 v2) "Hl1 Hl2".
@@ -117,26 +117,27 @@ Section verification.
     intros ->. by apply Hne.
   Qed.
 
-  Definition main_spec `{Encode A} (spec : A → iProp Σ) (t : unit) (m : microvx) :=
-    (∀ (init : state) rl wl St,
-        St init -∗
-        EWP m <| STATE rl wl St |> {{ spec }} )%I.
+  Definition main_spec `{Encode A} (spec : A → iProp Σ) main : iProp Σ :=
+    □ {{ ∀ (init : state) rl wl St; St init }}
+    main t : unit @ ⊤ <| STATE rl wl St |>
+    {{ RET v; spec v }}.
 
-  Definition run_spec (init : state) (main : val) (m : microvx) :=
-    (∀ (A : Type) (_ : Encode A) (spec : A → iProp Σ),
-       iSpec τ[unit] main (main_spec spec) -∗
-       EWP m {{ (v : state * A), spec (snd v) }})%I.
+  Definition run_spec run : iProp Σ :=
+    □ {{ ∀ `(Encode A) (spec : A → iProp Σ);
+       main_spec spec main }}
+    run init main : state val
+    {{ RET (v : state * A); spec (snd v) }}.
 
   Lemma localstate_run_spec :
     ∀ η,
       ⌜ lookup_name η "Get" = Some #rl ⌝ -∗
       ⌜ lookup_name η "Set" = Some #wl ⌝ -∗
       ⌜ address rl ≠ address wl ⌝ -∗
-      EWP eval η (EAnonFun __run)
-        {{ run,  □ iSpec τ[ state;val] run run_spec }}.
+      EWP eval η (EAnonFun __run) {{ run_spec }}.
   Proof.
     cbn zeta.
     iIntros (env HGet HSet Haddr).
+    unfold run_spec.
 
     (* Call the anonymous function. *)
     iApply (imp_EAnon_pers τ[ state; val ]); simpl.
@@ -146,10 +147,10 @@ Section verification.
     iMod (ghost_var_alloc (# init)) as (γ) "[Hstate Hpoints_to]"; iModIntro.
 
     (* Evaluate allocation of [init] *)
-    iApply (imp_ELet_var (λ l, l ↦ #init)%I).
+    iApply (imp_ELet_var (λ (l : record), l ↦ #init)%I).
 
     (* Evaluating the let-bound expression *)
-    { (* Allocate a new location with value [init] *)
+    { (* Allocate a new reference with value [init] *)
       imp_ref. }
 
     (* Continuing with the rest of the computation *)
@@ -163,8 +164,8 @@ Section verification.
 
     { (* 3A. Call to [main] in the handled expression *)
       imp_app τ[unit] with "[Hspec]".
+      { iApply "Hspec". }
       iIntros "Hmain".
-      rewrite /main_spec /=.
       iSpecialize ("Hmain" $! _ _ _ (λ init, points_to γ #init) with "Hpoints_to").
       iApply "Hmain". }
 
@@ -238,8 +239,7 @@ Section verification.
 
   Lemma module_proof (Q : val -> iProp Σ) :
     ⊢ EWP (eval_mexpr dummy_env __main)
-      {{ η, ∃ run, ⌜lookup_name η "run" = Some run⌝ ∗
-                     □ iSpec τ[state; val] run run_spec }}.
+      {{ η, ∃ run, ⌜lookup_name η "run" = Some run⌝ ∗ run_spec run }}.
   Proof.
     iApply imp_module.
     iApply (imp_sitems_cons).
@@ -275,10 +275,10 @@ Section verification.
     set xdata_eff := xdata_write rl wl.
 
     (* [let get () = perform Get] *)
-    iApply (imp_sitems_let (λ v, □ iSpec τ[unit] v (λ _ m,
-                                                      ∀ St x,
-                                                      St x -∗
-                                                      EWP m <|STATE rl wl St|> {{ X, ⌜X = x⌝ }}))%I ).
+    iApply (imp_sitems_let (λ v,
+              □ {{ ∀ St x; St x }}
+              v u : unit @ ⊤ <| STATE rl wl St |>
+              {{ RET X; ⌜X = x⌝ }})%I).
     { iApply (imp_EAnon_pers τ[unit]).
       iIntros "!>" ([] St x) "HSt".
       iApply imp_please. iNext.
@@ -295,10 +295,10 @@ Section verification.
     iIntros (get) "#Hget".
 
     (* [let set y = perform (Set y)] *)
-    iApply (imp_sitems_let (λ v, □ iSpec τ[Z] v (λ y m,
-                                                   ∀ St x,
-                                                   St x -∗
-                                                   EWP m <|STATE rl wl St|> {{ (_ : unit), St y }}))%I).
+    iApply (imp_sitems_let (λ v,
+              □ {{ ∀ St x; St x }}
+              v y : Z @ ⊤ <| STATE rl wl St |>
+              {{ RET (_ : unit); St y }})%I).
     { iApply (imp_EAnon_pers τ[Z]).
       iIntros "!>" (y St x) "HSt".
       iApply imp_please; iNext.
@@ -315,7 +315,7 @@ Section verification.
 
     (* [let run (type a) init maint : t * a =] *)
     iPoseProof (confront_addresses with "Hrl Hwl") as "%Haddr".
-    iApply (imp_sitems_let (λ run, □ iSpec τ[state; val] run run_spec)%I).
+    iApply (imp_sitems_let run_spec).
     { iApply (localstate_run_spec with "[] [] []"); iPureIntro.
       reflexivity.
       reflexivity.

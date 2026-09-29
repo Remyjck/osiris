@@ -34,7 +34,6 @@ Proof.
   eapply pure_ret_mono. { apply Ha. } intros η' Hpat.
   apply pure_irrefutably_extend. apply Hpat.
   Unshelve. all: eauto with pure.
-  exact _.
 Qed.
 
 Lemma bindings_cons `{Encode A, Encode B} η p e bs (φ1 : A -> Prop) φ2 φ (ψ : B → Prop) :
@@ -124,7 +123,7 @@ Section eval_pat_app.
     - destruct v; auto. destruct (_ =? _)%string; auto.
       apply eval_pat_app_aux; assumption.
     - destruct v; auto. destruct (lookup_path η π); last by unfold bind.
-      unfold as_loc; simpl; rewrite bind_ret.
+      unfold as_field_loc; simpl; rewrite bind_ret.
       destruct v0; simpl; try by rewrite !bind_crash.
       rewrite !bind_ret.
       destruct (locations.eqb _ _); auto.
@@ -208,5 +207,4 @@ Proof.
   eapply (pattern_app η η' p ♯a φ ⊥).
   apply Hpat_η'.
   Unshelve. all: eauto with pure.
-  exact _.
 Qed.

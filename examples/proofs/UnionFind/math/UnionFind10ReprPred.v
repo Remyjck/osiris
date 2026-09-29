@@ -19,9 +19,9 @@ Context `{!osirisGS Σ,
 Definition vertex (γ : uf_names) (x : elem) (i : Z) : iProp Σ :=
   ∃ (li lc : locations.loc),
     x ↪[γ.(uf_vert)]□ i ∗
-    isBlockLocs x [li; lc] ∗
-    isBlock x DfracDiscarded Mut ∗
-    li ↦□ #i.
+    blockLocs x [li; lc] ∗
+    blockTag x DfracDiscarded Mut ∗
+    li ↦ₗ□ #i.
 Global Instance vertex_persistent γ x i : Persistent (vertex γ x i).
 Proof. apply _. Qed.
 
@@ -35,7 +35,7 @@ Proof. apply _. Qed.
 
 Definition root_val (rc : record) (v : val) : iProp Σ :=
   ∃ lv : locations.loc,
-    isBlockLocs rc [lv] ∗ isBlock rc DfracDiscarded Mut ∗ lv ↦□ v.
+    blockLocs rc [lv] ∗ blockTag rc DfracDiscarded Mut ∗ lv ↦ₗ□ v.
 
 Global Instance root_val_persistent rc v : Persistent (root_val rc v).
 Proof. apply _. Qed.
@@ -70,7 +70,7 @@ Qed.
 Definition link_field (γ : uf_names) (rc : record) (lp : locations.loc)
     (h : elem) (i : Z) : iProp Σ :=
   ∃ (y : elem) jy,
-    isBlock rc DfracDiscarded Mut ∗ lp ↦ #y ∗
+    blockTag rc DfracDiscarded Mut ∗ lp ↦ₗ #y ∗
     vertex γ y jy ∗ ⌜(jy < i)%Z⌝ ∗ same_class γ h y.
 
 (* [linked γ x rc lp]: [x] holds the link record [rc], whose [parent] field
@@ -78,7 +78,7 @@ Definition link_field (γ : uf_names) (rc : record) (lp : locations.loc)
 
 Definition linked (γ : uf_names) (x : elem) (rc : record)
     (lp : locations.loc) : iProp Σ :=
-  x ↪[γ.(uf_link)]□ Some rc ∗ isBlockLocs rc [lp].
+  x ↪[γ.(uf_link)]□ Some rc ∗ blockLocs rc [lp].
 
 Global Instance linked_persistent γ x rc lp : Persistent (linked γ x rc lp).
 Proof. apply _. Qed.
@@ -93,18 +93,17 @@ Proof.
   by iDestruct (ghost_map_elem_valid_2 with "H1 H2") as %[Hbad _].
 Qed.
 
-(* Both halves are timeless, but the [record = loc] identification puts
-   several [ghost_mapG]s in scope at the same key type, and resolution
-   picks the wrong one for the array map. Hence the explicit instance. *)
+(* Both halves are timeless. The block map entry is applied explicitly: its
+   key is a [loc], which the [elem] type hides from instance search. *)
 
 Global Instance linked_timeless γ x rc lp : Timeless (linked γ x rc lp).
 Proof.
-  rewrite /linked /isBlockLocs. apply bi.sep_timeless; first apply _.
+  rewrite /linked /blockLocs. apply bi.sep_timeless; first apply _.
   apply bi.sep_timeless; last apply _.
-  apply (ghost_map_elem_timeless (V := list loc)).
+  apply block_map_elem_timeless.
 Qed.
 
-Lemma linked_locs γ x rc lp : linked γ x rc lp -∗ isBlockLocs rc [lp].
+Lemma linked_locs γ x rc lp : linked γ x rc lp -∗ blockLocs rc [lp].
 Proof. by iIntros "[_ $]". Qed.
 
 Lemma linked_agree γ x rc rc' lp lp' :
@@ -112,7 +111,7 @@ Lemma linked_agree γ x rc rc' lp lp' :
 Proof.
   iIntros "[H1 #Hl1] [H2 #Hl2]".
   iDestruct (ghost_map_elem_agree with "H1 H2") as %[= ->].
-  iDestruct (isBlockLocs_valid with "Hl1 Hl2") as %[= ->].
+  iDestruct (blockLocs_valid with "Hl1 Hl2") as %[= ->].
   done.
 Qed.
 
@@ -173,8 +172,8 @@ Qed.
 Definition vertex_own (γ : uf_names) (R : elem → elem) (V : elem → val)
     x i : iProp Σ :=
   ∃ (li lc : locations.loc) (c : content),
-    isBlockLocs x [li; lc] ∗
-    lc ↦ #c ∗
+    blockLocs x [li; lc] ∗
+    lc ↦ₗ #c ∗
     cell_own γ R V x i c.
 
 End repr.
@@ -195,7 +194,7 @@ Context `{!osirisGS Σ,
    else. *)
 
 Definition content_info (γ : uf_names) (x : elem) (c : content) : iProp Σ :=
-  isBlock (content_loc c) DfracDiscarded Mut ∗
+  blockTag (content_loc c) DfracDiscarded Mut ∗
   match c with
   | CtRoot rc => ∃ v, root_val rc v
   | CtLink rc => ∃ lp : locations.loc, linked γ x rc lp
@@ -234,7 +233,7 @@ Proof.
   rewrite /content_info /content_val /cell_own.
   destruct c as [rc|rc]; simpl.
   - iIntros "(%Hroot & Htok & #Hrv)".
-    iAssert (isBlock rc DfracDiscarded Mut) as "#HP".
+    iAssert (blockTag rc DfracDiscarded Mut) as "#HP".
     { by iDestruct "Hrv" as (lv) "(_ & $ & _)". }
     iSplitR; first by iPureIntro; split.
     iSplitR; [iSplitR; [iExact "HP" | by iExists (V x)] | ].
@@ -258,7 +257,7 @@ Qed.
 
 Lemma link_record_split rc (y : elem) :
   rc ⤇ {| link_parent := y |} -∗
-  ∃ lp, isBlockLocs rc [lp] ∗ isBlock rc DfracDiscarded Mut ∗ lp ↦ #y.
+  ∃ lp, blockLocs rc [lp] ∗ blockTag rc DfracDiscarded Mut ∗ lp ↦ₗ #y.
 Proof.
   iIntros "Hrec".
   rewrite /ownRecord /ownBlock /=.
@@ -270,8 +269,8 @@ Qed.
 
 Lemma link_field_intro γ rc lp (h y : elem) i j :
   (j < i)%Z →
-  isBlock rc DfracDiscarded Mut -∗
-  lp ↦ #y -∗
+  blockTag rc DfracDiscarded Mut -∗
+  lp ↦ₗ #y -∗
   vertex γ y j -∗
   same_class γ h y -∗
   link_field γ rc lp h i.
@@ -281,11 +280,11 @@ Proof.
 Qed.
 
 Lemma link_field_root_val_excl γ rc lp h i v :
-  isBlockLocs rc [lp] -∗ link_field γ rc lp h i -∗ root_val rc v -∗ False.
+  blockLocs rc [lp] -∗ link_field γ rc lp h i -∗ root_val rc v -∗ False.
 Proof.
   iIntros "#Hlocs Hlf (%lv & #Hlocs' & _ & #Hlv)".
   iDestruct "Hlf" as (y jy) "(_ & Hlp & _)".
-  iDestruct (isBlockLocs_valid with "Hlocs' Hlocs") as %[= ->].
+  iDestruct (blockLocs_valid with "Hlocs' Hlocs") as %[= ->].
   by iCombine "Hlp Hlv" gives %[Hbad _].
 Qed.
 
@@ -294,11 +293,11 @@ Qed.
    the vertex is not registered yet. *)
 
 Lemma vertex_own_fresh_ne γ R V x i li lc w :
-  isBlockLocs x [li; lc] -∗ lc ↦ w -∗ vertex_own γ R V x i -∗ False.
+  blockLocs x [li; lc] -∗ lc ↦ₗ w -∗ vertex_own γ R V x i -∗ False.
 Proof.
   iIntros "#Hlocs Hlc Hvo".
   iDestruct "Hvo" as (li' lc' c) "(#Hlocs' & Hlc' & _)".
-  iDestruct (isBlockLocs_valid with "Hlocs' Hlocs") as %[= -> ->].
+  iDestruct (blockLocs_valid with "Hlocs' Hlocs") as %[= -> ->].
   iCombine "Hlc Hlc'" gives %[Hbad _].
   exfalso. by eapply dfrac_full_exclusive.
 Qed.
@@ -359,10 +358,10 @@ Qed.
 Lemma vertex_frag γ x i : vertex γ x i -∗ x ↪[γ.(uf_vert)]□ i.
 Proof. iIntros "(% & % & $ & _)". Qed.
 
-Lemma vertex_mut γ x i : vertex γ x i -∗ isBlock x DfracDiscarded Mut.
+Lemma vertex_mut γ x i : vertex γ x i -∗ blockTag x DfracDiscarded Mut.
 Proof. iIntros "(% & % & _ & _ & $ & _)". Qed.
 
-Lemma vertex_locs γ x i : vertex γ x i -∗ ∃ li lc, isBlockLocs x [li; lc].
+Lemma vertex_locs γ x i : vertex γ x i -∗ ∃ li lc, blockLocs x [li; lc].
 Proof.
   iIntros "(%li & %lc & _ & Hlocs & _ & _)". iExists li, lc. iExact "Hlocs".
 Qed.

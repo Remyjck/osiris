@@ -138,18 +138,18 @@ Definition ELetRec1Var (f x : var) (e1 e2 : expr) :=
    available to files that only need to delimit, not to those notations. *)
 
 Notation "- e" := (EIntNeg e) : expr_scope.
-Infix "+" := EIntAdd : expr_scope.
-Infix "-" := EIntSub : expr_scope.
-Infix "*" := EIntMul : expr_scope.
+Infix "+" := (EBinOp BAdd) : expr_scope.
+Infix "-" := (EBinOp BSub) : expr_scope.
+Infix "*" := (EBinOp BMul) : expr_scope.
 Infix "&&" := EBoolConj : expr_scope.
 Infix "||" := EBoolDisj : expr_scope.
-Infix "==" := EOpPhysEq (at level 90) : expr_scope.
-Infix "=" := EOpEq : expr_scope.
-Infix "<>" := EOpNe : expr_scope.
-Infix "<" := EOpLt : expr_scope.
-Infix "<=" := EOpLe : expr_scope.
-Infix ">" := EOpGt : expr_scope.
-Infix ">=" := EOpGe : expr_scope.
+Infix "==" := (EBinOp BPhysEq) (at level 90) : expr_scope.
+Infix "=" := (EBinOp BEq) : expr_scope.
+Infix "<>" := (EBinOp BNe) : expr_scope.
+Infix "<" := (EBinOp BLt) : expr_scope.
+Infix "<=" := (EBinOp BLe) : expr_scope.
+Infix ">" := (EBinOp BGt) : expr_scope.
+Infix ">=" := (EBinOp BGe) : expr_scope.
 
 Definition EInt_of_Z Z := EInt Z.
 

@@ -42,7 +42,7 @@ Module M := EvalF Strat. Import M.
 is no trivially confluent step. It can eliminate a large part of the
 nondeterminism introduced by [Par] constructs *)
 
-Fixpoint confluent_step {A E} (σ : store) (m : micro A E) : option (config A E) :=
+Fixpoint confluent_step {A E} (σ : heap) (m : micro A E) : option (config A E) :=
   match m with
   (* Final micros do not step *)
   | Ret _ | Throw _ | Crash => None
@@ -54,11 +54,11 @@ Fixpoint confluent_step {A E} (σ : store) (m : micro A E) : option (config A E)
   | Stop CAlloc v k => Some (let l := fresh (dom σ) in (<[l:=Val v]>σ, continue k l))
   | Stop CAllocBlock (t, ls) k => Some (let l := fresh (A:=loc) (dom σ) in
                                    (insert l (Block t ls) σ, continue k l))
-  (* [CReturn w] returns [w] and does nothing else; [CNewProph] reserves a
-     fresh cell. *)
+  (* [CReturn w] returns [w] and does nothing else. [CNewProph] has no step
+     in the semantics: a prophecy has no runtime meaning, so the interpreter
+     hands out an arbitrary identifier. *)
   | Stop CReturn w k => Some (σ, continue k w)
-  | Stop CNewProph _ k => Some (let p := fresh (dom σ) in
-                                   (<[p := Val VUnit]> σ, continue k p))
+  | Stop CNewProph _ k => Some (σ, continue k (Loc 0))
   (* A resolution takes the step of the call it wraps and drops the ghost pair
      [(p, v)], so it is confluent exactly when that call is. *)
   | Stop (CResolve CReturn) (w, _, _) k => Some (σ, continue k w)
@@ -106,7 +106,7 @@ deterministic steps), or [Final] if the argument was in fact stuck. *)
   e.g. [None] to make the image of [Par m1 m2 _] depend only of the images of
   [m1] and [m2] instead of depending of [m1] and [m2] themselves. *)
 
-Fixpoint stepto {A E} (σ : store) (m : micro A E) {struct m} : step_result A E :=
+Fixpoint stepto {A E} (σ : heap) (m : micro A E) {struct m} : step_result A E :=
   match m with
   (* Already final *)
   | Ret x => Final (FRet x)
@@ -153,8 +153,7 @@ Fixpoint stepto {A E} (σ : store) (m : micro A E) {struct m} : step_result A E 
 
   (* [CReturn] and [CNewProph] are confluent; see [confluent_step]. *)
   | Stop CReturn w k => Step [(σ, continue k w)]
-  | Stop CNewProph _ k => let p := fresh (dom σ) in
-                          Step [(<[p := Val VUnit]> σ, continue k p)]
+  | Stop CNewProph _ k => Step [(σ, continue k (Loc 0))]
 
   (* A resolution performs the call it wraps in a single step, dropping the
      ghost pair [(p, v)]: the resolution leaves no trace in the store, so each
@@ -276,12 +275,12 @@ Definition io_loc := 0%Z.
    the pair of arguments [(name, arg)] *)
 Definition clo_io_perform (name : string) : val :=
   (* closure with environment mapping [E] to [io_loc] *)
-  VClo [("E", VLoc (Loc io_loc))] $
+  VClo [("E", VFieldLoc (Loc io_loc))] $
     (* [λ x, perform (E (name, x))] *)
     AnonFun "x" (EPerform (EXData ["E"] [EString name; EPath ["x"]])).
 
 (* Store with I/O effect allocated *)
-Definition io_store : store := {[ Loc io_loc := Val VUnit ]}.
+Definition io_store : heap := {[ Loc io_loc := Val VUnit ]}.
 
 (* Environment with some I/O primitives *)
 Definition io_env : env :=
@@ -317,7 +316,7 @@ Fixpoint string_of_pat (p : pat) : string :=
   | PData data list_pat => "PData(" ++ data ++ ", " ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PXData path list_pat => "PXData(" ++ String.concat "." path ++ ", " ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PRecord fs => "PRecord(" ++ String.concat "," (map (string_of_pair string_of_field string_of_pat) fs) ++ ")"
-  | PInline data pat => "PInline(" ++ data ++ ", " ++ string_of_pat pat ++ ")"
+  | PTaggedRecord data pat => "PTaggedRecord(" ++ data ++ ", " ++ string_of_pat pat ++ ")"
   | PArray list_pat => "PArray(" ++ String.concat "," (map string_of_pat list_pat) ++ ")"
   | PInt Z => "PInt(" ++ string_of_Z Z ++ ")"
   | PChar char => "PChar(" ++ string_of_char char ++ ")"
@@ -421,6 +420,7 @@ Fixpoint string_of_expr (e : expr) : string :=
   | ERef e => "ERef(" ++ string_of_expr e ++ ")"
   | ELoad e => "ELoad(" ++ string_of_expr e ++ ")"
   | EStore e1 e2 => "EStore(" ++ string_of_expr e1 ++ ", " ++ string_of_expr e2 ++ ")"
+  | EFieldLoad e => "EFieldLoad(" ++ string_of_expr e ++ ")"
   | EExchange e1 e2 => "EExchange(" ++ string_of_expr e1 ++ ", " ++ string_of_expr e2 ++ ")"
   | ECAS e1 e2 e3 => "ECAS(" ++ string_of_expr e1 ++ ", " ++ string_of_expr e2 ++ ", " ++ string_of_expr e3 ++ ")"
   | EFAA e1 e2 => "EFAA(" ++ string_of_expr e1 ++ ", " ++ string_of_expr e2 ++ ")"
@@ -487,12 +487,13 @@ Fixpoint string_of_val (v : val) : string :=
   | VTuple l => "VTuple(" ++ String.concat "; " (map string_of_val l) ++ ")"
   | VData data vs => "VData(" ++ data ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
   | VXData loc vs => "VXData(" ++ string_of_Z loc.(address) ++ ", [" ++ String.concat "; " (map string_of_val vs) ++ "])"
-  | VLoc l   => "VLoc("   ++ string_of_Z l.(address) ++ ")"
+  | VFieldLoc l   => "VFieldLoc("   ++ string_of_Z l.(address) ++ ")"
+  | VProph p => "VProph(" ++ string_of_Z p.(address) ++ ")"
   | VCont l  => "VCont("  ++ string_of_Z l.(address) ++ ")"
-  | VThread thread => "VLoc(" ++ string_of_Z thread.(tid) ++ ")"
+  | VThread thread => "VFieldLoc(" ++ string_of_Z thread.(tid) ++ ")"
   | VRecord l => "VRecord(" ++ string_of_Z l.(address) ++ ")"
   | VArray l => "VArray(" ++ string_of_Z l.(address) ++ ")"
-  | VInline c l => "VInline(" ++ c ++ ", " ++ string_of_Z l.(address) ++ ")"
+  | VTaggedRecord c l => "VTaggedRecord(" ++ c ++ ", " ++ string_of_Z l.(address) ++ ")"
   | VStruct fields => "VStruct(" ++ String.concat "; " (map (string_of_pair id string_of_val) fields) ++ ")"
   | VFunctor fields v l  => "VFunctor(Unsupported)"
   | VChar c => "VChar(" ++ string_of_char c ++ ")"
@@ -581,7 +582,7 @@ Definition string_of_block (b : mem_block) : string :=
   | Shot => "Shot"
   end.
 
-Definition string_of_store (σ : store) : string :=
+Definition string_of_store (σ : heap) : string :=
   "store(" ++
       String.concat "; "
         (map

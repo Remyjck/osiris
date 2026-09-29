@@ -63,28 +63,28 @@ Section content.
 
   Global Instance Encode_content : Encode content :=
     {| encode' c := match c with
-                    | CtRoot r => VInline "Root" r
-                    | CtLink r => VInline "Link" r
+                    | CtRoot r => VTaggedRecord "Root" r
+                    | CtLink r => VTaggedRecord "Link" r
                     end |}.
   Lemma content_encode_inline c :
-    #c = VInline (content_tag c) (content_loc c).
+    #c = VTaggedRecord (content_tag c) (content_loc c).
   Proof. rewrite encode_encode'. by destruct c. Qed.
 
-  Global Instance Inline_content_Root : Inline "Root" content :=
-    {| inline_apply := CtRoot; inline_encode := λ _, eq_refl |}.
+  Global Instance Inline_content_Root : Tagged "Root" content :=
+    {| tagged_apply := CtRoot; tagged_encode := λ _, eq_refl |}.
 
-  Global Instance Inline_content_Link : Inline "Link" content :=
-    {| inline_apply := CtLink; inline_encode := λ _, eq_refl |}.
+  Global Instance Inline_content_Link : Tagged "Link" content :=
+    {| tagged_apply := CtLink; tagged_encode := λ _, eq_refl |}.
 
-  Global Instance InlineEncode_content : InlineEncode content :=
-    {| inline_tag := content_tag;
-       inline_blk := content_loc;
-       inline_encode_eq := content_encode_inline |}.
+  Global Instance InlineEncode_content : TaggedEncode content :=
+    {| tagged_tag := content_tag;
+       tagged_blk := content_loc;
+       tagged_encode_eq := content_encode_inline |}.
 
 End content.
 
 (* The stored shape of a [content] value, for the rules (notably the
-   CAS) that inspect the raw [VInline] representation. *)
+   CAS) that inspect the raw [VTaggedRecord] representation. *)
 
 (* ------------------------------------------------------------------------ *)
 (* [RecordRepr] instances for the three record shapes allocated in this

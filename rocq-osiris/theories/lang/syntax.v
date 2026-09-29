@@ -68,9 +68,15 @@ Definition array :=
 Definition record :=
   tc_opaque loc.
 
+(* Prophecy identifiers. They live apart from the heap: the program logic
+   tracks which ones are in use. *)
+
+Definition proph_id :=
+  tc_opaque loc.
+
 (* Without this, the typeclass engine unfolds both [cont] and [block] to the
    same [tc_opaque loc] body, making Encode/Observe instances ambiguous. *)
-Global Typeclasses Opaque cont array record.
+Global Typeclasses Opaque cont array record proph_id.
 
 (* ------------------------------------------------------------------------ *)
 
@@ -117,7 +123,7 @@ Inductive pat :=
   | PRecord (fps : list (field * pat))
   (* An inline-record pattern: [C p] where [C] is an inline-record
      constructor and [p] matches the underlying record. *)
-  | PInline (c : data) (p : pat)
+  | PTaggedRecord (c : data) (p : pat)
   (* PArray: an array pattern. *)
   | PArray (ps : list pat)
   (* A literal integer pattern. *)
@@ -194,6 +200,34 @@ Inductive proph_arg :=
 
 (* ------------------------------------------------------------------------ *)
 
+(* Primitive operators. *)
+
+(* A binary operator is a strict, effect-free primitive: both of its operands
+   are evaluated (in parallel: see [EBinOp] in [eval.v]) before the operator
+   itself is applied to the resulting values. The short-circuiting Boolean
+   connectives [&&] and [||] are therefore *not* binary operators; they remain
+   separate constructs ([EBoolConj] and [EBoolDisj]). *)
+
+Inductive bin_op :=
+  (* Integer arithmetic. *)
+  | BAdd | BSub | BMul | BDiv | BMod
+  (* Integer logical operations. *)
+  | BLand | BLor | BLxor | BLsl | BLsr | BAsr
+  (* Physical equality [==]. *)
+  | BPhysEq
+  (* Polymorphic structural comparison. *)
+  | BEq | BNe | BLt | BLe | BGt | BGe.
+
+(* A unary operator is subject to the same discipline. *)
+
+Inductive un_op :=
+  (* Integer negation and bitwise complement. *)
+  | UNeg | ULnot
+  (* Boolean negation. *)
+  | UNot.
+
+(* ------------------------------------------------------------------------ *)
+
 (* Expressions. *)
 
 Inductive expr :=
@@ -247,30 +281,20 @@ Inductive expr :=
   | EFreeze (e : expr)
   | EUnfreeze (e : expr)
 
-  (* Boolean conjunction, disjunction, and negation. *)
+  (* Boolean conjunction and disjunction. These short-circuit, so they are
+     not binary operators: see [bin_op]. *)
   | EBoolConj (e1 e2 : expr)
   | EBoolDisj (e1 e2 : expr)
-  | EBoolNeg (e : expr)
+
+  (* Application of a unary operator: [op e]. *)
+  | EUnOp (op : un_op) (e : expr)
+  (* Application of a binary operator: [e1 op e2]. *)
+  | EBinOp (op : bin_op) (e1 e2 : expr)
 
   (* Integer literals. *)
   | EInt (i : Z)
   | EMaxInt
   | EMinInt
-  (* Integer arithmetic. *)
-  | EIntNeg (e : expr)
-  | EIntAdd (e1 e2 : expr)
-  | EIntSub (e1 e2 : expr)
-  | EIntMul (e1 e2 : expr)
-  | EIntDiv (e1 e2 : expr)
-  | EIntMod (e1 e2 : expr)
-  (* Integer logical operations. *)
-  | EIntLand (e1 e2 : expr)
-  | EIntLor  (e1 e2 : expr)
-  | EIntLxor (e1 e2 : expr)
-  | EIntLnot (e : expr)
-  | EIntLsl  (e1 e2 : expr)
-  | EIntLsr  (e1 e2 : expr)
-  | EIntAsr  (e1 e2 : expr)
 
   (* Floating-point literals. *)
   | EFloat (f : float)
@@ -280,15 +304,6 @@ Inductive expr :=
 
   (* String literals. *)
   | EString (s: string)
-
-  (* Polymorphic comparison operators. *)
-  | EOpPhysEq (e1 e2 : expr)
-  | EOpEq (e1 e2 : expr)
-  | EOpNe (e1 e2 : expr)
-  | EOpLt (e1 e2 : expr)
-  | EOpLe (e1 e2 : expr)
-  | EOpGt (e1 e2 : expr)
-  | EOpGe (e1 e2 : expr)
 
   (* Non-recursive local definition: [let bs in e]. *)
   | ELet (bs : list binding) (e : expr)
@@ -336,17 +351,24 @@ Inductive expr :=
      [let open M in e]. *)
   | ELetSitem (struct : sitem) (e : expr)
 
+  (* References. As in OCaml, a reference is a mutable record with a single
+     field: these behave as [ERecord], [ERecordAccess] and [ERecordSet] at
+     field [0]. *)
   (* Reference allocation: [ref e]. *)
   | ERef (e : expr)
   (* Reference lookup: [!e]. *)
   | ELoad (e : expr)
   (* Reference assignment: [e1 := e2]. *)
-  | EStore (e1 e2: expr)
-  (* Exchange: [Atomic.exchange e1 e2]. *)
+  | EStore (e1 e2 : expr)
+
+  (* Atomic operations on a field location (see [EAtomicLoc]). *)
+  (* Load: [Atomic.Loc.get e]. *)
+  | EFieldLoad (e : expr)
+  (* Exchange: [Atomic.Loc.exchange e1 e2]. *)
   | EExchange (e1 e2 : expr)
-  (* Compare-and-set: [Atomic.compare_and_set e1 e2 e3]. *)
+  (* Compare-and-set: [Atomic.Loc.compare_and_set e1 e2 e3]. *)
   | ECAS (e1 e2 e3 : expr)
-  (* Fetch-and-add: [Atomic.fetch_and_add e1 e2]. *)
+  (* Fetch-and-add: [Atomic.Loc.fetch_and_add e1 e2]. *)
   | EFAA (e1 e2 : expr)
 
   (* Allocating a prophecy variable: [Proph.create ()]. *)
@@ -487,13 +509,15 @@ Inductive val : Type :=
      [l] is the location of the constructor. Extensible types can
      alias by having two constructors point to the same location. *)
   | VXData (l: loc) (v : list val)
-  (* A location. *)
-  | VLoc (l : loc)
+  (* A field location. *)
+  | VFieldLoc (l : loc)
+  (* A prophecy identifier. *)
+  | VProph (p : proph_id)
   (* Both records and array are represented as pointers to a block. *)
   | VRecord (l : loc)
   | VArray (l : loc)
   (* Inline records contain both a tag and a pointer to a block. *)
-  | VInline (c : data) (l : loc)
+  | VTaggedRecord (c : data) (l : loc)
   (* A continuation; more precisely, a location which stores a continuation. *)
   | VCont (k : cont)
   (* A thread id. *)
@@ -527,6 +551,38 @@ Definition envs := (env * env)%type.
 (* Core sugar, used in eval.v. *)
 
 (* More sugar is defined in sugar.v. *)
+
+(* Primitive operators. *)
+
+(* [EUnOp] and [EBinOp] subsume what used to be one expression constructor per
+   operator. These abbreviations restore the old names: they are accepted both
+   in terms and in patterns, so the translator, the notations of [notations.v]
+   and the reasoning rules can keep spelling out [EIntAdd e1 e2] and friends. *)
+
+Abbreviation EIntNeg e := (EUnOp UNeg e).
+Abbreviation EIntLnot e := (EUnOp ULnot e).
+Abbreviation EBoolNeg e := (EUnOp UNot e).
+
+Abbreviation EIntAdd e1 e2 := (EBinOp BAdd e1 e2).
+Abbreviation EIntSub e1 e2 := (EBinOp BSub e1 e2).
+Abbreviation EIntMul e1 e2 := (EBinOp BMul e1 e2).
+Abbreviation EIntDiv e1 e2 := (EBinOp BDiv e1 e2).
+Abbreviation EIntMod e1 e2 := (EBinOp BMod e1 e2).
+
+Abbreviation EIntLand e1 e2 := (EBinOp BLand e1 e2).
+Abbreviation EIntLor  e1 e2 := (EBinOp BLor e1 e2).
+Abbreviation EIntLxor e1 e2 := (EBinOp BLxor e1 e2).
+Abbreviation EIntLsl  e1 e2 := (EBinOp BLsl e1 e2).
+Abbreviation EIntLsr  e1 e2 := (EBinOp BLsr e1 e2).
+Abbreviation EIntAsr  e1 e2 := (EBinOp BAsr e1 e2).
+
+Abbreviation EOpPhysEq e1 e2 := (EBinOp BPhysEq e1 e2).
+Abbreviation EOpEq e1 e2 := (EBinOp BEq e1 e2).
+Abbreviation EOpNe e1 e2 := (EBinOp BNe e1 e2).
+Abbreviation EOpLt e1 e2 := (EBinOp BLt e1 e2).
+Abbreviation EOpLe e1 e2 := (EBinOp BLe e1 e2).
+Abbreviation EOpGt e1 e2 := (EBinOp BGt e1 e2).
+Abbreviation EOpGe e1 e2 := (EBinOp BGe e1 e2).
 
 (* Unit. *)
 

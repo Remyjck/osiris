@@ -30,12 +30,14 @@ Inductive mem_block : Type :=
 | Kont (k : outcome2 val exn → microvx)
 | Shot.
 
-(* A store (or heap) is a finite map of locations to memory blocks. *)
+(* A heap is a finite map of locations to memory blocks. Prophecies have no
+   operational content, so the semantics does not track them: the set of
+   allocated prophecy identifiers belongs to the program logic's store. *)
 
-Definition store : Type :=
-  gmap loc mem_block.
+Abbreviation heap :=
+  (gmap loc mem_block).
 
-Implicit Type σ : store.
+Implicit Type σ : heap.
 
 Global Instance cont_eq_decision : EqDecision cont.
 Proof. solve_decision. Defined.
@@ -57,14 +59,14 @@ Proof.
   apply map_insert.
 Defined.
 
-Lemma store_conversion : cont_store = store.
+Lemma store_conversion : cont_store = heap.
 Proof. reflexivity. Qed.
 
 
-(* A configuration is a pair of a computation and a store. *)
+(* A configuration is a pair of a heap and a computation. *)
 
 Definition config (A E : Type) : Type :=
-  store * micro A E.
+  heap * micro A E.
 
 (* This tactic explodes a configuration [c] into a pair [(σ, m)]. *)
 
@@ -176,7 +178,7 @@ Qed.
    It fails if the location [l] is not in the domain of [σ] or contains
    something other than a value. *)
 
-Definition step_exchange_1 σ l v' : store :=
+Definition step_exchange_1 σ l v' : heap :=
   match σ !! l with
   | Some (Val v) => <[ l := Val v' ]> σ
   | _          => σ
@@ -210,7 +212,7 @@ Qed.
    its mutability tag to [t], and returns unit to the continuation [k].
    It fails if [l] is not in the domain of [σ] or does not contain a [Block]. *)
 
-Definition step_set_tag_1 σ l t : store :=
+Definition step_set_tag_1 σ l t : heap :=
   match σ !! l with
   | Some (Block _ ls) => <[ l := Block t ls ]> σ
   | _          => σ
@@ -248,11 +250,11 @@ Qed.
 
 Definition phys_eq_val_store v1 v2 σ : option bool :=
   match v1, v2 with
-  | VLoc l1, VLoc l2 =>
+  | VFieldLoc l1, VFieldLoc l2 =>
       Some (locations.eqb l1 l2)
   | VArray l1, VArray l2
   | VRecord l1, VRecord l2
-  | VInline _ l1, VInline _ l2 =>
+  | VTaggedRecord _ l1, VTaggedRecord _ l2 =>
       match σ !! l1, σ !! l2 with
       | Some (Block Mut _), Some (Block _ _)
       | Some (Block _ _), Some (Block Mut _) => Some (locations.eqb l1 l2)
@@ -266,7 +268,7 @@ Definition phys_eq_val_store v1 v2 σ : option bool :=
       None
   end.
 
-Definition step_cas_1 σ l seen (v' : val) : store :=
+Definition step_cas_1 σ l seen (v' : val) : heap :=
   match σ !! l with
   | Some (Val v) =>
       match phys_eq_val_store v seen σ with
@@ -312,7 +314,7 @@ Qed.
    It fails if the location [l] is not in the domain of [σ] or contains
    something other than an int. *)
 
-Definition step_faa_1 σ l (i : int) : store :=
+Definition step_faa_1 σ l (i : int) : heap :=
   match σ !! l with
   | Some (Val (VInt j)) =>
       <[ l := Val (VInt (int.add j i)) ]> σ
@@ -431,14 +433,6 @@ Global Hint Resolve
   try2_step_wrap_2
 : try2_algebraic.
 
-(* -------------------------------------------------------------------------- *)
-
-Fixpoint insertn ls vs σ :=
-  match ls, vs with
-  | [], [] => σ
-  | l :: ls, v :: vs => <[ l := Val v]> (insertn ls vs σ)
-  | _, _ => σ
-  end.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -502,17 +496,6 @@ Inductive step {A E} : config A E → config A E → Prop :=
       step
         (σ, Stop CAllocBlock (t, ls) k)
         (<[ l := Block t ls ]> σ, continue k l)
-
-  (* [stop CNewProph ()] allocates a fresh prophecy identifier. The heap
-     cell it reserves is never read and never written; it exists only so
-     that the identifier is fresh, exactly as [StepAlloc] does for a ref
-     cell. All the meaning of a prophecy lives in the ghost state. *)
-  | StepNewProph :
-      ∀ σ x p k,
-      σ !! p = None →
-      step
-        (σ, Stop CNewProph x k)
-        (<[ p := Val VUnit ]> σ, continue k p)
 
   (* If the location [l] exists and contains a value [v], then
      [stop CLoad l] returns this value; otherwise, it crashes. *)
@@ -586,7 +569,7 @@ Inductive step {A E} : config A E → config A E → Prop :=
       σ !! l = None →
       step
         (σ, Handle (Stop CPerf e k) h)
-        (<[l := Kont k]>σ, h (O3Perform e l))
+        (<[l := Kont k]> σ, h (O3Perform e l))
 
   | StepHandleFork :
     ∀ σ x k h,
@@ -608,6 +591,14 @@ Inductive step {A E} : config A E → config A E → Prop :=
       step
         (σ, Handle (Stop (CResolve c) y k) h)
         (σ, Stop (CResolve c) y (λ o, Handle (k o) h))
+
+  (* The allocation of a prophecy floats out for the same reason: the set of
+     allocated identifiers is not part of the heap. *)
+  | StepHandleNewProph :
+    ∀ σ x k h,
+      step
+        (σ, Handle (Stop CNewProph x k) h)
+        (σ, Stop CNewProph x (λ o, Handle (k o) h))
 
   (* If [Handle _ h] observes a crash then this crash is propagated. *)
   | StepHandleCrash :
@@ -761,7 +752,7 @@ Section threadpool.
     apply _.
   Defined.
 
-  Definition tconfig := (store * thpool)%type.
+  Definition tconfig := (heap * thpool)%type.
 
   Definition attempt_join {A E} ι π (k : outcome2 val exn -> micro A E) :=
     match @lookup _ _ _ lookup_thpool ι π with
@@ -883,7 +874,7 @@ Tactic Notation "destruct_is_result" simple_intropattern(p) :=
 
 (* The observation a resolution emits, given the outcome its call reached. *)
 
-Definition resolve_obs (p : loc) (v : val) (b : microvx) : list observation :=
+Definition resolve_obs (p : proph_id) (v : val) (b : microvx) : list observation :=
   match b with
   | Ret w => [(p, (w, v))]
   | _ => []
@@ -1044,6 +1035,13 @@ Proof.
   intros. destruct_can_step. inversion H.
 Qed.
 
+Lemma invert_can_step_new_proph {A E} σ x (k : _ -> micro A E) :
+  can_step (σ, (Stop CNewProph x k)) ->
+  False.
+Proof.
+  intros. destruct_can_step. inversion H.
+Qed.
+
 Create HintDb invert_can_step.
 
 Global Hint Resolve
@@ -1053,6 +1051,7 @@ Global Hint Resolve
   invert_can_step_perform
   invert_can_step_fork
   invert_can_step_join
+  invert_can_step_new_proph
   invert_can_step_resolve
 : invert_can_step.
 
@@ -1089,24 +1088,21 @@ Qed.
 (* If the location [l] exists in the store and contains a continuation,
    then [stop CResume (l, o)] can step in only one way. *)
 
-Lemma invert_step_resume {A E} (σ σ' : cont_store) (l : cont) o k sk m' :
-  σ !! l = Some (Kont sk) →
+Lemma invert_step_resume {A E} σ σ' (l : cont) o k sk m' :
+  (σ : cont_store) !! l = Some (Kont sk) →
   @step A E (σ, Stop CResume (l, o) k) (σ', m') →
-  σ' = <[ l := Shot ]> σ ∧
+  σ' = <[ l := Shot ]> (σ : cont_store) ∧
   m' = try2 (sk o) k.
 Proof.
   intros Heq Hstep. destruct_step.
   unfold step_resume_1, step_resume_2.
-  unfold lookup_cont in Heq.
-  change loc with cont. change store with cont_store.
-  change loc_eq_decision with cont_eq_decision.
-  change loc_countable with cont_countable.
-  rewrite Heq.
+  assert (Heq' : σ !! (l : loc) = Some (Kont sk)) by exact Heq.
+  rewrite Heq'.
   eauto.
 Qed.
 
-Lemma invert_step_resume_shot {A E} (σ σ' : cont_store) l o k m' :
-  σ !! l = Some Shot →
+Lemma invert_step_resume_shot {A E} σ σ' (l : cont) o k m' :
+  (σ : cont_store) !! l = Some Shot →
   @step A E (σ, Stop CResume (l, o) k) (σ', m') →
   σ = σ' /\
   ∃ s, m' = crash s.
@@ -1114,11 +1110,8 @@ Proof.
   intros Heq Hstep.
   destruct_step.
   unfold step_resume_1, step_resume_2.
-  unfold lookup_cont in Heq.
-  change loc with cont. change store with cont_store.
-  change loc_eq_decision with cont_eq_decision.
-  change loc_countable with cont_countable.
-  rewrite Heq.
+  assert (Heq' : σ !! (l : loc) = Some Shot) by exact Heq.
+  rewrite Heq'.
   eauto.
 Qed.
 
@@ -1186,7 +1179,8 @@ Qed.
 
 Lemma can_step_stop {A X Y E' E}
   σ (c : code X Y E') x (k : outcome2 Y E' → _) :
-  match c with | CPerf | CResolve _ => False | _ => True end ∧ not (is_concurrent_code c)  ->
+  match c with | CPerf | CNewProph | CResolve _ => False | _ => True end ∧
+  not (is_concurrent_code c) ->
   can_step ((σ, Stop c x k) : config A E).
 Proof.
   destruct c; repeat destruct x as (x & ?); try destruct o;
@@ -1205,13 +1199,9 @@ Proof.
   (* In the case of wrap, we must also exhibit an address [l]
      that is not in the domain of [σ]. *)
   { set (l' := fresh (dom σ)).
-    assert (lookup l' σ = None) by apply not_elem_of_dom, is_fresh.
+    assert (σ !! l' = None) by apply not_elem_of_dom, is_fresh.
     destruct x;
       eauto using StepWrap, StepShallowWrap with step. }
-  (* Allocating a prophecy identifier is an allocation like any other. *)
-  { eexists. apply StepNewProph.
-    apply not_elem_of_dom.
-    apply is_fresh. }
   (* For [CFlip], we need to provide a boolean. *)
   Unshelve. refine true.
 Qed.
@@ -1259,7 +1249,7 @@ Proof.
     (* An allocation is involved, so (again) we must exhibit
        an address [l] that is not in the domain of [σ]. *)
     set (l := fresh (dom σ)).
-    assert (lookup l σ = None) by apply not_elem_of_dom, is_fresh.
+    assert (σ !! l = None) by apply not_elem_of_dom, is_fresh.
     (* At this point, the reduction rule [StepHandlePerform] is
        exploited. It is worth noting that this rule can be used
        only if the computation that is being handled has type
@@ -1427,16 +1417,22 @@ Lemma no_step_Resolve {A E X} σ (c : code X val exn) y k σ' m' :
   ¬ step ((σ, Stop (CResolve c) y k) : config A E) (σ', m').
 Proof. inversion 1. Qed.
 
+(* Nor does the allocation of a prophecy. *)
+
+Lemma no_step_NewProph {A E} σ x k σ' m' :
+  ¬ step ((σ, Stop CNewProph x k) : config A E) (σ', m').
+Proof. inversion 1. Qed.
+
 (* -------------------------------------------------------------------------- *)
 
-(* Every computation is either a result, one of the four codes whose step
+(* Every computation is either a result, one of the five codes whose step
    belongs to the pool, or able to step on its own. *)
 
 Lemma only_crash_and_throw_and_perform_and_concurrent_are_stuck' {A E} σ (m : micro A E) :
   match m with
   | Ret _ | Crash | Throw _
   | Stop CPerf _ _ | Stop CFork _ _ | Stop CJoin _ _
-  | Stop (CResolve _) _ _ =>
+  | Stop CNewProph _ _ | Stop (CResolve _) _ _ =>
       True
   | _ =>
       can_step (σ, m)

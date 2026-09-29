@@ -82,10 +82,12 @@ Global Instance observe_encode `{Encode A} :
 Class NotVal (A : Type) : Prop := {}.
 Global Hint Mode NotVal + : typeclass_instances.
 Global Instance notval_bool : NotVal bool := {}.
+Global Instance notval_void : NotVal void := {}.
 Global Instance notval_unit : NotVal () := {}.
 Global Instance notval_env : NotVal env := {}.
 Global Instance notval_int : NotVal int := {}.
 Global Instance notval_loc : NotVal loc := {}.
+Global Instance notval_proph_id : NotVal proph_id := {}.
 Global Instance notval_cont : NotVal cont := {}.
 Global Instance notval_array : NotVal array := {}.
 Global Instance notval_record : NotVal record := {}.
@@ -135,6 +137,13 @@ Section lift_specs.
 
   Definition ireturns {V} `{Observe A V} (Φ : A → iProp Σ) : V → iProp Σ :=
     λ v, (∃ a : A, ⌜v = ♯ a⌝ ∗ Φ a)%I.
+
+  Lemma ireturns_mono {V} `{Observe A V} (Φ Φ' : A → iProp Σ) v :
+    (∀ a, Φ a ⊢ Φ' a) → ireturns Φ v ⊢ ireturns Φ' v.
+  Proof.
+    intros HΦ. apply bi.exist_mono => a.
+    apply bi.sep_mono; [ done | apply HΦ ].
+  Qed.
 
 End lift_specs.
 
@@ -527,13 +536,24 @@ Global Hint Resolve solve_encode_None solve_encode_Some : encode.
 (* This instance is needed, for instance, for memory locations. *)
 
 Global Instance Encode_loc : Encode loc :=
-  { encode' := λ l, VLoc l }.
+  { encode' := λ l, VFieldLoc l }.
 
 Lemma solve_encode_loc l :
-  VLoc l = #l.
+  VFieldLoc l = #l.
 Proof. solve_encode. Qed.
 
 Global Hint Resolve solve_encode_loc : encode.
+
+(* Prophecy identifiers. *)
+
+Global Instance Encode_proph_id : Encode proph_id :=
+  { encode' := λ p, VProph p }.
+
+Lemma solve_encode_proph_id (p : proph_id) :
+  VProph p = #p.
+Proof. solve_encode. Qed.
+
+Global Hint Resolve solve_encode_proph_id : encode.
 
 (* -------------------------------------------------------------------------- *)
 

@@ -170,7 +170,8 @@ Section pattern_rules.
   Qed.
 
   Lemma pure_orelse `{Observe A V} `{Observe B1 E1, Observe B2 E2}
-  (m1 : micro V E1) (m2 : micro V E2) (φ : A → Prop) Ψ1 Ψ2 :
+  (m1 : micro V E1) (m2 : micro V E2) (φ : A → Prop)
+  (Ψ1 : B1 → Prop) (Ψ2 : B2 → Prop) :
     pure m1 φ Ψ1 →
     (∀ e, Ψ1 e → pure m2 φ Ψ2) →
     pure (orelse m1 m2) φ Ψ2.
@@ -302,13 +303,13 @@ Section pattern_rules.
   Qed.
 
   (* Rules for inline-record patterns. An inline-record pattern
-     [PInline c p] matches an inline-record value with the same
+     [PTaggedRecord c p] matches an inline-record value with the same
      constructor; the sub-pattern [p] is matched against the
      underlying record. *)
 
-  Lemma pat_PInline_or η δ c c' p l φ ψ :
+  Lemma pat_PTaggedRecord_or η δ c c' p l φ ψ :
     (c = c' -> pattern η δ p (VRecord l) φ ψ) ->
-    pattern η δ (PInline c p) (VInline c' l) φ (ψ ∨ c ≠ c').
+    pattern η δ (PTaggedRecord c p) (VTaggedRecord c' l) φ (ψ ∨ c ≠ c').
       (* This form is useful when the truth of the equality [c = c']
         is not statically known. *)
   Proof.
@@ -317,42 +318,42 @@ Section pattern_rules.
     eapply pure_mono; first apply H; eauto.
   Qed.
 
-  Lemma pat_PInline_eq η δ c p v l φ ψ :
-    v = VInline c l ->
+  Lemma pat_PTaggedRecord_eq η δ c p v l φ ψ :
+    v = VTaggedRecord c l ->
     pattern η δ p (VRecord l) φ ψ →
-    pattern η δ (PInline c p) v φ ψ.
+    pattern η δ (PTaggedRecord c p) v φ ψ.
       (* This form is useful when [c = c'] is statically known. See
-         [pat_PData_eq] for why the [v = VInline c l] equation is
+         [pat_PData_eq] for why the [v = VTaggedRecord c l] equation is
          explicit. *)
   Proof.
     unfold pattern; intros -> ?. simpl_eval_pat.
     destruct_string_eqb; solve [ eauto using pure_wp_throw | tauto ].
   Qed.
 
-  Lemma pat_PInline_neq η δ c p c' v l φ :
-    v = VInline c' l ->
+  Lemma pat_PTaggedRecord_neq η δ c p c' v l φ :
+    v = VTaggedRecord c' l ->
     c ≠ c' →
-    pattern η δ (PInline c p) v φ True.
+    pattern η δ (PTaggedRecord c p) v φ True.
       (* This form is useful when [c ≠ c'] is statically known. *)
   Proof.
     unfold pattern; intros -> ?. simpl_eval_pat.
     destruct_string_eqb; solve [ eauto using pure_throw | tauto ].
   Qed.
 
-  Lemma pat_PInline_neq_data η δ c p c' v vs φ :
+  Lemma pat_PTaggedRecord_neq_data η δ c p c' v vs φ :
     v = VData c' vs ->
     c ≠ c' →
-    pattern η δ (PInline c p) v φ True.
+    pattern η δ (PTaggedRecord c p) v φ True.
       (* This form is useful when [c ≠ c'] is statically known. *)
   Proof.
     unfold pattern; intros -> ?. simpl_eval_pat.
     eauto using pure_throw.
   Qed.
 
-  Lemma pat_PInline η δ c p c' v l φ :
-    v = VInline c' l ->
+  Lemma pat_PTaggedRecord η δ c p c' v l φ :
+    v = VTaggedRecord c' l ->
     (c = c' -> pattern η δ p (VRecord l) φ True) ->
-    pattern η δ (PInline c p) v φ True.
+    pattern η δ (PTaggedRecord c p) v φ True.
   Proof.
     unfold pattern; intros. simpl_eval_pat. subst.
     destruct_string_eqb; solve [ eauto using pure_throw | tauto ].
@@ -360,12 +361,12 @@ Section pattern_rules.
 
   (* This more general version is not used in tactics at the moment *)
   Lemma pat_PXData η δ π ps l l' vs φ ψ :
-    lookup_path η π = Some (VLoc l') →
+    lookup_path η π = Some (VFieldLoc l') →
     (l = l' → patterns η δ ps vs φ ψ) →
     pattern η δ (PXData π ps) (VXData l vs) φ (ψ ∨ l ≠ l').
   Proof.
     unfold pattern. simpl_eval_pat. intros ->.
-    change (as_loc (of_option (Some (VLoc l')))) with (@ret _ unit l').
+    change (as_field_loc (of_option (Some (VFieldLoc l')))) with (@ret _ unit l').
     rewrite bind_ret.
     destruct (eqb_spec l l').
     - firstorder eauto using pure_exn_mono.
@@ -373,7 +374,7 @@ Section pattern_rules.
   Qed.
 
   Lemma pat_PXData_eq η δ π ps l vs φ ψ :
-    lookup_path η π = Some (VLoc l) ->
+    lookup_path η π = Some (VFieldLoc l) ->
     patterns η δ ps vs φ ψ →
     pattern η δ (PXData π ps) (VXData l vs) φ ψ.
       (* This form is useful when the truth of the equality [c = c']
@@ -381,13 +382,13 @@ Section pattern_rules.
   Proof.
     unfold pattern; intros Hlookup Hpat.
     simpl_eval_pat; rewrite Hlookup.
-    unfold as_loc, val_as_loc; simpl; rewrite !bind_ret.
+    unfold as_field_loc, val_as_field_loc; simpl; rewrite !bind_ret.
     unfold locations.eqb; destruct l; cbn.
     by rewrite Z.eqb_refl.
   Qed.
 
   Lemma pat_PXData_neq η δ π ps l1 l2 vs φ :
-    lookup_path η π = Some (VLoc l1) ->
+    lookup_path η π = Some (VFieldLoc l1) ->
     (address l1 <> address l2) ->
     pattern η δ (PXData π ps) (VXData l2 vs) φ True.
       (* This form is useful when the truth of the equality [c = c']
@@ -395,7 +396,7 @@ Section pattern_rules.
   Proof.
     unfold pattern; intros Hlookup Heq; simpl_eval_pat.
     rewrite Hlookup.
-    unfold as_loc, val_as_loc; cbn; rewrite !bind_ret.
+    unfold as_field_loc, val_as_field_loc; cbn; rewrite !bind_ret.
     unfold locations.eqb; simpl.
     destruct l1, l2; simpl in *.
     replace (address0 =? address) with false;
@@ -404,7 +405,7 @@ Section pattern_rules.
   Qed.
 
   Lemma pat_PXData_neq' η δ π ps l1 l2 vs :
-    lookup_path η π = Some (VLoc l1) ->
+    lookup_path η π = Some (VFieldLoc l1) ->
     (address l1 <> address l2) ->
     pattern η δ (PXData π ps) (VXData l2 vs) (λ _, False) True.
       (* This form is useful when the truth of the equality [c = c']
@@ -412,7 +413,7 @@ Section pattern_rules.
   Proof.
     unfold pattern; intros Hlookup Heq; simpl_eval_pat.
     rewrite Hlookup.
-    unfold as_loc, val_as_loc; cbn; rewrite !bind_ret.
+    unfold as_field_loc, val_as_field_loc; cbn; rewrite !bind_ret.
     unfold locations.eqb; simpl.
     destruct l1, l2; simpl in *.
     replace (address0 =? address) with false;

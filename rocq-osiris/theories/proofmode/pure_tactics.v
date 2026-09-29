@@ -644,14 +644,14 @@ Local Ltac2 rec pattern_match_aux () :=
           Control.plus
             (fun _ => eapply pat_PXData_eq > [ solve_lookup_path () | pattern_match_aux () ])
             (fun _ => eapply pat_PXData_neq > [ solve_lookup_path () | auto ])
-      | PInline _ _ =>
+      | PTaggedRecord _ _ =>
           Control.plus
-            (fun _ => eapply pat_PInline_eq > [ solve [ ltac1:(encode) ]
+            (fun _ => eapply pat_PTaggedRecord_eq > [ solve [ ltac1:(encode) ]
                                               | pattern_match_aux () ])
             (fun _ => Control.plus
-              (fun _ => eapply pat_PInline_neq > [ solve [ ltac1:(encode) ]
+              (fun _ => eapply pat_PTaggedRecord_neq > [ solve [ ltac1:(encode) ]
                                                  | ltac1:(congruence) ])
-              (fun _ => eapply pat_PInline_neq_data > [ solve [ ltac1:(encode) ]
+              (fun _ => eapply pat_PTaggedRecord_neq_data > [ solve [ ltac1:(encode) ]
                                                | ltac1:(congruence) ]))
       | PConstant _ =>
           Control.plus

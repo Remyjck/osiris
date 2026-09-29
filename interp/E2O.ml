@@ -49,6 +49,35 @@ let mut_tag : E.mut_tag -> O.mut_tag = function
   | Mut -> Mut
   | Immut -> Immut
 
+(* Primitive operators. The Rocq AST has a single [EUnOp] / [EBinOp] node
+   carrying an operator code; the translator's AST has one constructor per
+   operator. These two functions bridge the gap. *)
+
+let un_op : E.un_op -> O.expr -> O.expr = function
+  | UNeg -> fun e -> EIntNeg e
+  | ULnot -> fun e -> EIntLnot e
+  | UNot -> fun e -> EBoolNeg e
+
+let bin_op : E.bin_op -> O.expr -> O.expr -> O.expr = function
+  | BAdd -> fun e1 e2 -> EIntAdd (e1, e2)
+  | BSub -> fun e1 e2 -> EIntSub (e1, e2)
+  | BMul -> fun e1 e2 -> EIntMul (e1, e2)
+  | BDiv -> fun e1 e2 -> EIntDiv (e1, e2)
+  | BMod -> fun e1 e2 -> EIntMod (e1, e2)
+  | BLand -> fun e1 e2 -> EIntLand (e1, e2)
+  | BLor -> fun e1 e2 -> EIntLor (e1, e2)
+  | BLxor -> fun e1 e2 -> EIntLxor (e1, e2)
+  | BLsl -> fun e1 e2 -> EIntLsl (e1, e2)
+  | BLsr -> fun e1 e2 -> EIntLsr (e1, e2)
+  | BAsr -> fun e1 e2 -> EIntAsr (e1, e2)
+  | BPhysEq -> fun e1 e2 -> EOpPhysEq (e1, e2)
+  | BEq -> fun e1 e2 -> EOpEq (e1, e2)
+  | BNe -> fun e1 e2 -> EOpNe (e1, e2)
+  | BLt -> fun e1 e2 -> EOpLt (e1, e2)
+  | BLe -> fun e1 e2 -> EOpLe (e1, e2)
+  | BGt -> fun e1 e2 -> EOpGt (e1, e2)
+  | BGe -> fun e1 e2 -> EOpGe (e1, e2)
+
 let proph_arg : E.proph_arg -> O.proph_arg = function
   | PArgPath p -> PArgPath (path p)
   | PArgData d -> PArgData (data d)
@@ -64,7 +93,7 @@ let rec pat : E.pat -> O.pat = function
   | PData (d, ps)   -> PData (data d, pats ps)
   | PXData (ph, ps) -> PXData (path ph, pats ps)
   | PRecord fps     -> PRecord (fpats fps)
-  | PInline (d, p)  -> PInline (data d, pat p)
+  | PTaggedRecord (d, p)  -> PTaggedRecord (data d, pat p)
   | PArray _        -> PUnsupported
   | PInt i          -> PInt (z i)
   | PChar c         -> PChar (char c)
@@ -110,33 +139,16 @@ let rec expr : E.expr -> O.expr = function
   | EUnfreeze e -> EUnfreeze (expr e)
   | EBoolConj (e1, e2) -> EBoolConj (expr e1, expr e2)
   | EBoolDisj (e1, e2) -> EBoolDisj (expr e1, expr e2)
-  | EBoolNeg e -> EBoolNeg (expr e)
+  (* The Rocq AST folds every primitive operator into [EUnOp] / [EBinOp],
+     whereas the translator's AST still has one constructor per operator. *)
+  | EUnOp (op, e) -> un_op op (expr e)
+  | EBinOp (op, e1, e2) -> bin_op op (expr e1) (expr e2)
   | EInt i -> EInt (z i)
   | EMaxInt -> EMaxInt
   | EMinInt -> EMinInt
-  | EIntNeg e -> EIntNeg (expr e)
-  | EIntAdd (e1, e2) -> EIntAdd (expr e1, expr e2)
-  | EIntSub (e1, e2) -> EIntSub (expr e1, expr e2)
-  | EIntMul (e1, e2) -> EIntMul (expr e1, expr e2)
-  | EIntDiv (e1, e2) -> EIntDiv (expr e1, expr e2)
-  | EIntMod (e1, e2) -> EIntMod (expr e1, expr e2)
-  | EIntLand (e1, e2) -> EIntLand (expr e1, expr e2)
-  | EIntLor (e1, e2) -> EIntLor (expr e1, expr e2)
-  | EIntLxor (e1, e2) -> EIntLxor (expr e1, expr e2)
-  | EIntLnot e -> EIntLnot (expr e)
-  | EIntLsl (e1, e2) -> EIntLsl (expr e1, expr e2)
-  | EIntLsr (e1, e2) -> EIntLsr (expr e1, expr e2)
-  | EIntAsr (e1, e2) -> EIntAsr (expr e1, expr e2)
   | EFloat s -> EFloat (string_of_float s)
   | EChar c -> EChar (char c)
   | EString s -> EString (string s)
-  | EOpPhysEq (e1, e2) -> EOpPhysEq (expr e1, expr e2)
-  | EOpEq (e1, e2) -> EOpEq (expr e1, expr e2)
-  | EOpNe (e1, e2) -> EOpNe (expr e1, expr e2)
-  | EOpLt (e1, e2) -> EOpLt (expr e1, expr e2)
-  | EOpLe (e1, e2) -> EOpLe (expr e1, expr e2)
-  | EOpGt (e1, e2) -> EOpGt (expr e1, expr e2)
-  | EOpGe (e1, e2) -> EOpGe (expr e1, expr e2)
   | ELet (bs, e) -> ELet (bindings bs, expr e)
   | ELetRec (rbs, e) -> ELetRec (rec_bindings rbs, expr e)
   | ESeq (e1, e2) -> ESeq (expr e1, expr e2)
@@ -156,6 +168,7 @@ let rec expr : E.expr -> O.expr = function
   | ERef e -> ERef (expr e)
   | ELoad e -> ELoad (expr e)
   | EStore (e1, e2) -> EStore (expr e1, expr e2)
+  | EFieldLoad e -> EFieldLoad (expr e)
   | EExchange (e1, e2) -> EExchange (expr e1, expr e2)
   | ECAS (e1, e2, e3) -> ECAS (expr e1, expr e2, expr e3)
   | EFAA (e1, e2) -> EFAA (expr e1, expr e2)

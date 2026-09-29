@@ -38,7 +38,7 @@ Abbreviation proph_steps_trans := (lsteps_trans proph_step).
 
 (* [safe σ π]: any reachable configuration from (σ, π) is safe. *)
 
-Definition safe (σ : store) (π : thpool) : Prop :=
+Definition safe (σ : subjective_step.store) (π : thpool) : Prop :=
   ∀ σ' π',
     rtc erased_proph_step (σ, π) (σ', π') →
     ∀ ι m, π' !! ι = Some m → not_stuck m σ' (dom π').
@@ -93,8 +93,10 @@ Lemma safe_not_crash σ π ι :
 Proof.
   intros Hsafe Hι.
   destruct (Hsafe σ π (rtc_refl _ _) ι Crash Hι) as [ [] | [ Hcp | [] ] ].
-  destruct (subjective_step.invert_can_progress _ _ _ Hcp) as [ H | [ H | [ H | H ] ] ];
+  destruct (subjective_step.invert_reducible _ _ _ Hcp)
+    as [ H | [ H | [ H | [ H | H ] ] ] ];
     try by destruct H as (?&?&?&?).
+  - by destruct H as (?&?&?).
   - by destruct H as (?&?&?&?&?).
   - by eapply invert_can_step_Crash.
 Qed.
@@ -108,15 +110,30 @@ Local Ltac erase_result_step :=
   | Hsafe : safe ?σ ?π,
     Hι : ?π !! ?ι = Some (Stop (CResolve CReturn) (?w, ?p, ?v) ?k) |- _ =>
       assert (proph_step (σ, π) [(p, (w, v))]
-                (σ, <[ ι := continue k w ]> π))
-        by (apply (ResolveTS ι π σ σ CReturn w p v (Ret w) k Hι);
-            [ exact (StepReturn σ w inject2) | done ])
+                (store_upd_heap (λ _, σ.(st_heap)) σ,
+                 <[ ι := continue k w ]> π))
+        by (apply (ResolveTS ι π σ σ.(st_heap) CReturn w p v (Ret w) k Hι);
+            [ exact (StepReturn σ.(st_heap) w inject2) | done ])
   | Hsafe : safe ?σ ?π,
     Hι : ?π !! ?ι = Some (Stop CReturn ?w ?k) |- _ =>
-      assert (proph_step (σ, π) [] (σ, <[ ι := continue k w ]> π))
+      assert (proph_step (σ, π) []
+                (store_upd_heap (λ _, σ.(st_heap)) σ,
+                 <[ ι := continue k w ]> π))
         by (apply PureTS;
-            apply (BaseTS ι π (Stop CReturn w k) σ (continue k w) σ Hι);
+            apply (BaseTS ι π (Stop CReturn w k) σ.(st_heap) (continue k w)
+                     σ.(st_heap) Hι);
             apply StepReturn)
+  (* The allocation of a prophecy picks a fresh identifier. *)
+  | Hsafe : safe ?σ ?π,
+    Hι : ?π !! ?ι = Some (Stop CNewProph ?x ?k),
+    Hk : ∀ _, erase_micro _ _ _ _ |- _ =>
+      let p := fresh "p" in
+      set (p := stdpp.base.fresh σ.(used_proph_id) : proph_id);
+      pose proof (Hk p);
+      assert (proph_step (σ, π) []
+                (store_upd_used_proph_id ({[ p ]} ∪.) σ,
+                 <[ ι := continue k p ]> π))
+        by (apply (NewProphTS ι π σ x p k Hι); apply is_fresh)
   end.
 
 (* Having taken that step, the induction hypothesis carries the rest: the
@@ -124,14 +141,14 @@ Local Ltac erase_result_step :=
 
 Local Ltac erase_not_stuck_finish :=
   match goal with
-  | Hstep : proph_step (?σ, ?π) ?κ0 (?σ, <[ ?ι := continue ?k ?w ]> ?π),
+  | Hstep : proph_step (?σ, ?π) ?κ0 (?σ', <[ ?ι := continue ?k ?w ]> ?π),
     Hsafe : safe ?σ ?π, IH : ∀ _ _, _ → _ → @JMeq _ _ _ _ → _,
     Hm : erase_micro _ _ (continue ?k ?w) ?me |- _ =>
       let Hsafe' := fresh "Hsafe'" in
-      assert (Hsafe' : safe σ (<[ ι := continue k w ]> π))
+      assert (Hsafe' : safe σ' (<[ ι := continue k w ]> π))
         by (eapply safe_steps; [ exact Hsafe | ];
             econstructor; [ exact Hstep | constructor ]);
-      apply (IH (O2Ret w) (continue k w) eq_refl eq_refl JMeq_refl me σ
+      apply (IH (O2Ret w) (continue k w) eq_refl eq_refl JMeq_refl me σ'
                 (<[ ι := continue k w ]> π) _ _ ι Hsafe'
                 ltac:(by rewrite lookup_insert_eq) Hm)
   end.
@@ -140,18 +157,35 @@ Local Ltac erase_not_stuck_finish :=
 
 (** ** Thread-level steps. *)
 
-(* The steps a thread can take alone (without concurrency): a [step], or a resolution. *)
+(* The steps a thread can take alone (without concurrency): a [step] on the
+   heap, the allocation of a prophecy, or a resolution. *)
 
-Inductive tstep {A E} : store * micro A E → list observation → store * micro A E → Prop :=
-  | TBase σ m σ' m' :
-      step (σ, m) (σ', m') →
-      tstep (σ, m) [] (σ', m')
-  | TResolve {Y} σ σ' (c : code Y val exn) x p v b k :
-      step (σ, stop c x) (σ', b) →
+Inductive tstep {A E} :
+    subjective_step.store * micro A E → list observation →
+    subjective_step.store * micro A E → Prop :=
+  | TBase σ m h' m' :
+      step (σ.(st_heap), m) (h', m') →
+      tstep (σ, m) [] (store_upd_heap (λ _, h') σ, m')
+  | TNewProph σ x p k :
+      p ∉ σ.(used_proph_id) →
+      tstep (σ, Stop CNewProph x k) []
+            (store_upd_used_proph_id ({[ p ]} ∪.) σ, continue k p)
+  | TResolve {Y} σ h' (c : code Y val exn) x p v b k :
+      step (σ.(st_heap), stop c x) (h', b) →
       is_result b →
       tstep (σ, Stop (CResolve c) (x, p, v) k) (resolve_obs p v b)
-            (σ', try2 b k)
+            (store_upd_heap (λ _, h') σ, try2 b k)
 .
+
+(* A step that leaves the heap alone leaves the store alone. *)
+
+Lemma TBase_same {A E} σ (m m' : micro A E) :
+  step (σ.(st_heap), m) (σ.(st_heap), m') →
+  tstep (σ, m) [] (σ, m').
+Proof.
+  intros Hstep. pose proof (TBase σ m _ m' Hstep) as Ht.
+  by rewrite store_upd_heap_id in Ht.
+Qed.
 
 (* Runs of [tstep], sharing the generic labelled-steps machinery with
    [proph_steps] (utils/logic/lsteps.v). *)
@@ -162,17 +196,18 @@ Abbreviation tsteps_trans := (lsteps_trans tstep).
 
 (* A [tstep] can resolve, so it lands in the instrumented model. *)
 
-Lemma tstep_proph_step ι π (c1 c2 : store * microvx) κ :
+Lemma tstep_proph_step ι π (c1 c2 : subjective_step.store * microvx) κ :
   π !! ι = Some c1.2 →
   tstep c1 κ c2 →
   proph_step (c1.1, π) κ (c2.1, <[ ι := c2.2 ]> π).
 Proof.
   intros Hι Hstep. dependent destruction Hstep; simpl in *.
   - by apply PureTS; eapply BaseTS.
+  - by eapply NewProphTS.
   - by eapply ResolveTS.
 Qed.
 
-Lemma tsteps_proph_steps ι n (c1 c2 : store * microvx) κ π :
+Lemma tsteps_proph_steps ι n (c1 c2 : subjective_step.store * microvx) κ π :
   π !! ι = Some c1.2 →
   tsteps n c1 κ c2 →
   proph_steps n (c1.1, π) κ (c2.1, <[ ι := c2.2 ]> π).
@@ -197,7 +232,7 @@ Definition is_result {A E} (m : micro A E) : Prop :=
   end.
 
 Definition steppable_code {X Y E} (c : code X Y E) : Prop :=
-  match c with CPerf | CResolve _ => False | _ => True end.
+  match c with CPerf | CNewProph | CResolve _ => False | _ => True end.
 
 Lemma not_steppable_step_through_par {X Y E} (c : code X Y E) :
   ¬ steppable_code c → step_through_par_code c.
@@ -210,10 +245,10 @@ Lemma not_stuck_call {A E X Y} σ (π : gset thread) (c : code X Y exn) x
 Proof.
   intros Hc. destruct c; try done;
     try (right; left;
-         apply subjective_step.can_step_can_progress, can_step_stop;
+         apply subjective_step.can_step_reducible, can_step_stop;
          split; [ done | by intros [] ]).
   - (* a fork makes progress by creating a thread *)
-    right; left. by apply subjective_step.can_progress_fork.
+    right; left. by apply subjective_step.reducible_fork.
   - (* a join is waiting *)
     by right; right.
 Qed.
@@ -255,7 +290,7 @@ Definition mstuck {A E} σ (m : micro A E) : Prop :=
   m = Crash ∨
   ∃ X (c : code X val exn) x p v (k : outcome2 val exn → micro A E),
     m = Stop (CResolve c) (x, p, v) k ∧
-    ∀ σ' b, step (σ, stop c x) (σ', b) → ¬ is_result b.
+    ∀ h' b, step (σ.(st_heap), stop c x) (h', b) → ¬ is_result b.
 
 (* -------------------------------------------------------------------------- *)
 
@@ -293,42 +328,42 @@ Qed.
 
 (** ** Stores. *)
 
-(* Erasure neither allocates nor moves anything, so the two stores have the
+(* Erasure neither allocates nor moves anything, so the two heaps have the
    same domain and agree cell by cell. *)
 
-Lemma erase_store_lookup σ σe l b :
-  erase_store σ σe →
+Lemma erase_store_lookup (σ σe : heap) l b :
+  erase_heap σ σe →
   σ !! l = Some b →
   ∃ be, σe !! l = Some be ∧ erase_mem_block b be.
 Proof.
-  intros Hσ Hl. specialize (Hσ l). unfold store in *. rewrite Hl in Hσ.
+  intros Hσ Hl. specialize (Hσ l). rewrite Hl in Hσ.
   destruct (σe !! l) as [ be | ]; [ by eauto | done ].
 Qed.
 
-Lemma erase_store_lookup_erased σ σe l be :
-  erase_store σ σe →
+Lemma erase_store_lookup_erased (σ σe : heap) l be :
+  erase_heap σ σe →
   σe !! l = Some be →
   ∃ b, σ !! l = Some b ∧ erase_mem_block b be.
 Proof.
-  intros Hσ Hl. specialize (Hσ l). unfold store in *. rewrite Hl in Hσ.
+  intros Hσ Hl. specialize (Hσ l). rewrite Hl in Hσ.
   destruct (σ !! l) as [ b | ]; [ by eauto | done ].
 Qed.
 
-Lemma erase_store_none σ σe l :
-  erase_store σ σe →
+Lemma erase_store_none (σ σe : heap) l :
+  erase_heap σ σe →
   σe !! l = None →
   σ !! l = None.
 Proof.
-  intros Hσ Hl. specialize (Hσ l). unfold store in *. rewrite Hl in Hσ.
+  intros Hσ Hl. specialize (Hσ l). rewrite Hl in Hσ.
   by destruct (σ !! l) as [ b | ].
 Qed.
 
-Lemma erase_store_insert σ σe l b be :
-  erase_store σ σe →
+Lemma erase_store_insert (σ σe : heap) l b be :
+  erase_heap σ σe →
   erase_mem_block b be →
-  erase_store (<[ l := b ]> σ) (<[ l := be ]> σe).
+  erase_heap (<[ l := b ]> σ) (<[ l := be ]> σe).
 Proof.
-  intros Hσ Hb i. unfold store in *.
+  intros Hσ Hb i.
   destruct (decide (l = i)) as [ -> | Hne ].
   - by rewrite !lookup_insert_eq.
   - rewrite !lookup_insert_ne //; try apply Hσ.
@@ -339,8 +374,8 @@ Qed.
    rewrites. So the two programs compare alike, with no side condition;
    HeapLang needs [vals_compare_safe] here. *)
 
-Lemma erase_phys_eq_blocks σ σe l1 l2 :
-  erase_store σ σe →
+Lemma erase_phys_eq_blocks (σ σe : heap) l1 l2 :
+  erase_heap σ σe →
   match σe !! l1, σe !! l2 with
   | Some (Block Mut _), Some (Block _ _)
   | Some (Block _ _), Some (Block Mut _) => Some (locations.eqb l1 l2)
@@ -353,26 +388,31 @@ Lemma erase_phys_eq_blocks σ σe l1 l2 :
     end.
 Proof.
   intros Hσ. pose proof (Hσ l1) as H1. pose proof (Hσ l2) as H2.
-  destruct (σ !! l1) as [ [ ] | ] eqn:E1, (σe !! l1) as [ [ ] | ] eqn:E2,
-           (σ !! l2) as [ [ ] | ] eqn:E3, (σe !! l2) as [ [ ] | ] eqn:E4;
+  destruct (σ !! l1) as [ [ ] | ] eqn:E1,
+           (σe !! l1) as [ [ ] | ] eqn:E2,
+           (σ !! l2) as [ [ ] | ] eqn:E3,
+           (σe !! l2) as [ [ ] | ] eqn:E4;
     rewrite ?E1 ?E2 ?E3 ?E4 in H1 H2;
     simpl in H1, H2; destruct_and?; simplify_eq; try done;
     by repeat case_match.
 Qed.
 
-Lemma erase_phys_eq_val_store σ σe v1 v2 :
-  erase_store σ σe →
-  phys_eq_val_store (erase_val v1) (erase_val v2) σe
-  = phys_eq_val_store v1 v2 σ.
+(* Only one way: a prophecy does not compare, but its erasure [VUnit]
+   does. *)
+
+Lemma erase_phys_eq_val_store (σ σe : heap) v1 v2 b :
+  erase_heap σ σe →
+  phys_eq_val_store v1 v2 σ = Some b →
+  phys_eq_val_store (erase_val v1) (erase_val v2) σe = Some b.
 Proof.
-  intros Hσ. destruct v1, v2;
+  intros Hσ Hb. destruct v1, v2;
     repeat (match goal with
             | |- context [ VData ?c ?l ] => is_var l; destruct l
             end);
-    simpl; try reflexivity.
+    simpl in *; try done.
   (* What is left is the block comparison, which reads the two blocks' tags
      out of the store. *)
-  all: by apply erase_phys_eq_blocks.
+  all: by rewrite (erase_phys_eq_blocks σ σe).
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -384,7 +424,7 @@ Local Ltac erase_op l :=
   let H2 := fresh "H2" in
   let Hl := fresh "Hl" in
   match goal with
-  | H : erase_store ?σ ?σe |- _ =>
+  | H : erase_heap ?σ ?σe |- _ =>
       pose proof (H l) as Hl;
       destruct (σ !! l) as [ [ | | | ] | ] eqn:H1,
                (σe !! l) as [ [ | | | ] | ] eqn:H2;
@@ -393,7 +433,7 @@ Local Ltac erase_op l :=
   simpl in Hl; try done; destruct_and?; subst; simpl.
 
 Lemma erase_step_load_2 σ σe l :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_microvx (step_load_2 σ l inject2) (step_load_2 σe l inject2).
 Proof.
   intros Hσ. unfold step_load_2. erase_op l;
@@ -401,7 +441,7 @@ Proof.
 Qed.
 
 Lemma erase_step_load_block_2 σ σe l :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_micro id erase_val
     (step_load_block_2 σ l inject2) (step_load_block_2 σe l inject2).
 Proof.
@@ -410,15 +450,15 @@ Proof.
 Qed.
 
 Lemma erase_step_exchange_1 σ σe l v :
-  erase_store σ σe →
-  erase_store (step_exchange_1 σ l v) (step_exchange_1 σe l (erase_val v)).
+  erase_heap σ σe →
+  erase_heap (step_exchange_1 σ l v) (step_exchange_1 σe l (erase_val v)).
 Proof.
   intros Hσ. unfold step_exchange_1. erase_op l;
     first [ by apply erase_store_insert | done ].
 Qed.
 
 Lemma erase_step_exchange_2 σ σe l :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_microvx (step_exchange_2 σ l inject2) (step_exchange_2 σe l inject2).
 Proof.
   intros Hσ. unfold step_exchange_2. erase_op l;
@@ -426,15 +466,15 @@ Proof.
 Qed.
 
 Lemma erase_step_set_tag_1 σ σe l t :
-  erase_store σ σe →
-  erase_store (step_set_tag_1 σ l t) (step_set_tag_1 σe l t).
+  erase_heap σ σe →
+  erase_heap (step_set_tag_1 σ l t) (step_set_tag_1 σe l t).
 Proof.
   intros Hσ. unfold step_set_tag_1. erase_op l;
     first [ by apply erase_store_insert | done ].
 Qed.
 
 Lemma erase_step_set_tag_2 σ σe l :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_micro id erase_val
     (step_set_tag_2 σ l inject2) (step_set_tag_2 σe l inject2).
 Proof.
@@ -442,36 +482,31 @@ Proof.
     first [ apply EM_Crash | exact (EM_Ret id erase_val _) ].
 Qed.
 
-(* Compare-and-set first compares, and both programs compare the same two
-   values at related stores. *)
+(* Compare-and-set first compares. Where the annotated program can compare,
+   the erased one compares alike. Where it cannot (a prophecy), it crashes, and the erased program may go on to write: the
+   stores are then no longer related, which the crash makes moot. *)
 
-Lemma erase_step_cas_1 σ σe l seen v :
-  erase_store σ σe →
-  erase_store (step_cas_1 σ l seen v)
-              (step_cas_1 σe l (erase_val seen) (erase_val v)).
+Lemma erase_step_cas σ σe l seen v :
+  erase_heap σ σe →
+  step_cas_2 σ l seen v inject2 = Crash
+  ∨ (erase_heap (step_cas_1 σ l seen v)
+                 (step_cas_1 σe l (erase_val seen) (erase_val v))
+     ∧ erase_microvx (step_cas_2 σ l seen v inject2)
+                     (step_cas_2 σe l (erase_val seen) (erase_val v) inject2)).
 Proof.
-  intros Hσ. unfold step_cas_1. erase_op l;
-    try (rewrite (erase_phys_eq_val_store σ σe) //;
-         destruct (phys_eq_val_store _ seen σ) as [ [ | ] | ]);
-    first [ by apply erase_store_insert | done ].
-Qed.
-
-Lemma erase_step_cas_2 σ σe l seen v :
-  erase_store σ σe →
-  erase_microvx (step_cas_2 σ l seen v inject2)
-                (step_cas_2 σe l (erase_val seen) (erase_val v) inject2).
-Proof.
-  intros Hσ. unfold step_cas_2. erase_op l;
-    try (rewrite (erase_phys_eq_val_store σ σe) //;
-         destruct (phys_eq_val_store _ seen σ) as [ [ | ] | ]);
-    first [ apply EM_Crash | exact (EM_Ret erase_val erase_val _) ].
+  intros Hσ. unfold step_cas_1, step_cas_2. erase_op l;
+    try (right; split; [ done | apply EM_Crash ]).
+  destruct (phys_eq_val_store _ seen σ) as [ b | ] eqn:Hb; [ | by left ].
+  rewrite (erase_phys_eq_val_store σ σe _ _ b Hσ Hb). right.
+  destruct b; (split; [ by apply erase_store_insert || done | ]);
+    exact (EM_Ret erase_val erase_val _).
 Qed.
 
 (* Fetch-and-add insists on an integer, which erasure leaves alone. *)
 
 Lemma erase_step_faa_1 σ σe l i :
-  erase_store σ σe →
-  erase_store (step_faa_1 σ l i) (step_faa_1 σe l i).
+  erase_heap σ σe →
+  erase_heap (step_faa_1 σ l i) (step_faa_1 σe l i).
 Proof.
   intros Hσ. unfold step_faa_1. erase_op l;
     try (match goal with v : val |- _ => destruct v end; simpl);
@@ -479,7 +514,7 @@ Proof.
 Qed.
 
 Lemma erase_step_faa_2 σ σe l i :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_microvx (step_faa_2 σ l i inject2) (step_faa_2 σe l i inject2).
 Proof.
   intros Hσ. unfold step_faa_2. erase_op l;
@@ -488,15 +523,15 @@ Proof.
 Qed.
 
 Lemma erase_step_resume_1 σ σe l :
-  erase_store σ σe →
-  erase_store (step_resume_1 σ l) (step_resume_1 σe l).
+  erase_heap σ σe →
+  erase_heap (step_resume_1 σ l) (step_resume_1 σe l).
 Proof.
   intros Hσ. unfold step_resume_1. erase_op l;
     first [ by apply erase_store_insert | done ].
 Qed.
 
 Lemma erase_step_resume_2 σ σe l o :
-  erase_store σ σe →
+  erase_heap σ σe →
   erase_microvx (step_resume_2 σ l o inject2)
              (step_resume_2 σe l (erase_outcome o) inject2).
 Proof.
@@ -511,8 +546,8 @@ Qed.
    programs store the same thing up to erasure. *)
 
 Lemma erase_step_wrap_1 σ σe l η bs l' :
-  erase_store σ σe →
-  erase_store (step_wrap_1 σ l η bs l')
+  erase_heap σ σe →
+  erase_heap (step_wrap_1 σ l η bs l')
               (step_wrap_1 σe l (erase_env η) (erase_branches bs) l').
 Proof.
   intros Hσ. unfold step_wrap_1. apply erase_store_insert; [ done | ].
@@ -522,8 +557,8 @@ Proof.
 Qed.
 
 Lemma erase_step_shallow_wrap_1 σ σe l η bs l' :
-  erase_store σ σe →
-  erase_store (step_shallow_wrap_1 σ l η bs l')
+  erase_heap σ σe →
+  erase_heap (step_shallow_wrap_1 σ l η bs l')
               (step_shallow_wrap_1 σe l (erase_env η) (erase_branches bs) l').
 Proof.
   intros Hσ. unfold step_shallow_wrap_1. apply erase_store_insert; [ done | ].
@@ -539,13 +574,15 @@ Qed.
 (* Where the erasure of a system call is checked against the semantics, one
    code at a time. The only place the proof looks at the store. *)
 
-Lemma erase_step_call {X Y} (c : code X Y exn) x σ σe σe' (be : micro Y exn) :
+Lemma erase_step_call {X Y} (c : code X Y exn) x (σ σe σe' : heap)
+    (be : micro Y exn) :
   no_proph_code c →
-  erase_store σ σe →
+  erase_heap σ σe →
   step (σe, stop c (erase_code_arg c x)) (σe', be) →
   ∃ σ' b,
-    step (σ, stop c x) (σ', b) ∧ erase_store σ' σe' ∧
-    erase_micro (erase_code_res c) erase_val b be.
+    step (σ, stop c x) (σ', b) ∧
+    (b = Crash ∨
+     erase_heap σ' σe' ∧ erase_micro (erase_code_res c) erase_val b be).
 Proof.
   intros Hc Hσ Hstep.
   dependent destruction c; try done; simpl in *.
@@ -554,7 +591,9 @@ Proof.
   (* The annotated program takes the same step, at the same location and
      with the same Boolean where there is a choice. *)
   all: eexists; eexists; split;
-       [ solve [ econstructor; eauto using erase_store_none ] | split ].
+       [ solve [ econstructor; eauto using erase_store_none ] | ].
+  (* Only compare-and-set can crash where its erasure does not. *)
+  all: first [ by apply erase_step_cas | right; split ].
   (* What is left is one store relation and one computation relation per
      code, which is what the lemmas above are for. *)
   (* [CEval] and [CLoop] hand over a computation of their own. *)
@@ -580,8 +619,6 @@ Proof.
   - by apply erase_step_exchange_2.
   - by apply erase_step_set_tag_1.
   - by apply erase_step_set_tag_2.
-  - by apply erase_step_cas_1.
-  - by apply erase_step_cas_2.
   - by apply erase_step_faa_1.
   - by apply erase_step_faa_2.
   - by apply erase_step_resume_1.
@@ -636,6 +673,9 @@ Proof. by rewrite !try2_inject2. Qed.
 
 Lemma tstep_frame {A E B F} (C : micro A E → micro B F) σ m κ σ' m' :
   (∀ σ1 m1 σ2 m2, step (σ1, m1) (σ2, m2) → step (σ1, C m1) (σ2, C m2)) →
+  (∀ σ1 x k,
+     step (σ1, C (Stop CNewProph x k))
+          (σ1, Stop CNewProph x (λ o, C (k o)))) →
   (∀ X σ1 (c : code X val exn) y k,
      step (σ1, C (Stop (CResolve c) y k))
           (σ1, Stop (CResolve c) y (λ o, C (k o)))) →
@@ -643,20 +683,25 @@ Lemma tstep_frame {A E B F} (C : micro A E → micro B F) σ m κ σ' m' :
   (∃ n, tsteps n (σ, C m) κ (σ', C m'))
   ∨ (∃ n, tsteps n (σ, C m) κ (σ', Crash) ∧ mstuck σ' (Crash : micro B F)).
 Proof.
-  intros Hbase Hthrough Hstep. dependent destruction Hstep.
+  intros Hbase Hnew Hthrough Hstep. dependent destruction Hstep.
   - left. exists 1. apply tsteps_one, TBase. by apply Hbase.
+  (* The allocation floats to the top of the thread and takes its step
+     there. *)
+  - left. exists 2.
+    eapply (lsteps_l _ 1 _ _ _ []); [ apply TBase_same, Hnew | ].
+    apply tsteps_one. exact (TNewProph σ x p (λ o, C (k o)) H).
   (* The resolution floats to the top of the thread and resolves there. The
      context survives a returned or a thrown outcome, but not a crash, which
      [try2] propagates in place of [C Crash]. *)
   - destruct_is_result o.
     + left. exists 2.
-      eapply (lsteps_l _ 1 _ _ _ []); [ apply TBase, Hthrough | ].
+      eapply (lsteps_l _ 1 _ _ _ []); [ apply TBase_same, Hthrough | ].
       apply tsteps_one. rewrite try2_inject2_frame.
-      exact (TResolve σ σ' c x p v (inject2 o) (λ o, C (k o)) H H0).
+      exact (TResolve σ h' c x p v (inject2 o) (λ o, C (k o)) H H0).
     + right. exists 2. split; [ | by left ].
-      eapply (lsteps_l _ 1 _ _ _ []); [ apply TBase, Hthrough | ].
+      eapply (lsteps_l _ 1 _ _ _ []); [ apply TBase_same, Hthrough | ].
       apply tsteps_one.
-      exact (TResolve σ σ' c x p v Crash (λ o, C (k o)) H H0).
+      exact (TResolve σ h' c x p v Crash (λ o, C (k o)) H H0).
 Qed.
 
 Lemma tstep_handle {A E} σ (m : microvx) κ σ' m'
@@ -665,8 +710,9 @@ Lemma tstep_handle {A E} σ (m : microvx) κ σ' m'
   (∃ n, tsteps n (σ, Handle m h) κ (σ', Handle m' h))
   ∨ (∃ n, tsteps n (σ, Handle m h) κ (σ', Crash) ∧ mstuck σ' (Crash : micro A E)).
 Proof.
-  intros Hs. eapply (tstep_frame (λ m, Handle m h)); [ | | exact Hs ].
+  intros Hs. eapply (tstep_frame (λ m, Handle m h)); [ | | | exact Hs ].
   - intros. by apply StepHandleLeft.
+  - intros. by apply StepHandleNewProph.
   - intros. by apply StepHandleResolve.
 Qed.
 
@@ -711,8 +757,9 @@ Lemma tstep_par_l {A1 A2 A E E'} σ (m1 : micro A1 E') m1' κ σ' m2
   (∃ n, tsteps n (σ, Par m1 m2 k) κ (σ', Par m1' m2 k))
   ∨ (∃ n, tsteps n (σ, Par m1 m2 k) κ (σ', Crash) ∧ mstuck σ' (Crash : micro A E)).
 Proof.
-  intros Hs. eapply (tstep_frame (λ m1, Par m1 m2 k)); [ | | exact Hs ].
+  intros Hs. eapply (tstep_frame (λ m1, Par m1 m2 k)); [ | | | exact Hs ].
   - intros. by apply StepParLeft.
+  - intros. apply StepThroughParLeft. done.
   - intros. apply StepThroughParLeft. done.
 Qed.
 
@@ -722,8 +769,9 @@ Lemma tstep_par_r {A1 A2 A E E'} σ (m2 : micro A2 E') m2' κ σ' m1
   (∃ n, tsteps n (σ, Par m1 m2 k) κ (σ', Par m1 m2' k))
   ∨ (∃ n, tsteps n (σ, Par m1 m2 k) κ (σ', Crash) ∧ mstuck σ' (Crash : micro A E)).
 Proof.
-  intros Hs. eapply (tstep_frame (λ m2, Par m1 m2 k)); [ | | exact Hs ].
+  intros Hs. eapply (tstep_frame (λ m2, Par m1 m2 k)); [ | | | exact Hs ].
   - intros. by apply StepParRight.
+  - intros. apply StepThroughParRight. done.
   - intros. apply StepThroughParRight. done.
 Qed.
 
@@ -748,7 +796,7 @@ Proof.
 Qed.
 
 Lemma mstuck_frame {A E B F} (C : micro A E → micro B F) σ m :
-  step (σ, C Crash) (σ, Crash) →
+  step (σ.(st_heap), C Crash) (σ.(st_heap), Crash) →
   (∀ X σ1 (c : code X val exn) y k,
      step (σ1, C (Stop (CResolve c) y k))
           (σ1, Stop (CResolve c) y (λ o, C (k o)))) →
@@ -756,9 +804,9 @@ Lemma mstuck_frame {A E B F} (C : micro A E → micro B F) σ m :
 Proof.
   intros Hcrash Hthrough [ -> | (X & c & x & p & v & k & -> & Hc) ].
   - exists 1, [], σ, Crash. split; [ | by left ].
-    by apply tsteps_one, TBase.
+    by apply tsteps_one, TBase_same.
   - exists 1, [], σ, (Stop (CResolve c) (x, p, v) (λ o, C (k o))).
-    split; [ by apply tsteps_one, TBase | ].
+    split; [ by apply tsteps_one, TBase_same | ].
     right. by exists X, c, x, p, v, (λ o, C (k o)).
 Qed.
 
@@ -792,16 +840,18 @@ Qed.
 
 (** ** Stripping the calls erasure removes. *)
 
-(* [CReturn], and the resolution attached to a value that compiles to it,
-   are the only nodes the annotated program has and the erased one does not.
-   Stepping them away is what makes the two computations line up, and causes
-   a stutter that the simulation has to absorb. *)
+(* [CNewProph], [CReturn], and the resolution attached to a value that
+   compiles to it, are the only nodes the annotated program has and the
+   erased one does not. Stepping them away is what makes the two
+   computations line up, and causes a stutter that the simulation has to
+   absorb. A stutter may change the store, by allocating a prophecy
+   identifier, but never the heap, which is all [erase_store] looks at. *)
 
 (* A [CResolve] is a stutter exactly when the call it wraps is a [CReturn]. *)
 
 Definition stutter_code {X Y E} (c : code X Y E) : Prop :=
   match c with
-  | CReturn => True
+  | CNewProph | CReturn => True
   | CResolve c' => ¬ no_proph_code c'
   | _ => False
   end.
@@ -817,51 +867,113 @@ Lemma no_proph_resolve_no_stutter {X} (c : code X val exn) :
   no_proph_code c → ¬ stutter_code (CResolve c).
 Proof. simpl. tauto. Qed.
 
-(* The two stutter steps themselves. Both leave the store alone; the
-   resolution emits its observation, the bare [CReturn] emits none. *)
+(* A computation that erases to the allocation of a prophecy crashed, or is
+   itself a stutter: the erased program allocates no prophecy. The code is
+   told apart by a Boolean test rather than by inversion, which would have
+   to compare the result types [val] and [proph_id]. *)
+
+Definition is_new_proph_code {X Y E} (c : code X Y E) : bool :=
+  match c with CNewProph => true | _ => false end.
+
+Definition is_new_proph {A E} (m : micro A E) : bool :=
+  match m with Stop c _ _ => is_new_proph_code c | _ => false end.
+
+Lemma new_proph_code_proph {X Y E} (c : code X Y E) :
+  is_new_proph_code c = true → ¬ no_proph_code c.
+Proof. destruct c; simpl; try discriminate; tauto. Qed.
+
+Lemma erase_micro_new_proph {A E} (fA : A → A) (fE : E → E) m x k :
+  erase_micro fA fE m (Stop CNewProph x k) → m = Crash ∨ ¬ no_stutter m.
+Proof.
+  intros Hm. remember (Stop CNewProph x k) as me eqn:Heq.
+  assert (Hb : is_new_proph me = true) by (by subst). clear Heq.
+  induction Hm; simpl in Hb; try discriminate.
+  - by left.
+  - by destruct (new_proph_code_proph c Hb).
+  - right. simpl. tauto.
+  - by destruct (new_proph_code_proph c Hb).
+  - right. simpl. tauto.
+  - right. simpl. tauto.
+Qed.
+
+(* The stutter steps themselves. The two returns leave the store alone; the
+   resolution emits its observation, the bare [CReturn] emits none. The
+   allocation of a prophecy adds a fresh identifier to the store. *)
+
+Lemma tstep_new_proph {A E} σ x (k : outcome2 proph_id exn → micro A E) :
+  let p := fresh σ.(used_proph_id) in
+  tstep (σ, Stop CNewProph x k) []
+        (store_upd_used_proph_id ({[ p ]} ∪.) σ, continue k p).
+Proof. apply TNewProph, is_fresh. Qed.
+
+(* A stutter leaves the heap, and so the erasure relation, unchanged. *)
+
+Lemma erase_store_heap σ σ0 σe :
+  σ0.(st_heap) = σ.(st_heap) → erase_store σ σe → erase_store σ0 σe.
+Proof. unfold erase_store. by intros ->. Qed.
 
 Lemma tstep_return {A E} σ w (k : outcome2 val exn → micro A E) :
   tstep (σ, Stop CReturn w k) [] (σ, continue k w).
-Proof. apply TBase, StepReturn. Qed.
+Proof. apply TBase_same, StepReturn. Qed.
 
 Lemma tstep_resolve_return {A E} σ w p v (k : outcome2 val exn → micro A E) :
   tstep (σ, Stop (CResolve CReturn) (w, p, v) k) [(p, (w, v))]
         (σ, continue k w).
-Proof. exact (TResolve σ σ CReturn w p v (Ret w) k (StepReturn σ w inject2) I). Qed.
+Proof.
+  pose proof (TResolve σ σ.(st_heap) CReturn w p v (Ret w) k
+                (StepReturn σ.(st_heap) w inject2) I) as Ht.
+  by rewrite store_upd_heap_id in Ht.
+Qed.
 
 Lemma erase_unstutter {A E} (fA : A → A) (fE : E → E) ma me σ :
   erase_micro fA fE ma me →
   reaches_stuck σ ma
-  ∨ (∃ n κ ma0, tsteps n (σ, ma) κ (σ, ma0) ∧
-                erase_micro fA fE ma0 me ∧ no_stutter ma0).
+  ∨ (∃ n κ σ0 ma0, tsteps n (σ, ma) κ (σ0, ma0) ∧ σ0.(st_heap) = σ.(st_heap) ∧
+                   erase_micro fA fE ma0 me ∧ no_stutter ma0).
 Proof.
-  intros Hm. induction Hm.
-  (* Everything but the two calls erasure removes is already in shape. *)
-  - right. exists 0, [], (Ret a). split; [ constructor | ]. by split; [ apply EM_Ret | ].
-  - right. exists 0, [], (Throw e). split; [ constructor | ]. by split; [ apply EM_Throw | ].
-  - right. exists 0, [], Crash. split; [ constructor | ]. by split; [ apply EM_CrashL | ].
-  - right. exists 0, [], (Handle m h). split; [ constructor | ].
-    by split; [ apply EM_Handle | ].
-  - right. exists 0, [], (Stop c x k). split; [ constructor | ].
-    split; [ by apply EM_Stop | ]. by apply no_proph_no_stutter.
-  - right. exists 0, [], (Stop CNewProph x k). split; [ constructor | ].
-    split; [ by apply EM_NewProph | by intros [] ].
-  - right. exists 0, [], (Stop (CResolve c) (x, p, v) k). split; [ constructor | ].
-    split; [ by apply EM_Resolve | ]. by apply no_proph_resolve_no_stutter.
+  intros Hm. revert σ. induction Hm; intros σ.
+  (* Everything but the calls erasure removes is already in shape. *)
+  - right. exists 0, [], σ, (Ret a). split; [ constructor | ].
+    by split; [ | split; [ apply EM_Ret | ] ].
+  - right. exists 0, [], σ, (Throw e). split; [ constructor | ].
+    by split; [ | split; [ apply EM_Throw | ] ].
+  - right. exists 0, [], σ, Crash. split; [ constructor | ].
+    by split; [ | split; [ apply EM_CrashL | ] ].
+  - right. exists 0, [], σ, (Handle m h). split; [ constructor | ].
+    by split; [ | split; [ apply EM_Handle | ] ].
+  - right. exists 0, [], σ, (Stop c x k). split; [ constructor | ].
+    split; [ done | split; [ by apply EM_Stop | ] ].
+    by apply no_proph_no_stutter.
+  (* The allocation of a prophecy: it steps, and only the set of prophecy
+     identifiers changes. *)
+  - destruct (H0 (fresh σ.(used_proph_id))
+                 (store_upd_used_proph_id
+                    ({[ fresh σ.(used_proph_id) ]} ∪.) σ))
+      as [ Hstuck | (n & κ & σ0 & ma0 & Hsteps & Hh & Hma0 & Hns) ].
+    + left. eapply reaches_stuck_after; [ | exact Hstuck ].
+      by apply tsteps_one, tstep_new_proph.
+    + right. exists (S n), ([] ++ κ), σ0, ma0.
+      split; [ econstructor; [ apply tstep_new_proph | exact Hsteps ] | ].
+      split; [ exact Hh | done ].
+  - right. exists 0, [], σ, (Stop (CResolve c) (x, p, v) k).
+    split; [ constructor | ]. split; [ done | split; [ by apply EM_Resolve | ] ].
+    by apply no_proph_resolve_no_stutter.
   (* A resolution attached to a value: it steps, and the store is unchanged. *)
-  - destruct IHHm as [ Hstuck | (n & κ & ma0 & Hsteps & Hma0 & Hns) ].
+  - destruct (IHHm σ)
+      as [ Hstuck | (n & κ & σ0 & ma0 & Hsteps & Hh & Hma0 & Hns) ].
     + left. eapply reaches_stuck_after; [ | exact Hstuck ].
       by apply tsteps_one, tstep_resolve_return.
-    + right. exists (S n), ([(p, (w, v))] ++ κ), ma0. split; [ | done ].
+    + right. exists (S n), ([(p, (w, v))] ++ κ), σ0, ma0. split; [ | done ].
       econstructor; [ apply tstep_resolve_return | exact Hsteps ].
   (* The [CReturn] it compiles to. *)
-  - destruct IHHm as [ Hstuck | (n & κ & ma0 & Hsteps & Hma0 & Hns) ].
+  - destruct (IHHm σ)
+      as [ Hstuck | (n & κ & σ0 & ma0 & Hsteps & Hh & Hma0 & Hns) ].
     + left. eapply reaches_stuck_after; [ | exact Hstuck ].
       by apply tsteps_one, tstep_return.
-    + right. exists (S n), ([] ++ κ), ma0. split; [ | done ].
+    + right. exists (S n), ([] ++ κ), σ0, ma0. split; [ | done ].
       econstructor; [ apply tstep_return | exact Hsteps ].
-  - right. exists 0, [], (Par m1 m2 k). split; [ constructor | ].
-    split; [ | done ]. by eapply EM_Par.
+  - right. exists 0, [], σ, (Par m1 m2 k). split; [ constructor | ].
+    split; [ done | split; [ by eapply EM_Par | done ] ].
 Qed.
 
 (* Stripping the stutter inside a context, which is how the [Handle] and
@@ -901,48 +1013,50 @@ Qed.
 Lemma handle_unstutter {A E} σ (m m' : microvx) (h : _ → micro A E) :
   erase_microvx m m' →
   reaches_stuck σ (Handle m h)
-  ∨ (∃ n κ m0, tsteps n (σ, Handle m h) κ (σ, Handle m0 h) ∧
-               erase_microvx m0 m' ∧ no_stutter m0).
+  ∨ (∃ n κ σ0 m0, tsteps n (σ, Handle m h) κ (σ0, Handle m0 h) ∧
+                  σ0.(st_heap) = σ.(st_heap) ∧ erase_microvx m0 m' ∧ no_stutter m0).
 Proof.
   intros Hm.
   destruct (erase_unstutter erase_val erase_val m m' σ Hm)
-    as [ Hst | (n & κ & m0 & Hs & Hm0 & Hns) ].
+    as [ Hst | (n & κ & σ0 & m0 & Hs & Hh & Hm0 & Hns) ].
   - left. by apply mstuck_under_handle.
-  - destruct (tsteps_handle n σ m κ σ m0 h Hs)
+  - destruct (tsteps_handle n σ m κ σ0 m0 h Hs)
       as [ [ n' H ] | H ]; last by left.
-    right. by exists n', κ, m0.
+    right. by exists n', κ, σ0, m0.
 Qed.
 
 Lemma par_l_unstutter {A1 A2 A E E'} σ (m1 m1' : micro A1 E') f1 fE' m2
     (k : outcome2 (A1 * A2) E' → micro A E) :
   erase_micro f1 fE' m1 m1' →
   reaches_stuck σ (Par m1 m2 k)
-  ∨ (∃ n κ m0, tsteps n (σ, Par m1 m2 k) κ (σ, Par m0 m2 k) ∧
-               erase_micro f1 fE' m0 m1' ∧ no_stutter m0).
+  ∨ (∃ n κ σ0 m0, tsteps n (σ, Par m1 m2 k) κ (σ0, Par m0 m2 k) ∧
+                  σ0.(st_heap) = σ.(st_heap) ∧
+                  erase_micro f1 fE' m0 m1' ∧ no_stutter m0).
 Proof.
   intros Hm.
   destruct (erase_unstutter f1 fE' m1 m1' σ Hm)
-    as [ Hst | (n & κ & m0 & Hs & Hm0 & Hns) ].
+    as [ Hst | (n & κ & σ0 & m0 & Hs & Hh & Hm0 & Hns) ].
   - left. by apply mstuck_under_par_l.
-  - destruct (tsteps_par_l n σ m1 κ σ m0 m2 k Hs)
+  - destruct (tsteps_par_l n σ m1 κ σ0 m0 m2 k Hs)
       as [ [ n' H ] | H ]; last by left.
-    right. by exists n', κ, m0.
+    right. by exists n', κ, σ0, m0.
 Qed.
 
 Lemma par_r_unstutter {A1 A2 A E E'} σ (m2 m2' : micro A2 E') f2 fE' m1
     (k : outcome2 (A1 * A2) E' → micro A E) :
   erase_micro f2 fE' m2 m2' →
   reaches_stuck σ (Par m1 m2 k)
-  ∨ (∃ n κ m0, tsteps n (σ, Par m1 m2 k) κ (σ, Par m1 m0 k) ∧
-               erase_micro f2 fE' m0 m2' ∧ no_stutter m0).
+  ∨ (∃ n κ σ0 m0, tsteps n (σ, Par m1 m2 k) κ (σ0, Par m1 m0 k) ∧
+                  σ0.(st_heap) = σ.(st_heap) ∧
+                  erase_micro f2 fE' m0 m2' ∧ no_stutter m0).
 Proof.
   intros Hm.
   destruct (erase_unstutter f2 fE' m2 m2' σ Hm)
-    as [ Hst | (n & κ & m0 & Hs & Hm0 & Hns) ].
+    as [ Hst | (n & κ & σ0 & m0 & Hs & Hh & Hm0 & Hns) ].
   - left. by apply mstuck_under_par_r.
-  - destruct (tsteps_par_r n σ m2 κ σ m0 m1 k Hs)
+  - destruct (tsteps_par_r n σ m2 κ σ0 m0 m1 k Hs)
       as [ [ n' H ] | H ]; last by left.
-    right. by exists n', κ, m0.
+    right. by exists n', κ, σ0, m0.
 Qed.
 
 (* Two calls of the same code, at the same store, agree on whether they
@@ -990,20 +1104,30 @@ Local Ltac stuck_resolution_par :=
   intros ? ? Hbx;
   by destruct (step_through_par_no_step _ _ _ _ _ ltac:(eassumption) Hbx).
 
+(* The erasure relation at the store a stutter led to. *)
+
+Local Tactic Notation "erase_store_after_stutter" ident(Hσ') :=
+  match goal with
+  | Hh : _ = _, Hσ : erase_store _ _ |- _ =>
+      pose proof (erase_store_heap _ _ _ Hh Hσ) as Hσ'
+  end.
+
 (* Stripping the stutter off one branch of a [Par]. *)
 
 Local Ltac unstutter_l :=
   match goal with
   | |- reaches_stuck ?σ (Par ?m1 ?m2 ?k) ∨ _ =>
       destruct (par_l_unstutter σ m1 _ _ _ m2 k ltac:(eassumption))
-        as [ ? | (n1 & κ1 & u1 & Hs1 & Hu1 & Hns1) ]; first by left
+        as [ ? | (n1 & κ1 & σ1 & u1 & Hs1 & Hh1 & Hu1 & Hns1) ];
+        [ by left | erase_store_after_stutter Hσ1 ]
   end.
 
 Local Ltac unstutter_r :=
   match goal with
   | |- reaches_stuck ?σ (Par ?m1 ?m2 ?k) ∨ _ =>
       destruct (par_r_unstutter σ m2 _ _ _ m1 k ltac:(eassumption))
-        as [ ? | (n2 & κ2 & u2 & Hs2 & Hu2 & Hns2) ]; first by left
+        as [ ? | (n2 & κ2 & σ2 & u2 & Hs2 & Hh2 & Hu2 & Hns2) ];
+        [ by left | erase_store_after_stutter Hσ2 ]
   end.
 
 (* Every case in which the annotated thread keeps up ends the same way: run,
@@ -1086,7 +1210,8 @@ Lemma erase_step_micro {A E} (fA : A → A) (fE : E → E) (ma me : micro A E) �
     ∨ (∃ n κ σ' ma', tsteps n (σ, ma) κ (σ', ma') ∧ erase_store σ' σe' ∧
                      erase_micro fA fE ma' me').
 Proof.
-  intros Hm Hσ. induction Hm; intros σe' me' Hstep.
+  (* The store is generalized: a stutter may allocate a prophecy. *)
+  intros Hm Hσ. revert σ Hσ. induction Hm; intros σ Hσ σe' me' Hstep.
   - (* Ret *) by destruct_step.
   - (* Throw *) by destruct_step.
   (* An annotated crash is stuck where it stands. *)
@@ -1097,7 +1222,8 @@ Proof.
   - (* Handle *)
     rename H into Hh, IHHm into IHm.
     destruct (handle_unstutter σ m m' h Hm)
-      as [ ? | (n & κ & m0 & Hs & Hm0 & Hns) ]; first by left.
+      as [ ? | (n & κ & σ0 & m0 & Hs & Hheap & Hm0 & Hns) ]; first by left.
+    pose proof (erase_store_heap _ _ _ Hheap Hσ) as Hσ0.
     destruct_step.
     + (* StepHandleRet *)
       es_shape Hm0;
@@ -1130,9 +1256,13 @@ Proof.
     + (* StepHandleResolve: the erased program has no resolution left, so
          this thread can only be the erasure of one that crashed. *)
       es_shape Hm0; es_stuck Hs.
+    + (* StepHandleNewProph: likewise, the erased program allocates no
+         prophecy. *)
+      destruct (erase_micro_new_proph _ _ _ _ _ Hm0) as [ -> | Hn ];
+        [ es_stuck Hs | done ].
     + (* StepHandleCrash *) es_shape Hm0; es_stuck Hs.
     + (* StepHandleLeft *)
-      destruct (IHm _ _ ltac:(eassumption))
+      destruct (IHm σ Hσ _ _ ltac:(eassumption))
         as [ Hst2 | (n2 & κ2 & σ2 & ma2 & Hs2 & Hσ2 & Hr2) ].
       * left. by apply mstuck_under_handle.
       * destruct (tsteps_handle n2 σ m κ2 σ2 ma2 h Hs2)
@@ -1142,34 +1272,43 @@ Proof.
   - (* Stop *)
     rename H into Hc.
     destruct (step_stop_split _ _ _ _ _ _ Hstep) as (be & Hbe & ->).
-    destruct (erase_step_call c x σ σe σe' be Hc Hσ Hbe)
-      as (σ' & b & Hb & Hσ' & Hrel).
-    right. exists 1, [], σ', (try2 b k). split; [ | split; [ done | ] ].
+    destruct (erase_step_call c x σ.(st_heap) σe σe' be Hc Hσ Hbe)
+      as (h' & b & Hb & [ -> | (Hσ' & Hrel) ]).
+    { (* The annotated call crashed: it is stuck after one step. *)
+      left. eapply reaches_stuck_after;
+        [ apply tsteps_one, TBase; by apply step_stop_join
+        | by apply reaches_stuck_now; left ]. }
+    right. exists 1, [], (store_upd_heap (λ _, h') σ), (try2 b k).
+    split; [ | split; [ done | ] ].
     + apply tsteps_one, TBase. by apply step_stop_join.
     + by eapply erase_try2.
-  (* [Proph.create ()] and [ref ()] take the same step, down to the location
-     they pick. *)
+  (* [Proph.create ()] erases to [()], which takes no step: the annotated
+     program allocates a fresh prophecy first, which leaves the heap
+     unchanged, and the induction hypothesis carries the rest. *)
   - (* NewProph *)
-    rename H into Hk.
-    destruct_step.
-    right. exists 1, [], (<[ l := Val VUnit ]> σ), (continue k l). split.
-    + apply tsteps_one, TBase, StepNewProph. by eapply erase_store_none.
-    + split; [ by apply erase_store_insert | apply (Hk (O2Ret l)) ].
+    rename H0 into IHk.
+    eapply matched_prepend; [ apply tstep_new_proph | ].
+    by apply IHk.
   - (* Resolve *)
     rename H into Hc, H0 into Hnt, H1 into Hk.
     destruct (step_stop_split _ _ _ _ _ _ Hstep) as (be & Hbe & ->).
-    destruct (erase_step_call c x σ σe σe' be Hc Hσ Hbe)
-      as (σ' & b & Hb & Hσ' & Hrel).
+    destruct (erase_step_call c x σ.(st_heap) σe σe' be Hc Hσ Hbe)
+      as (h' & b & Hb & [ -> | (Hσ' & Hrel) ]).
+    { (* The annotated call crashed: so does the resolution. *)
+      left. eapply reaches_stuck_after;
+        [ apply tsteps_one; exact (TResolve σ h' c x p v Crash k Hb I)
+        | by apply reaches_stuck_now; left ]. }
     destruct b as [ w | ex | | | | ].
     + (* the stop returned, so the resolution happens *)
-      right. exists 1, [(p, (w, v))], σ', (continue k w). split;
-        [ apply tsteps_one; exact (TResolve σ σ' c x p v (Ret w) k Hb I) | ].
+      right. exists 1, [(p, (w, v))], (store_upd_heap (λ _, h') σ),
+        (continue k w). split;
+        [ apply tsteps_one; exact (TResolve σ h' c x p v (Ret w) k Hb I) | ].
       split; [ done | ]. dependent destruction Hrel. apply (Hk w).
     + (* the stop raised, which the codes a resolution may wrap never do *)
       by destruct (Hnt _ _ _ Hb).
     + (* the call crashed *)
-      right. exists 1, [], σ', Crash. split;
-        [ apply tsteps_one; exact (TResolve σ σ' c x p v Crash k Hb I) | ].
+      right. exists 1, [], (store_upd_heap (λ _, h') σ), Crash. split;
+        [ apply tsteps_one; exact (TResolve σ h' c x p v Crash k Hb I) | ].
       split; [ done | apply EM_CrashL ].
     (* The call reduced to a computation rather than to an outcome, so the
        annotated thread is stuck, which [safe] excludes at the pool level. *)
@@ -1190,11 +1329,12 @@ Proof.
     + (* StepParRetRet: both branches have to be stripped before they can be
          read together. *)
       unstutter_l.
-      destruct (par_r_unstutter σ m2 _ f2 fE' u1 k Hm2)
+      destruct (par_r_unstutter σ1 m2 _ f2 fE' u1 k Hm2)
         as [ (n2 & κ2 & σ2 & ma2 & Hs2 & Hst2)
-           | (n2 & κ2 & u2 & Hs2 & Hu2 & Hns2) ];
+           | (n2 & κ2 & σ2 & u2 & Hs2 & Hh2 & Hu2 & Hns2) ];
         first (left; eapply reaches_stuck_steps;
                  [ by eapply tsteps_trans | done ]).
+      pose proof (erase_store_heap _ _ _ Hh2 Hσ1) as Hσ2.
       es_shape Hu1; last es_stuck (tsteps_trans _ _ _ _ _ _ _ Hs1 Hs2).
       es_shape Hu2; last es_stuck (tsteps_trans _ _ _ _ _ _ _ Hs1 Hs2).
       es_advance (tsteps_trans _ _ _ _ _ _ _ Hs1 Hs2) StepParRetRet;
@@ -1222,14 +1362,14 @@ Proof.
           eauto using EM_Par
         | es_stuck Hs2 ].
     + (* StepParLeft *)
-      destruct (IHm1 _ _ ltac:(eassumption))
+      destruct (IHm1 σ Hσ _ _ ltac:(eassumption))
         as [ Hst2 | (n2 & κ2 & σ2 & ma2 & Hs2 & Hσ2 & Hr2) ].
       * left. by apply mstuck_under_par_l.
       * destruct (tsteps_par_l n2 σ m1 κ2 σ2 ma2 m2 k Hs2)
           as [ [ n3 H3 ] | H3 ]; last by left.
         eauto 9 using EM_Par.
     + (* StepParRight *)
-      destruct (IHm2 _ _ ltac:(eassumption))
+      destruct (IHm2 σ Hσ _ _ ltac:(eassumption))
         as [ Hst2 | (n2 & κ2 & σ2 & ma2 & Hs2 & Hσ2 & Hr2) ].
       * left. by apply mstuck_under_par_r.
       * destruct (tsteps_par_r n2 σ m2 κ2 σ2 ma2 m1 k Hs2)
@@ -1326,7 +1466,7 @@ Local Tactic Notation "safe_unresolved"
 
 Local Tactic Notation "join_step" uconstr(Hι2) :=
   eapply proph_steps_trans; [ by eapply proph_steps_trans | ];
-  apply proph_steps_one; apply PureTS; eapply JoinTS; [ exact Hι2 | ];
+  apply proph_steps_one; apply PureTS_same; eapply JoinTS; [ exact Hι2 | ];
   unfold attempt_join, thpool, insert_thpool, lookup_thpool;
   by rewrite lookup_insert_eq.
 
@@ -1335,26 +1475,26 @@ Lemma erase_fork_backward σ π πe ι ι' (v1 v2 : val) k :
   erase_thpool π πe →
   πe !! ι = Some (Stop CFork (v1, v2) k) →
   πe !! ι' = None →
-  ∃ n κ π',
-    proph_steps n (σ, π) κ (σ, π') ∧
+  ∃ n κ σ' π',
+    proph_steps n (σ, π) κ (σ', π') ∧ σ'.(st_heap) = σ.(st_heap) ∧
     erase_thpool π'
       (<[ ι' := call v1 v2 ]> (<[ ι := continue k (VThread ι') ]> πe)).
 Proof.
   intros Hsafe Hπ Hιe Hnone.
   destruct (erase_thpool_lookup _ _ _ _ Hπ Hιe) as (ma & Hι & Hma).
   destruct (erase_unstutter erase_val erase_val ma _ σ Hma)
-    as [ Hst1 | (n1 & κ1 & ma0 & Hs1 & Hma0 & Hns) ];
+    as [ Hst1 | (n1 & κ1 & σ1 & ma0 & Hs1 & Hh1 & Hma0 & Hns) ];
     first by destruct (safe_not_reaches_stuck _ _ _ _ Hsafe Hι Hst1).
   assert (ι ≠ ι') by congruence.
   remember (v1, v2) as vv eqn:Hvv.
   dependent destruction Hma0; try stutter_absurd; try done; fold erase_val in *.
   - safe_crashed Hsafe Hι Hs1.
   - destruct x as (w1, w2). simpl in Hvv. simplify_eq.
-    eexists (n1 + 1), (κ1 ++ []), _. split.
+    eexists (n1 + 1), (κ1 ++ []), σ1, _. split; [ | split; [ exact Hh1 | ] ].
     + eapply proph_steps_trans;
-        [ exact (tsteps_proph_steps ι n1 (σ, ma) (σ, _) κ1 π Hι Hs1) | ].
+        [ exact (tsteps_proph_steps ι n1 (σ, ma) (σ1, _) κ1 π Hι Hs1) | ].
       simpl. apply proph_steps_one.
-      apply PureTS. eapply ForkTS. apply lookup_insert_eq.
+      apply PureTS_same. eapply ForkTS. apply lookup_insert_eq.
       rewrite lookup_insert_ne; last done.
       by eapply erase_thpool_none.
     + apply erase_thpool_insert; [ | apply erase_call ].
@@ -1369,18 +1509,18 @@ Lemma erase_join_backward σ π πe ι ι' k m :
   erase_thpool π πe →
   πe !! ι = Some (Stop CJoin ι' k) →
   attempt_join ι' πe k = Some m →
-  ∃ n κ π',
-    proph_steps n (σ, π) κ (σ, π') ∧
+  ∃ n κ σ' π',
+    proph_steps n (σ, π) κ (σ', π') ∧ σ'.(st_heap) = σ.(st_heap) ∧
     erase_thpool π' (<[ ι := m ]> πe).
 Proof.
   intros Hsafe Hπ Hιe Hjoin.
   destruct (erase_thpool_lookup _ _ _ _ Hπ Hιe) as (ma & Hι & Hma).
   destruct (erase_unstutter erase_val erase_val ma _ σ Hma)
-    as [ Hst1 | (n1 & κ1 & ma0 & Hs1 & Hma0 & Hns) ];
+    as [ Hst1 | (n1 & κ1 & σ1 & ma0 & Hs1 & Hh1 & Hma0 & Hns) ];
     first by destruct (safe_not_reaches_stuck _ _ _ _ Hsafe Hι Hst1).
-  assert (Hsteps1 : proph_steps n1 (σ, π) κ1 (σ, <[ ι := ma0 ]> π))
-    by exact (tsteps_proph_steps ι n1 (σ, ma) (σ, ma0) κ1 π Hι Hs1).
-  assert (Hsafe1 : safe σ (<[ ι := ma0 ]> π))
+  assert (Hsteps1 : proph_steps n1 (σ, π) κ1 (σ1, <[ ι := ma0 ]> π))
+    by exact (tsteps_proph_steps ι n1 (σ, ma) (σ1, ma0) κ1 π Hι Hs1).
+  assert (Hsafe1 : safe σ1 (<[ ι := ma0 ]> π))
     by (eapply safe_steps; [ exact Hsafe | exact Hsteps1 ]).
   assert (Hπ1 : erase_thpool (<[ ι := ma0 ]> π) πe)
     by (eapply erase_thpool_insert_l; [ exact Hπ | exact Hιe | exact Hma0 ]).
@@ -1400,11 +1540,11 @@ Proof.
       assert (Hx1 : π1 !! x = Some ma')
         by (subst π1; unfold thpool, insert_thpool, lookup_thpool;
             rewrite lookup_insert_ne //).
-      destruct (erase_unstutter erase_val erase_val ma' me' σ Hma')
-        as [ Hst2 | (n2 & κ2 & ma0' & Hs2 & Hma0' & Hns') ];
+      destruct (erase_unstutter erase_val erase_val ma' me' σ1 Hma')
+        as [ Hst2 | (n2 & κ2 & σ2 & ma0' & Hs2 & Hh2 & Hma0' & Hns') ];
         first by destruct (safe_not_reaches_stuck _ _ _ _ Hsafe1 Hx1 Hst2).
-      assert (Hsteps2 : proph_steps n2 (σ, π1) κ2 (σ, <[ x := ma0' ]> π1))
-        by exact (tsteps_proph_steps x n2 (σ, ma') (σ, ma0') κ2 _ Hx1 Hs2).
+      assert (Hsteps2 : proph_steps n2 (σ1, π1) κ2 (σ2, <[ x := ma0' ]> π1))
+        by exact (tsteps_proph_steps x n2 (σ1, ma') (σ2, ma0') κ2 _ Hx1 Hs2).
       eassert (Hι2 : <[ x := ma0' ]> π1 !! ι = Some _).
       { unfold thpool, insert_thpool, lookup_thpool.
         rewrite lookup_insert_ne //. }
@@ -1413,21 +1553,21 @@ Proof.
       destruct me' as [ v | ex | | | | ]; simplify_eq;
         dependent destruction Hma0'; try stutter_absurd;
         try safe_crashed Hsafe1 Hx1 Hs2.
-      * eexists (n1 + n2 + 1), ((κ1 ++ κ2) ++ []), _.
-        split; [ join_step Hι2 | ].
+      * eexists (n1 + n2 + 1), ((κ1 ++ κ2) ++ []), σ2, _.
+        split; [ join_step Hι2 | split; [ by rewrite Hh2 | ] ].
         apply erase_thpool_insert; [ | apply (H0 (O2Ret _)) ].
         eapply erase_thpool_insert_l; [ done | exact Hxe | apply EM_Ret ].
-      * eexists (n1 + n2 + 1), ((κ1 ++ κ2) ++ []), _.
-        split; [ join_step Hι2 | ].
+      * eexists (n1 + n2 + 1), ((κ1 ++ κ2) ++ []), σ2, _.
+        split; [ join_step Hι2 | split; [ by rewrite Hh2 | ] ].
         apply erase_thpool_insert; [ | apply (H0 (O2Throw _)) ].
         eapply erase_thpool_insert_l; [ done | exact Hxe | apply EM_Throw ].
     + (* the joined thread does not exist, and both programs crash *)
       simplify_eq.
       assert (π !! x = None) by by eapply erase_thpool_none.
       assert (ι ≠ x) by congruence.
-      eexists (n1 + 1), (κ1 ++ []), _. split.
+      eexists (n1 + 1), (κ1 ++ []), σ1, _. split; [ | split; [ exact Hh1 | ] ].
       { eapply proph_steps_trans; [ exact Hsteps1 | ].
-        apply proph_steps_one, PureTS. eapply JoinTS; [ exact Hι1 | ].
+        apply proph_steps_one, PureTS_same. eapply JoinTS; [ exact Hι1 | ].
         unfold attempt_join, thpool, insert_thpool, lookup_thpool.
         rewrite lookup_insert_ne //. by simplify_option_eq. }
       apply erase_thpool_insert; [ | apply EM_Crash ].
@@ -1454,12 +1594,12 @@ Proof.
     exists n, κ, σ2, (<[ ι := ma2 ]> π). split; [ | split; [ done | ] ].
     + exact (tsteps_proph_steps ι n (σ, ma) (σ2, ma2) κ π Hι Hs).
     + by apply erase_thpool_insert.
-  - edestruct erase_fork_backward as (n & κ & π' & Hsteps & Hπ');
+  - edestruct erase_fork_backward as (n & κ & σ' & π' & Hsteps & Hh & Hπ');
       [ exact Hsafe | exact Hπ | eassumption | eassumption | ].
-    by exists n, κ, σ, π'.
-  - edestruct erase_join_backward as (n & κ & π' & Hsteps & Hπ');
+    exists n, κ, σ', π'. by split; [ | split; [ eapply erase_store_heap | ] ].
+  - edestruct erase_join_backward as (n & κ & σ' & π' & Hsteps & Hh & Hπ');
       [ exact Hsafe | exact Hπ | eassumption | eassumption | ].
-    by exists n, κ, σ, π'.
+    exists n, κ, σ', π'. by split; [ | split; [ eapply erase_store_heap | ] ].
 Qed.
 
 (* Safety transfers to the erased configuration. *)
@@ -1481,26 +1621,25 @@ Proof.
   - by destruct (safe_not_crash _ _ _ Hsafe Hι).
   - dependent destruction Hm.
     right; left.
-    by apply subjective_step.can_step_can_progress, can_step_handle.
+    by apply subjective_step.can_step_reducible, can_step_handle.
   - dependent destruction Hm.
     + apply not_stuck_call. eapply not_stuck_call_code; [ done | ].
       by eapply (Hsafe σ π (rtc_refl _ _)).
-    + right; left. apply subjective_step.can_step_can_progress, can_step_stop;
-        split; [ done | by intros [] ].
+    + (* the three calls erasure removes: the annotated program steps first *)
+      erase_result_step; erase_not_stuck_finish.
     + apply not_stuck_call. eapply not_stuck_resolve_code; [ done | ].
       by eapply (Hsafe σ π (rtc_refl _ _)).
-    + (* the two calls erasure removes: the annotated program steps first *)
-      erase_result_step; erase_not_stuck_finish.
+    + erase_result_step; erase_not_stuck_finish.
     + erase_result_step; erase_not_stuck_finish.
   - dependent destruction Hm.
-    right; left. by apply subjective_step.can_step_can_progress, can_step_par.
+    right; left. by apply subjective_step.can_step_reducible, can_step_par.
 Qed.
 
 Lemma erase_not_stuck σ π σe πe :
   safe σ π →
   erase_store σ σe →
   erase_thpool π πe →
-  ∀ ι m, πe !! ι = Some m → not_stuck m σe (dom πe).
+  ∀ ι m, πe !! ι = Some m → not_stuck m (Store σe ∅) (dom πe).
 Proof.
   intros Hsafe Hσ Hπ ι m Hme.
   destruct (erase_thpool_lookup _ _ _ _ Hπ Hme) as (ma & Hι & Hm).
@@ -1516,14 +1655,14 @@ Qed.
 
 Local Ltac erase_result_finish oe :=
   match goal with
-  | Hstep : proph_step (?σ, ?π) ?κ0 (?σ, <[ ?ι := continue ?k ?w ]> ?π),
+  | Hstep : proph_step (?σ, ?π) ?κ0 (?σ1, <[ ?ι := continue ?k ?w ]> ?π),
     Hsafe : safe ?σ ?π, IH : ∀ _ _, _ → _ → @JMeq _ _ _ _ → _,
     Hm : erase_micro _ _ (continue ?k ?w) _ |- _ =>
       let Hsafe' := fresh "Hsafe'" in
-      assert (Hsafe' : safe σ (<[ ι := continue k w ]> π))
+      assert (Hsafe' : safe σ1 (<[ ι := continue k w ]> π))
         by (eapply safe_steps; [ exact Hsafe | ];
             econstructor; [ exact Hstep | constructor ]);
-      destruct (IH (O2Ret w) (continue k w) eq_refl eq_refl JMeq_refl oe σ
+      destruct (IH (O2Ret w) (continue k w) eq_refl eq_refl JMeq_refl oe σ1
                    (<[ ι := continue k w ]> π) ι Hsafe'
                    ltac:(by rewrite lookup_insert_eq) Hm)
         as (n & κ & σ' & π' & o' & Hsteps & Ho' & Hoe);
@@ -1615,7 +1754,7 @@ Theorem erasure (e : expr) ι (Φ : outcome2 val exn → Prop) σ σe :
      (∀ o, π !! ι = Some (inject2 o) → Φ o)) →
   (∀ k σ2 π,
      threadpool_steps k (σe, {[ ι := eval [] (erase_expr e) ]}) (σ2, π) →
-     (∀ ι' m, π !! ι' = Some m → not_stuck m σ2 (dom π)) ∧
+     (∀ ι' m, π !! ι' = Some m → not_stuck m (Store σ2 ∅) (dom π)) ∧
      (∀ o, π !! ι = Some (inject2 o) → ∃ o', erase_outcome o' = o ∧ Φ o')).
 Proof.
   intros Hσ Hann k σ2 πe Hsteps.
@@ -1654,7 +1793,7 @@ Corollary erasure_adequacy Σ `{!osirisGpreS Σ} (e : expr) ι Φ σ σe :
   (∀ `{!osirisGS Σ}, ⊢ ewp_def ⊤ (eval [] e) ⊥ (λ o, ⌜Φ o⌝)) →
   (∀ k σ2 π,
      threadpool_steps k (σe, {[ ι := eval [] (erase_expr e) ]}) (σ2, π) →
-     (∀ ι' m, π !! ι' = Some m → not_stuck m σ2 (dom π)) ∧
+     (∀ ι' m, π !! ι' = Some m → not_stuck m (Store σ2 ∅) (dom π)) ∧
      (∀ o, π !! ι = Some (inject2 o) → ∃ o', erase_outcome o' = o ∧ Φ o')).
 Proof.
   intros Hσ Hwp. eapply erasure; [ done | ]. intros.
@@ -1667,7 +1806,7 @@ Corollary erasure_adequacy_empty Σ `{!osirisGpreS Σ} (e : expr) ι Φ :
   (∀ `{!osirisGS Σ}, ⊢ ewp_def ⊤ (eval [] e) ⊥ (λ o, ⌜Φ o⌝)) →
   (∀ k σ2 π,
      threadpool_steps k (∅, {[ ι := eval [] (erase_expr e) ]}) (σ2, π) →
-     (∀ ι' m, π !! ι' = Some m → not_stuck m σ2 (dom π)) ∧
+     (∀ ι' m, π !! ι' = Some m → not_stuck m (Store σ2 ∅) (dom π)) ∧
      (∀ o, π !! ι = Some (inject2 o) → ∃ o', erase_outcome o' = o ∧ Φ o')).
 Proof.
   intros Hwp.

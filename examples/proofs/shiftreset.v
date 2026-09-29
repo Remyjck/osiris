@@ -58,17 +58,16 @@ Section reasoning_rules.
   Definition shift_f := (EAnonFun __shift).
   Definition reset_f := (EAnonFun __reset).
 
-  Definition reset_spec ℓ : val → microvx → iProp Σ :=
-    λ f m,
-      (∀ (Ψ : iEff Σ) (Φ : val → iProp Σ),
-          iSpec τ[unit] f (λ _ m, EWP m <|SHIFT ℓ Ψ Φ|> {{ Φ }}) -∗
-          EWP m <|Ψ|> {{ Φ }})%I.
+  Definition reset_spec ℓ reset : iProp Σ :=
+    □ {{ ∀ (Ψ : iEff Σ) (Φ : val → iProp Σ);
+       iSpec τ[unit] f (λ _ m, EWP m <| SHIFT ℓ Ψ Φ |> {{ Φ }}) }}
+    reset f : val @ ⊤ <| Ψ |>
+    {{ RET w; Φ w }}.
 
-  Definition shift_spec ℓ : val → microvx → iProp Σ :=
-    λ f m,
-      (∀ (Ψ : iEff Σ) (Φ Q : val → iProp Σ),
-          is_shift Ψ Φ Q f -∗
-          EWP m <|SHIFT ℓ Ψ Φ|> {{ Q }})%I.
+  Definition shift_spec ℓ shift : iProp Σ :=
+    □ {{ ∀ (Ψ : iEff Σ) (Φ Q : val → iProp Σ); is_shift Ψ Φ Q f }}
+    shift f : val @ ⊤ <| SHIFT ℓ Ψ Φ |>
+    {{ RET w; Q w }}.
 
 End reasoning_rules.
 
@@ -94,12 +93,12 @@ Section verification.
 
   Lemma establish_shift_spec η :
     lookup_name η "Shift" = Some #shift_eff →
-    ⊢ EWP eval η (EAnonFun __shift)
-      {{ v, □ iSpec τ[val] v (shift_spec shift_eff) }}.
+    ⊢ EWP eval η (EAnonFun __shift) {{ shift_spec shift_eff }}.
   Proof.
     iIntros (Hlookup).
+    rewrite /shift_spec.
     iApply (imp_EAnon_pers τ[val]); simpl.
-    iIntros "!>" (f). rewrite /shift_spec.
+    iIntros "!>" (f).
     iIntros (Ψ Φ Q) "Hf".
     iApply imp_please; iNext.
     iApply (imp_EPerform (λ eff, ⌜eff = Shift f⌝)%I).
@@ -114,12 +113,12 @@ Section verification.
 
   Lemma establish_reset_spec η :
     lookup_name η "Shift" = Some #shift_eff →
-    ⊢ EWP eval η (EAnonFun __reset)
-      {{ v, □ iSpec τ[val] v (reset_spec shift_eff) }}.
+    ⊢ EWP eval η (EAnonFun __reset) {{ reset_spec shift_eff }}.
   Proof.
     iIntros (Hlookup).
+    rewrite /reset_spec.
     iApply (imp_EAnon_pers τ[val]); simpl.
-    iIntros "!>" (f). rewrite /reset_spec.
+    iIntros "!>" (f).
     iIntros (Ψ Φ) "Hf".
     iApply imp_please; iNext.
 

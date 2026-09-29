@@ -13,6 +13,7 @@ Require Export
   impure_rules
   array_rules
   record_rules
+  ref_rules
   inline_rules
   ipattern_rules
   atomic_rules

@@ -13,26 +13,26 @@ Section array_resources.
 
   Context `{!osirisGS Σ}.
 
-  (* [isBlockLocs a ls] is now defined in ewp.v as a persistent ghost map entry.
-     The definition, [isBlockLocs_pers], [isBlockLocs_valid], and [isBlockLocs_length] lemmas
+  (* [blockLocs a ls] is defined in ghost_state.v as a persistent ghost map entry.
+     The definition, [blockLocs_pers], [blockLocs_valid], and [blockLocs_length] lemmas
      are all there. *)
 
   (* Ownership over a segment of the array. *)
 
   Definition isSlice `{Encode A} a dq (i : Z) (xs : list A) : iProp Σ :=
-    ∃ ls, isBlockLocs a ls ∗
+    ∃ ls, blockLocs a ls ∗
     ⌜0 ≤ i ≤ length ls - length xs⌝ ∗
-    [∗ listZ] l;x ∈ seg i (i + length xs) ls; xs, l ↦{dq} #x.
+    [∗ listZ] l;x ∈ seg i (i + length xs) ls; xs, l ↦ₗ{dq} #x.
 
-  Lemma isSlice_isBlockLocs `{Encode A} a dq i (xs : list A) :
-    isSlice a dq i xs -∗ ∃ ls, isBlockLocs a ls ∗ ⌜0 ≤ i ≤ length ls - length xs⌝.
+  Lemma isSlice_blockLocs `{Encode A} a dq i (xs : list A) :
+    isSlice a dq i xs -∗ ∃ ls, blockLocs a ls ∗ ⌜0 ≤ i ≤ length ls - length xs⌝.
   Proof. iIntros "(%ls & $ & $ & _)". Qed.
 
   Lemma isSlice_in_bounds `{Encode A} a dq i (xs : list A) :
     isSlice a dq i xs -∗ ⌜0 ≤ i⌝.
   Proof.
     iIntros "Hslice".
-    iPoseProof (isSlice_isBlockLocs with "Hslice") as "(%ls & Hblock & %Hbounds)".
+    iPoseProof (isSlice_blockLocs with "Hslice") as "(%ls & Hblock & %Hbounds)".
     iPureIntro. lia.
   Qed.
 
@@ -40,18 +40,18 @@ Section array_resources.
      Includes the exclusive physical block ownership [a ⤇{1} Mut ls], enabling freeze. *)
 
   Definition ownArray `{Encode A} (a : array) dq (xs : list A) : iProp Σ :=
-    ∃ ls, isBlockLocs a ls ∗ isBlock a dq Mut ∗ isSlice a dq 0 xs ∗ ⌜length ls = length xs⌝.
+    ∃ ls, blockLocs a ls ∗ blockTag a dq Mut ∗ isSlice a dq 0 xs ∗ ⌜length ls = length xs⌝.
 
-  Lemma ownArray_isBlockLocs `{Encode A} a dq (xs : list A) :
-    ownArray a dq xs -∗ ∃ ls, isBlockLocs a ls ∗ ⌜length ls = length xs⌝.
+  Lemma ownArray_blockLocs `{Encode A} a dq (xs : list A) :
+    ownArray a dq xs -∗ ∃ ls, blockLocs a ls ∗ ⌜length ls = length xs⌝.
   Proof. iIntros "(%ls & #$ & _ & _ & $)". Qed.
 
   Lemma ownArray_length `{Encode A} a dq (xs : list A) :
     ownArray a dq xs -∗ ⌜0 ≤ length xs ≤ max_array_length⌝.
   Proof.
     iIntros "Hown".
-    iPoseProof (ownArray_isBlockLocs with "Hown") as "(%ls & Ha & %Hlenls)".
-    iPoseProof (isBlockLocs_length with "Ha") as "%Hboundls".
+    iPoseProof (ownArray_blockLocs with "Hown") as "(%ls & Ha & %Hlenls)".
+    iPoseProof (blockLocs_length with "Ha") as "%Hboundls".
     iPureIntro. rewrite Hlenls in Hboundls.
     split; [ by length_nonneg xs | apply Hboundls ].
   Qed.
@@ -69,7 +69,7 @@ Section array_resources.
   Proof.
     iIntros "(%ls & #Hblock & %Hbound & Hpts)".
     iMod (big_opLZ.big_sepLZ2_fupd E
-            (λ (_ : Z) (l : locations.loc) (x : A), (l ↦□ #x)%I)
+            (λ (_ : Z) (l : locations.loc) (x : A), (l ↦ₗ□ #x)%I)
             with "[Hpts]") as "Hpts".
     { iApply (big_opLZ.big_sepLZ2_impl with "Hpts").
       iIntros "!>" (k l x _ _) "Hl".
@@ -81,8 +81,8 @@ Section array_resources.
   Qed.
 
   Lemma isSlice_ownArray `{Encode A} a dq ls (xs : list A) :
-    isBlockLocs a ls -∗
-    isBlock a dq Mut -∗
+    blockLocs a ls -∗
+    blockTag a dq Mut -∗
     isSlice a dq 0 xs -∗
     ⌜length ls = length xs⌝ -∗
     ownArray a dq xs.
@@ -118,7 +118,7 @@ Section array_resources.
     - iDestruct "Hslice" as "(Hslice1 & Hslice2)".
       iDestruct "Hslice1" as "(%ls & #Harr & %Hlen & Hslice1)".
       iDestruct "Hslice2" as "(% & #Harr' & %Hlen' & Hslice2)".
-      iPoseProof (isBlockLocs_valid with "Harr Harr'") as "->".
+      iPoseProof (blockLocs_valid with "Harr Harr'") as "->".
       iFrame "#". length.
 
       iPoseProof (big_sepLZ2_app with "Hslice1 Hslice2") as "Hslice".
@@ -156,8 +156,10 @@ Section array_reasoning.
   Global Instance notval_block : NotVal (mut_tag * list loc) := {}.
   Global Instance notval_listloc : NotVal (list loc) := {}.
 
+  Implicit Types ζ : exn → iProp Σ.
+
   (** General [as_array] rule.  Given that the postcondition of [m] implies
-      [isBlockLocs a ls] for some [a] and [ls], the [load_block] step is
+      [blockLocs a ls] for some [a] and [ls], the [load_block] step is
       discharged automatically and [Φ ls] is delivered. *)
   Lemma imp_as_array {ζ} {Φ : array → iProp Σ} (m : microvx) :
     EWP m @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ }} -∗
@@ -178,20 +180,20 @@ Section array_reasoning.
     iIntros "[%Hleneq %Hlenbound] He". simpl_eval.
     iApply (imp_bind (A1:=list A) with "He").
     iIntros (xs) "HΦs".
-    iApply imp_bind.
+    iApply (imp_bind (A1:=list loc)).
     { iApply imp_allocn. iIntros "!>" (ls) "Hls". iExact "Hls". }
     iIntros (arr) "Hls".
     iPoseProof (big_sepLZ2_length with "Hls") as "%Hlenls".
     iPoseProof (big_sepLZ2_length with "HΦs") as "%Hlenxs".
-    iApply imp_bind.
+    iApply (imp_bind (A1:=loc)).
     { iApply (imp_alloc_block Mut arr with "[]").
       iPureIntro. rewrite Hlenls Hlenxs Hleneq. apply Hlenbound. }
     iIntros (a) "(Ha & #Harr)".
     iApply imp_ret; first encode.
     iFrame "HΦs".
 
-    (* Goal: establish [a ↦∗ xs] from [a ⤇{1} Mut arr], [isBlockLocs a arr],
-       and [∀ l x ∈ arr xs, l ↦ #x ]. *)
+    (* Goal: establish [a ↦∗ xs] from [a ⤇{1} Mut arr], [blockLocs a arr],
+       and [∀ l x ∈ arr xs, l ↦ₗ #x ]. *)
     iApply (isSlice_ownArray with "Harr Ha [Hls] [//]").
     iFrame "Harr". seg. iFrame "Hls".
     iPureIntro; lia.
@@ -213,7 +215,7 @@ Section array_reasoning.
   Qed.
 
   Lemma imp_EArrayLength' {ζ} (ls : list loc) e :
-    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (a : array), isBlockLocs a ls }} -∗
+    EWP eval η e @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ (a : array), blockLocs a ls }} -∗
     EWP eval η (EArrayLength e) @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ n, ⌜n = length ls⌝ }}.
   Proof.
     iIntros "He". simpl_eval.
@@ -233,7 +235,7 @@ Section array_reasoning.
     iApply (imp_bind with "[He] [-]").
     { iApply (imp_as_array with "He"). }
     iIntros (a) "Hslice".
-    iPoseProof (ownArray_isBlockLocs with "Hslice") as "(%ls & #Hblock & %Hbounds)".
+    iPoseProof (ownArray_blockLocs with "Hslice") as "(%ls & #Hblock & %Hbounds)".
     iApply imp_bind.
     { iApply (imp_load_block_ghost with "Hblock"). }
     iIntros ((t & ls')) "->".
@@ -313,13 +315,13 @@ Section array_reasoning.
   Lemma slice_insert_acc `{Encode A, Inhabited A} (i j : Z) (a : array) (xs : list A) (ls : list loc) :
     j ≤ i < j + length xs →
     a ↦∗[j] xs -∗
-    isBlockLocs a ls -∗
-    (ls !!! i) ↦ #(xs !!! (i - j)) ∗
-    (∀ y, (ls !!! i) ↦ #y -∗ a ↦∗[j] <[i - j := y]> xs).
+    blockLocs a ls -∗
+    (ls !!! i) ↦ₗ #(xs !!! (i - j)) ∗
+    (∀ y, (ls !!! i) ↦ₗ #y -∗ a ↦∗[j] <[i - j := y]> xs).
   Proof.
     iIntros "%Hbound_i Hslice #Hblock".
     iDestruct "Hslice" as "(% & #Hblock' & %Hbounds & Hseg)".
-    iPoseProof (isBlockLocs_valid with "Hblock Hblock'") as "->".
+    iPoseProof (blockLocs_valid with "Hblock Hblock'") as "->".
     iPoseProof (big_sepLZ2_insert_seg_acc i with "Hseg") as "(Hpts & Hseg)".
     lengths. lia. lia.
     iFrame.
@@ -331,13 +333,13 @@ Section array_reasoning.
   Lemma slice_lookup_acc `{Encode A, Inhabited A} (i j : Z) (a : array) dq (xs : list A) (ls : list loc) :
     j ≤ i < j + length xs →
     a ↦∗[j]{dq} xs -∗
-    isBlockLocs a ls -∗
-    (ls !!! i) ↦{dq} #(xs !!! (i - j)) ∗
-    ((ls !!! i) ↦{dq} #(xs !!! (i - j)) -∗ a ↦∗[j]{dq} xs).
+    blockLocs a ls -∗
+    (ls !!! i) ↦ₗ{dq} #(xs !!! (i - j)) ∗
+    ((ls !!! i) ↦ₗ{dq} #(xs !!! (i - j)) -∗ a ↦∗[j]{dq} xs).
   Proof.
     iIntros "%Hbound_i Hslice #Hblock".
     iDestruct "Hslice" as "(% & #Hblock' & %Hbounds & Hseg)".
-    iPoseProof (isBlockLocs_valid with "Hblock Hblock'") as "->".
+    iPoseProof (blockLocs_valid with "Hblock Hblock'") as "->".
     iPoseProof (big_sepLZ2_lookup_seg_acc i with "Hseg") as "(Hpts & Hseg)".
     lengths. lia. lia.
     iFrame.
@@ -346,7 +348,7 @@ Section array_reasoning.
   Qed.
 
   Lemma imp_EArrayGet2 `{Encode A, Inhabited A} {Φ : A → iProp Σ} {ζ} (Φ2 : Z → iProp Σ) e1 e2 (a : array) ls :
-    ▷ isBlockLocs a ls -∗
+    ▷ blockLocs a ls -∗
     EWP eval η e1 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ a', ⌜a'=a⌝ }} -∗
     EWP eval η e2 @ E <|Ψ|> ⟨⟨ ζ ⟩⟩ {{ Φ2 }} -∗
     (∀ i, Φ2 i -∗
@@ -363,9 +365,9 @@ Section array_reasoning.
       iDestruct ("P" with "HΦ2") as
         "(%dq & %j & %xs & Hslice & Hlookup)". iNext.
       iDestruct "Hslice" as "(%Hbound & Hslice)".
-      iPoseProof (isSlice_isBlockLocs with "Hslice") as "(% & #Ha' & %Hbound')".
-      iPoseProof (isBlockLocs_valid with "Ha Ha'") as "->".
-      iPoseProof (isBlockLocs_length with "Ha") as "%Hlenls".
+      iPoseProof (isSlice_blockLocs with "Hslice") as "(% & #Ha' & %Hbound')".
+      iPoseProof (blockLocs_valid with "Ha Ha'") as "->".
+      iPoseProof (blockLocs_length with "Ha") as "%Hlenls".
 
       simpl.
       iApply imp_bind. iApply (imp_load_block_ghost with "Ha").
@@ -438,8 +440,8 @@ Section array_reasoning.
     iDestruct ("P" with "HΦ1 HΦ2 HΦ3") as
         "(%j & %xs & Hslice & HΦ)". iNext.
     iDestruct "Hslice" as "(%Hbound & Hslice)".
-    iPoseProof (isSlice_isBlockLocs with "Hslice") as "(%ls & #Hblock & %Hbounds)".
-    iPoseProof (isBlockLocs_length with "Hblock") as "%Hlen'".
+    iPoseProof (isSlice_blockLocs with "Hslice") as "(%ls & #Hblock & %Hbounds)".
+    iPoseProof (blockLocs_length with "Hblock") as "%Hlen'".
 
     iApply imp_bind. { iApply (imp_load_block_ghost with "Hblock"). }
     iIntros ((t & ls')) "-> /=".

@@ -80,7 +80,7 @@ type pat =
   | PRecord of fpats
   (* An inline-record pattern: [C p] where [C] is an inline-record
      constructor and [p] matches the underlying record. *)
-  | PInline of data * pat
+  | PTaggedRecord of data * pat
   (* A literal integer pattern. *)
   | PInt of int
   (* A literal character pattern. *)
@@ -315,17 +315,24 @@ type expr =
 
   | ELetSitem of sitem * expr
 
+  (* References. As in OCaml, a reference is a mutable record with a single
+     field: these behave as [ERecord], [ERecordAccess] and [ERecordSet] at
+     field [0]. *)
   (* Reference allocation: [ref e]. *)
   | ERef of expr
   (* Reference lookup: [!e]. *)
   | ELoad of expr
   (* Reference assignment: [e1 := e2]. *)
   | EStore of expr * expr
-  (* Exchange: [Atomic.exchange e1 e2]. *)
+
+  (* Atomic operations on a field location (see [EAtomicLoc]). *)
+  (* Load: [Atomic.Loc.get e]. *)
+  | EFieldLoad of expr
+  (* Exchange: [Atomic.Loc.exchange e1 e2]. *)
   | EExchange of expr * expr
-  (* Compare-and-set: [Atomic.compare_and_set e1 e2 e3]. *)
+  (* Compare-and-set: [Atomic.Loc.compare_and_set e1 e2 e3]. *)
   | ECAS of expr * expr * expr
-  (* Fetch-and-add: [Atomic.fetch_and_and e1 e2]. *)
+  (* Fetch-and-add: [Atomic.Loc.fetch_and_add e1 e2]. *)
   | EFAA of expr * expr
 
   (* Allocating a prophecy variable: [Proph.create ()]. *)

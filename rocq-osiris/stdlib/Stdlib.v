@@ -47,17 +47,17 @@ Section StdLib__code.
 
   (* Arithmetic Operations. *)
 
-  Definition Stdlib__add := VClo2 EIntAdd.
-  Definition Stdlib__sub := VClo2 EIntSub.
-  Definition Stdlib__mul := VClo2 EIntMul.
-  Definition Stdlib__div := VClo2 EIntDiv.
-  Definition Stdlib__neg := VClo1 EIntNeg.
+  Definition Stdlib__add := VClo2 (EBinOp BAdd).
+  Definition Stdlib__sub := VClo2 (EBinOp BSub).
+  Definition Stdlib__mul := VClo2 (EBinOp BMul).
+  Definition Stdlib__div := VClo2 (EBinOp BDiv).
+  Definition Stdlib__neg := VClo1 (EUnOp UNeg).
 
   (* Arithmetic Comparisons. *)
-  Definition Stdlib__lt : val := VClo2 EOpLt.
-  Definition Stdlib__le : val := VClo2 EOpLe.
-  Definition Stdlib__gt : val := VClo2 EOpGt.
-  Definition Stdlib__ge : val := VClo2 EOpGe.
+  Definition Stdlib__lt : val := VClo2 (EBinOp BLt).
+  Definition Stdlib__le : val := VClo2 (EBinOp BLe).
+  Definition Stdlib__gt : val := VClo2 (EBinOp BGt).
+  Definition Stdlib__ge : val := VClo2 (EBinOp BGe).
 
   (* Arithmetic part of the module. *)
   Definition Stdlib_arith_env : env :=
@@ -86,8 +86,8 @@ Section StdLib__code.
   (* ------------------------------------------------------------------------ *)
 
   (* Polymorphic Comparisons. *)
-  Definition Stdlib__eq : val := VClo2 EOpEq.
-  Definition Stdlib__ne : val := VClo2 EOpNe.
+  Definition Stdlib__eq : val := VClo2 (EBinOp BEq).
+  Definition Stdlib__ne : val := VClo2 (EBinOp BNe).
   Axiom Stdlib__compare : val.
 
   (* On Pairs. *)
@@ -115,7 +115,7 @@ Section StdLib__code.
   (* ------------------------------------------------------------------------ *)
 
   (* Boolean Operations. *)
-  Definition Stdlib__not : val := VClo1 EBoolNeg.
+  Definition Stdlib__not : val := VClo1 (EUnOp UNot).
     (* Boolean conjunction and disjunction are not functions;
        they are primitive operations. *)
 

@@ -33,8 +33,7 @@ Section ewp.
         ewp_def E m' Ψ Q ∗
           (match μ with
            | None => state_interp (σ', κs, π)
-           | Some (ι', m') => ∃ φ' γ, state_interp (σ', κs, <[ι':= γ]>π) ∗
-                                        saved_prop.saved_pred_own γ DfracDiscarded φ' ∗
+           | Some (ι', m') => ∃ φ', state_interp (σ', κs, <[ι':= φ']>π) ∗
                                         ewp_def ⊤ m' ⊥ (λ o, □ φ' o)
           end).
   Proof.
@@ -65,9 +64,6 @@ Section ewp.
     { iApply ("Hmono" with "[> -]").
       by iApply (fupd_mask_mono E1 _). }
 
-    (* Case: [m] is a [WPCrash]. *)
-    { by iApply (fupd_mask_mono E1 _). }
-
     { (* Case: [m] is a [WPPerform]. We use [prot_mono]. *)
       iApply (fupd_mask_mono E1 _). set_solver.
       iMod "Hwp"; iModIntro.
@@ -91,9 +87,8 @@ Section ewp.
       intro_state_join. iMod (fupd_mask_subseteq E1) as "Hmod". set_solver.
       spec_state_join.
       iMod "Hwp". iModIntro.
-      destruct (π !! t) eqn:Hlookup.
-      - iDestruct "Hwp" as "(%φ'0 & $ & Hwp)".
-        iIntros "!> %o Ho". iSpecialize ("Hwp" with "Ho").
+      destruct (π !! t) as [φ'|] eqn:Hlookup.
+      - iIntros "!> %o Ho". iSpecialize ("Hwp" with "Ho").
         ewp_mask_elim. iMod "Hwp" as "(Hwp & Hforked)". iFrame.
         iMod "Hmod".
         iApply ("IH" with "Hwp Hmono").
@@ -144,7 +139,6 @@ Section ewp.
     ewp_unfold_all.
     ewp_case m.
     { by iDestruct "Hm" as ">>> $". }
-    { by iDestruct "Hm" as ">> []". }
     { inversion Heff. }
     { intro_state.
       iMod "Hm".
@@ -153,15 +147,22 @@ Section ewp.
 
       construct_wp_nonret.
       iSpecialize ("Hm" $! σ' m' μ Hstep0).
-      ewp_mask_elim. iMod "Hm" as "(Hewp & $)".
+      ewp_mask_elim. iMod "Hm" as "(Hewp & Hsi)".
       (* Use atomicity. *)
       edestruct H; first eassumption; rewrite H0.
-      - ewp_unfold_all.
+      - iFrame "Hsi". ewp_unfold_all.
         by iDestruct "Hewp" as ">>$".
-      - ewp_unfold_all.
+      - iFrame "Hsi". ewp_unfold_all.
         by iDestruct "Hewp" as ">>$".
-      - ewp_unfold_all.
-        by iDestruct "Hewp" as ">[]". }
+      - (* A crash is not reducible: refute it with the state interpretation
+           we still hold, while the mask is [E2]. *)
+        ewp_unfold_all.
+        destruct μ as [[ι' mf]|]; iSimpl in "Hsi".
+        + iDestruct "Hsi" as (φ') "[Hsi _]".
+          iMod ("Hewp" $! _ [] _ _ with "Hsi") as "[%Hred _]".
+          by apply not_reducible_Crash in Hred.
+        + iMod ("Hewp" $! _ [] _ _ with "Hsi") as "[%Hred _]".
+          by apply not_reducible_Crash in Hred. }
 
     { inversion Hjoin. }
   Qed.
@@ -250,8 +251,6 @@ Section ewp_pure.
     - iModIntro. destruct o; iPureIntro.
       + by eapply invert_pure_wp_ret in Hm.
       + by eapply invert_pure_wp_throw in Hm.
-    - (* [crash]'s satisfy [ψ] *)
-      by eapply invert_pure_wp_crash in Hm.
     - (* [perform] is not immediately pure *)
       by apply invert_pure_wp_stop in Hm.
     - (* Case: [m] can step *)
@@ -262,10 +261,10 @@ Section ewp_pure.
       construct_wp_nonret.
       (* and no step can change [σ] or escape [pure] *)
       ewp_cleanup_mod. ewp_mask_elim.
-      specialize (H σ).
+      specialize (H σ.(st_heap)).
       apply invert_can_step_subjective_step in Hstep; last assumption.
-      destruct Hstep as (Hstep & -> & ->).
-      destruct (pure_wp_preservation Hm Hstep) as (Hm' & <-).
+      destruct Hstep as ((h' & -> & Hstep) & -> & ->).
+      destruct (pure_wp_preservation Hm Hstep) as (Hm' & ->).
       iFrame.
       by iApply "IH".
     - by apply invert_pure_wp_stop in Hm.
@@ -283,7 +282,7 @@ Section ewp_pure.
       exists a. auto.
     - iIntros "%He".
       iPureIntro.
-      destruct He as (c & -> & Hc). unfold observe, observe_encode. exact Hc.
+      destruct He as (c & -> & Hc). exists c. auto.
   Qed.
 
 End ewp_pure.

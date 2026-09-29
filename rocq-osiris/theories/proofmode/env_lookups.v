@@ -211,9 +211,9 @@ Section InEnv.
 
   Lemma in_env_here_inline {η} (c : data) (r : record) (mk : record → A) x y :
     (x =? y)%string = true →
-    (∀ r' : record, VInline c r' = #(mk r')) →
+    (∀ r' : record, VTaggedRecord c r' = #(mk r')) →
     Φ (mk r) -∗
-    in_env x Φ ((y, VInline c r) :: η).
+    in_env x Φ ((y, VTaggedRecord c r) :: η).
   Proof.
     iIntros (Heq Hmk) "HΦ".
     rewrite Hmk.
@@ -492,6 +492,68 @@ Ltac2 get_in_env (x : constr) (η : constr) : constr :=
     (fun _ => go pers_hyps)
     (fun _ => go spat_hyps).
 
+(* [is_env_spec δ prop] checks whether [prop] is a specification of the
+   environment [δ] itself, i.e. whether it has one of the three shapes
+   an environment is ever specified by. The check is up to conversion,
+   so that a module specification hidden behind a definition is
+   recognised too (as in [get_context_spec]). *)
+
+Ltac2 is_env_spec (δ : constr) (prop : constr) : bool :=
+  Control.plus
+    (fun _ =>
+       first [ Std.unify prop open_constr:(in_env _ _ $δ)
+             | Std.unify prop open_constr:(env_lookups.context _ _ $δ)
+             | Std.unify prop open_constr:(path_spec _ _ $δ) ];
+       true)
+    (fun _ => false).
+
+(* [get_env_spec δ] returns the name of an intuitionistic hypothesis
+   specifying the environment [δ], as judged by [is_env_spec].
+
+   Only the intuitionistic hypotheses are searched: a module
+   specification is persistent, and it is used twice when resolving a
+   path through that module (once for the head, once for the tail). *)
+
+Ltac2 get_env_spec (δ : constr) : constr :=
+  let (pers_hyps, _) := get_iris_hyps () in
+  let rec go env :=
+    lazy_match! env with
+    | environments.Enil =>
+        Control.zero (Tactic_failure
+                        (Some (fprintf "Could not find a specification for the environment %t" δ)))
+    | environments.Esnoc ?env ?name ?prop =>
+        if is_env_spec δ prop then name else go env
+    end
+  in
+  go pers_hyps.
+
+(* [solve_env_spec_evar ()] instantiates a goal of the form [?spec δ],
+   where [?spec] is still an evar.
+
+   This is what [in_env_here] leaves behind when the name being resolved
+   is bound to a module's environment: [path_spec_cons] introduces the
+   module's specification as an evar, to be discovered while resolving
+   the head of the path. Nothing downstream can make progress until it
+   is instantiated, so we read it off the context. [iExact] then
+   abstracts [δ] out of the hypothesis, which is what gives [?spec] the
+   pointwise form the rest of the path needs.
+
+   A postcondition evar over an ordinary value is left alone: no
+   hypothesis has the shape [is_env_spec] looks for, and such an evar is
+   meant to stay, for [solve_eq_goal] or [iFrame] to instantiate. Same
+   for a concrete specification left for the caller to discharge. *)
+
+Ltac2 solve_env_spec_evar () :=
+  lazy_match! get_iris_goal () with
+  | ?spec ?δ =>
+      if Constr.is_evar spec then
+        Control.plus
+          (fun _ => let hyp := get_env_spec δ in iExact $hyp)
+          (fun _ => ())
+      else ()
+  | _ => ()
+  end.
+
 (* [get_path_spec p η] tries to find a hypothesis of the form
    [path_spec p' _ η] in the iris context, for a path [p'] equal to [p]
    (and the same environment [η]). This lets [solve_path_spec] reuse an
@@ -544,7 +606,7 @@ Ltac2 in_env_here () :=
 Ltac2 in_env_here_inline_tac () :=
   iApply in_env_here_inline;
   Control.focus 1 1 (fun _ => apply String.eqb_refl);
-  Control.focus 1 1 (fun _ => apply inline_encode).
+  Control.focus 1 1 (fun _ => apply tagged_encode).
 
 Ltac2 in_env_app_l () :=
   iApply in_env_app_l.
@@ -598,7 +660,10 @@ Ltac2 rec solve_in_env () :=
       match! env with
       | (?name', ?_val) :: _ =>
           if Constr.equal name name' then
-            in_env_here ()
+            (in_env_here ();
+             (* [in_env_here] leaves the specification of the value found,
+                which may still be an evar. *)
+             Control.enter solve_env_spec_evar)
           else
             (in_env_cons ();
              Control.enter solve_in_env)
@@ -745,6 +810,31 @@ Ltac2 rec solve_path_spec () :=
 
 (** User-level tactics. *)
 
+(* Ltac1 entry points for the two solvers above, so that the environment
+   dependencies left over by a body lemma can be discharged without
+   writing an [ltac2:(...)] quotation. Ltac1 and Ltac2 have separate
+   namespaces, so these keep the names of the tactics they call. *)
+
+Tactic Notation "solve_in_env" := ltac2:(solve_in_env ()).
+Tactic Notation "solve_path_spec" := ltac2:(solve_path_spec ()).
+
+(* [solve_env] discharges one environment-dependency goal, whichever of
+   the two forms it takes. Body lemmas state their dependencies under a
+   [▷] when the binding is recursive, so the later is stripped first. *)
+
+(* Written after [iApply foo_proof], as [iApply foo_proof; solve_env], it
+   discharges every dependency of [foo] on its environment at once. *)
+
+Ltac solve_env :=
+  (* A body lemma states its environment dependencies under a [▷] when
+     the binding is recursive, and under a [□] when the specification is
+     used more than once (the shape the stdlib proofs use). *)
+  repeat (first [ iNext | iModIntro ]);
+  first [ solve_in_env | solve_path_spec ];
+  (* Reaching the binding leaves its specification as a goal; it is in
+     the context, as the hypothesis the lookup was resolved against. *)
+  try (iFrame "#"; done).
+
 Ltac2 solve_eq_goal () :=
   (* The postcondition may be wrapped in the [tapp] coercion (from the
      n-ary application machinery used for tuples and records), which
@@ -840,8 +930,10 @@ Section TacticTests.
      - Module2 is in the environment and contains [Module3],
        which contains [sub] *)
 
-  Definition add_spec add : iProp Σ := □ iSpec τ[Z;Z] add (λ (i j : Z) m, EWP m {{ k, ⌜(k = i + j)%Z⌝ }})%I.
-  Definition sub_spec sub : iProp Σ := □ iSpec τ[Z;Z] sub (λ (i j : Z) m, EWP m {{ k, ⌜(k = i - j)%Z⌝ }})%I.
+  Definition add_spec add : iProp Σ :=
+    □ {{ True }} add (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i + j)%Z⌝ }}.
+  Definition sub_spec sub : iProp Σ :=
+    □ {{ True }} sub (i : Z) (j : Z) : Z Z {{ RET k; ⌜(k = i - j)%Z⌝ }}.
   Definition a_spec a : iProp Σ := ∀ (A : Type), □ ⌜a > 2⌝.
 
   Definition module3_spec η := context [var_spec "sub" sub_spec] {["sub"]} η.
@@ -876,13 +968,40 @@ Section TacticTests.
       { imp_path. }
       { imp_path. }
       iIntros (??) "-> -> %m Hm !>".
-      iApply "Hm". }
+      by iApply "Hm". }
     { imp_path. }
     iIntros (??) "-> #%Ha %m Hm !>".
+    iSpecialize ("Hm" with "[//]").
     iApply (imp_wand with "Hm").
     iIntros (y ->). iPureIntro.
     specialize (Ha unit).
     lia.
+  Qed.
+
+  (* A path into a module whose environment is bound in place, rather
+     than spliced into the environment with [++]. This is the shape
+     [imp_sitems_module] produces: the module's bindings come as a plain
+     [in_env] hypothesis over a fresh environment variable [δM].
+
+     [path_spec_cons] leaves the module's own specification as an evar,
+     which [solve_env_spec_evar] reads off the context. *)
+
+  Lemma example_module_path (δM η : env) :
+    in_env "sub" sub_spec δM -∗
+    path_spec ["Module"; "sub"] sub_spec (("Module", #δM) :: η).
+  Proof.
+    iIntros "#HM". solve_path_spec.
+  Qed.
+
+  (* One module deeper, the outer module being specified by a [context]
+     hypothesis: the evar for the outer environment is read off that
+     hypothesis, and the inner one off [module3_spec]. *)
+
+  Lemma example_nested_module_path (δM η : env) :
+    context [var_spec "Module3" module3_spec] {["Module3"]} δM -∗
+    path_spec ["Module2"; "Module3"; "sub"] sub_spec (("Module2", #δM) :: η).
+  Proof.
+    iIntros "#HM". solve_path_spec.
   Qed.
 
 End TacticTests.
