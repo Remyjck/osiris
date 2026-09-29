@@ -732,14 +732,9 @@ Section triple_body.
 
 End triple_body.
 
-  (* Notation "'types' t1 .. tn ; P" := *)
-  (* (∀.. (TS : TeleS (λ t1, TeleS (λ (_ : Encode t1), .. (TeleS (λ tn, TeleS (λ (_ : Encode t1), TeleO))) ..))), *)
-  (*  @tele_app *)
-  (*    (TeleS (λ t1, TeleS (λ (_ : Encode t1), .. (TeleS (λ tn, TeleS (λ (_ : Encode t1), TeleO))) ..))) *)
-  (*    _ *)
-  (*    (λ t1 _, .. (λ tn _, P) ..) TS)%I *)
-  (* (at level 50, *)
-  (*  t1 closed binder, tn closed binder). *)
+(* [{{] is a closed notation that also occurs in the middle of the notation,
+   for which this warning is misleading. *)
+Local Set Warnings "-closed-notation-not-level-0".
 
 Notation "'{{' ∀ x .. y ; P } } c a .. b ':' τ1 .. τn τm {{ 'RET' v ; Q } }" :=
   (iSpec
